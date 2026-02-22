@@ -1,0 +1,226 @@
+version: "3.9"
+
+# ============================================================
+# Whydud — Production Docker Compose
+# 9 services, ~8-9GB RAM total (fits 16GB VPS)
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # Caddy — Reverse proxy + auto SSL
+  # RAM: ~64MB
+  # ----------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - whydud
+
+  # ----------------------------------------------------------
+  # PostgreSQL 16 + TimescaleDB
+  # RAM: ~2GB
+  # ----------------------------------------------------------
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-whydud}
+      POSTGRES_USER: ${POSTGRES_USER:-whydud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - whydud
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-whydud} -d ${POSTGRES_DB:-whydud}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------
+  # Redis 7 — Cache + Celery broker + sessions + rate limits
+  # RAM: ~512MB
+  # ----------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 400mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - whydud
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ----------------------------------------------------------
+  # Meilisearch — Product search engine
+  # RAM: ~1GB
+  # ----------------------------------------------------------
+  meilisearch:
+    image: getmeili/meilisearch:v1.7
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:?required}
+      MEILI_ENV: production
+    volumes:
+      - meilisearch_data:/meili_data
+    networks:
+      - whydud
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ----------------------------------------------------------
+  # Django Backend — Gunicorn (3 workers)
+  # RAM: ~1GB
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    restart: unless-stopped
+    command: gunicorn whydud.wsgi:application --workers 3 --bind 0.0.0.0:8000 --timeout 60 --access-logfile -
+    environment:
+      DJANGO_SETTINGS_MODULE: whydud.settings.prod
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-whydud}
+      POSTGRES_USER: ${POSTGRES_USER:-whydud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:?required}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?required}
+      EMAIL_ENCRYPTION_KEY: ${EMAIL_ENCRYPTION_KEY:?required}
+      OAUTH_ENCRYPTION_KEY: ${OAUTH_ENCRYPTION_KEY:?required}
+      CLOUDFLARE_EMAIL_WEBHOOK_SECRET: ${CLOUDFLARE_EMAIL_WEBHOOK_SECRET:?required}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL:-https://whydud.com}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    volumes:
+      - static_files:/app/staticfiles
+      - media_files:/app/media
+    networks:
+      - whydud
+
+  # ----------------------------------------------------------
+  # Celery Worker — General tasks (4 concurrent)
+  # RAM: ~2GB
+  # ----------------------------------------------------------
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    restart: unless-stopped
+    command: celery -A whydud worker --loglevel=info --concurrency=4 --queues=default,scraping,scoring,alerts
+    environment: &celery_env
+      DJANGO_SETTINGS_MODULE: whydud.settings.prod
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-whydud}
+      POSTGRES_USER: ${POSTGRES_USER:-whydud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:?required}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?required}
+      EMAIL_ENCRYPTION_KEY: ${EMAIL_ENCRYPTION_KEY:?required}
+      OAUTH_ENCRYPTION_KEY: ${OAUTH_ENCRYPTION_KEY:?required}
+    depends_on:
+      - backend
+    networks:
+      - whydud
+
+  # ----------------------------------------------------------
+  # Celery Beat — Scheduler (cron jobs)
+  # RAM: ~256MB
+  # ----------------------------------------------------------
+  celery-beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    restart: unless-stopped
+    command: celery -A whydud beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    environment: *celery_env
+    depends_on:
+      - backend
+    networks:
+      - whydud
+
+  # ----------------------------------------------------------
+  # Email Worker — Isolated queue for @whyd.xyz + Gmail
+  # RAM: ~512MB
+  # ----------------------------------------------------------
+  email-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    restart: unless-stopped
+    command: celery -A whydud worker --loglevel=info --concurrency=2 --queues=email
+    environment: *celery_env
+    depends_on:
+      - backend
+    networks:
+      - whydud
+
+  # ----------------------------------------------------------
+  # Next.js Frontend — SSR
+  # RAM: ~1GB
+  # ----------------------------------------------------------
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfiles/frontend.Dockerfile
+      target: production
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${FRONTEND_URL:-https://whydud.com}
+      NEXT_PUBLIC_SITE_URL: ${FRONTEND_URL:-https://whydud.com}
+      INTERNAL_API_URL: http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - whydud
+
+volumes:
+  postgres_data:
+  redis_data:
+  meilisearch_data:
+  caddy_data:
+  caddy_config:
+  static_files:
+  media_files:
+
+networks:
+  whydud:
+    driver: bridge

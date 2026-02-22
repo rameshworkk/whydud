@@ -1,0 +1,42 @@
+# Whydud — Caddy reverse proxy config
+# Auto-SSL via Let's Encrypt
+
+whydud.com, www.whydud.com {
+    # Django backend: API + admin + webhooks
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /admin/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /webhooks/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /static/* {
+        root * /srv/static
+        file_server
+    }
+
+    # Next.js frontend: everything else
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    # Security headers
+    header {
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/whydud.log
+        format json
+    }
+}
