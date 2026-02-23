@@ -163,10 +163,14 @@ export const MOCK_PRODUCTS: MockProduct[] = [
   },
 ];
 
+// Non-null assertions are safe here — we define exactly 8 products above.
+// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+const p = (i: number): MockProduct => MOCK_PRODUCTS[i]!;
+
 export const MOCK_DEALS: MockDeal[] = [
   {
     id: "deal-001",
-    product: MOCK_PRODUCTS[1], // boAt Airdopes 141
+    product: p(1), // boAt Airdopes 141
     deal_type: "error_price",
     current_price: 29900,
     reference_price: 199900,
@@ -175,7 +179,7 @@ export const MOCK_DEALS: MockDeal[] = [
   },
   {
     id: "deal-002",
-    product: MOCK_PRODUCTS[0], // Samsung Galaxy S24 FE
+    product: p(0), // Samsung Galaxy S24 FE
     deal_type: "lowest_ever",
     current_price: 3799900,
     reference_price: 4999900,
@@ -184,7 +188,7 @@ export const MOCK_DEALS: MockDeal[] = [
   },
   {
     id: "deal-003",
-    product: MOCK_PRODUCTS[2], // Noise ColorFit Ultra 2
+    product: p(2), // Noise ColorFit Ultra 2
     deal_type: "massive_discount",
     current_price: 79900,
     reference_price: 499900,
@@ -193,7 +197,7 @@ export const MOCK_DEALS: MockDeal[] = [
   },
   {
     id: "deal-004",
-    product: MOCK_PRODUCTS[6], // Bajaj Rex Plus
+    product: p(6), // Bajaj Rex Plus
     deal_type: "lowest_ever",
     current_price: 74900,
     reference_price: 199900,

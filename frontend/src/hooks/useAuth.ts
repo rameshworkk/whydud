@@ -18,13 +18,18 @@ export function useAuth(): AuthState {
   });
 
   useEffect(() => {
-    authApi.me().then((res) => {
-      if (res.success) {
-        setState({ user: res.data, isLoading: false, isAuthenticated: true });
-      } else {
+    authApi
+      .me()
+      .then((res) => {
+        if (res.success) {
+          setState({ user: res.data, isLoading: false, isAuthenticated: true });
+        } else {
+          setState({ user: null, isLoading: false, isAuthenticated: false });
+        }
+      })
+      .catch(() => {
         setState({ user: null, isLoading: false, isAuthenticated: false });
-      }
-    });
+      });
   }, []);
 
   return state;

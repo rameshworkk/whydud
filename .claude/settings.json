@@ -9,7 +9,15 @@
       "Bash(pip show:*)",
       "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.dev POSTGRES_PASSWORD=whydud_dev python manage.py makemigrations:*)",
       "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.dev POSTGRES_PASSWORD=whydud_dev python manage.py migrate:*)",
-      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.dev POSTGRES_PASSWORD=whydud_dev python manage.py:*)"
+      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.dev POSTGRES_PASSWORD=whydud_dev python manage.py:*)",
+      "Bash(ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e:*)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(powershell -Command:*)",
+      "mcp__claude_ai_Figma__get_metadata",
+      "mcp__claude_ai_Figma__get_design_context"
     ]
   }
 }

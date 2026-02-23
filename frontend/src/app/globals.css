@@ -121,6 +121,18 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ─── Utility: hide scrollbar but keep scroll ──────────────────────────── */
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
 /* ─── Base Styles ──────────────────────────────────────────────────────── */
 
 @layer base {

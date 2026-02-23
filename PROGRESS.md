@@ -5,6 +5,8 @@
 **Architecture Reference:** `docs/ARCHITECTURE.md`
 
 ## 🎯 CURRENT TASK
+Fix the console error showing on the homepage (red "1 error" badge bottom-left).
+Check browser console, fix the error. Don't change any design — just fix the error.
 
 
 ---
@@ -227,7 +229,7 @@
 | CardVault component | ✅ | |
 | `src/lib/mock-data.ts` | ✅ | 8 products + 4 deals, MockProduct + MockDeal types |
 | `src/components/product/product-card.tsx` | ✅ | Matches Figma — Recommended badge, stars, teal brand, marketplace badge, Best buy |
-| Homepage | ⬜ | Sprint 1 remaining |
+| Homepage | ✅ | Redesigned to match Figma: split hero (text+search left, floating visuals right), review CTA strip, trending with filter chips, Buyer's/Reviewer's Zone cards, deals, rate-&-review section, top picks/bestsellers/top-rated/most-bought side-by-side, helpful reviews section |
 | Auth pages (login, register, verify email) | ⬜ | Sprint 1 remaining |
 | @whyd.xyz onboarding flow | ⬜ | Sprint 1 remaining |
 | Wishlist pages | ⬜ | Sprint 2 |
@@ -251,6 +253,28 @@
 | Email bodies as `BinaryField` (AES-256-GCM) | Encrypted at rest; decrypted only on explicit user request |
 | Cursor pagination (not offset) | Consistent results as data changes; works with TimescaleDB time ordering |
 | `users` / `email_intel` / `scoring` / `tco` / `community` custom schemas | Isolation between domains; `db_table = 'schema\\".\\"table'` pattern in Django |
+
+---
+## 2026-02-24 — Fix homepage console error
+
+**Root cause:** `apiClient.request()` in `src/lib/api/client.ts` had no `try/catch`. When the backend is unreachable (dev without Docker), `fetch()` throws a network error. `useAuth` called `.then()` with no `.catch()`, so the rejection was unhandled → Next.js dev overlay showed "1 error".
+
+**Fix:**
+- `src/lib/api/client.ts`: wrapped `fetch` + `response.json()` in `try/catch`; returns `{ success: false, error: { code: "NETWORK_ERROR", ... } }` on failure instead of throwing.
+- `src/hooks/useAuth.ts`: added `.catch(() => setState({ user: null, isLoading: false, isAuthenticated: false }))` — belt-and-suspenders in case any future error slips through.
+
+---
+## 2026-02-24 — Homepage Figma match
+
+Redesigned `src/app/(public)/page.tsx` to closely match `docs/figma/homepage.png`:
+- **Hero**: Two-column layout — left (title + search bar with All Categories dropdown), right (floating product visuals with labels). Removed trust pills (not in Figma).
+- **Review CTA strip**: Peach (#fff5ef) banner after hero — "Get an ₹500 instant gift card", star/gift visual, "Write a review now" button.
+- **Trending**: Renamed "What's Trending" → "Trending right now". Category filter chips (pill tabs, first = orange selected, rest = bordered) replacing emoji category row. Filters button.
+- **Buyer's Zone / Reviewer's Zone**: Redesigned from dark+light cards to Figma-style warm-peach / pink cards with image placeholder on right.
+- **Blockbuster Deals**: Title matches Figma ("Blockbuster deals for you").
+- **Rate & review section**: New section with user avatar, "Rate and review your products" prompt, reward badges, 3 review-product cards.
+- **Product grids**: Top Picks + Bestsellers side-by-side; Top Rated + Most Bought side-by-side.
+- **Helpful reviews section**: New section with 4 mock review cards, prev/next nav buttons.
 
 ---
 Build the Homepage (`/`) — `src/app/(public)/page.tsx`.

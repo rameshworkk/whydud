@@ -29,18 +29,22 @@ async function request<T>(
     });
   }
 
-  const response = await fetch(url.toString(), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-    credentials: "include", // send session cookie
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  try {
+    const response = await fetch(url.toString(), {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers ?? {}),
+      },
+      credentials: "include", // send session cookie
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
 
-  const json = (await response.json()) as ApiResponse<T>;
-  return json;
+    const json = (await response.json()) as ApiResponse<T>;
+    return json;
+  } catch {
+    return { success: false, error: { code: "NETWORK_ERROR", message: "Network request failed" } } as ApiResponse<T>;
+  }
 }
 
 export const apiClient = {
