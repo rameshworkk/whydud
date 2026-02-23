@@ -5,23 +5,16 @@
 **Architecture Reference:** `docs/ARCHITECTURE.md`
 
 ## 🎯 CURRENT TASK
-Build product detail page at src/app/(public)/product/[slug]/page.tsx. Match docs/figma/Product_detail_page.png.
+Build 3 pages with mock data:
 
-Create these components first, then assemble the page:
-- src/components/product/marketplace-prices.tsx (stacked cards, best=green bg, others="X% Higher")
-- src/components/product/category-score-bars.tsx (5 colored dots per row)
-- src/components/product/dud-score-gauge.tsx (semi-circular SVG, red→green, needle)
-- src/components/product/price-chart.tsx (Recharts LineChart, 3 marketplace lines, time tabs)
-- src/components/reviews/rating-distribution.tsx (5→1 star horizontal bars with %)
-- src/components/reviews/review-card.tsx (avatar, name, date, stars, title, body, actions)
+1. src/app/(public)/search/page.tsx — match docs/figma/Search_result_page-1.png
+   "Results for X" + sort dropdown + 4-col ProductCard grid + right sidebar seller card
 
-Layout: Left sidebar (image + key specs) | Center (title, price, scores, marketplace prices, chart) | Right sidebar (reviews)
-Use mock data.
-Figma design link- https://www.figma.com/design/j7Yg1g0xSHi3RNUBL7c1Ia/whydud?node-id=1081-11303&t=g9kbPj7oWrqOCJk9-1
+2. src/app/(public)/compare/page.tsx — match docs/figma/Comparison_results.png
+   Product header row, sticky tabs (Highlights|Summary|Detailed|TCO), highlights cards, category score dots, spec rows with "Best" badges
 
-All sections are independently scrollable without effecting other sections. For example review section is scrollable with the product details staying at position. it should give user a feeling of using a dashboard or customer decision panel.
-
----
+3. src/app/(public)/seller/[slug]/page.tsx — match docs/figma/Seller_detail_page-1.png
+   Header (avatar, name, verified badge, stars, TrustScore gauge), tabs, performance sidebar, category pills
 
 ## Legend
 
@@ -228,7 +221,7 @@ All sections are independently scrollable without effecting other sections. For 
 |---|---|---|
 | Layout (Header, Footer, Sidebar, MobileNav) | ✅ | Implemented |
 | Global CSS + Tailwind config | ✅ | Custom brand tokens |
-| `(public)/search` page | ✅ | |
+| `(public)/search` page | ✅ | Redesigned: 4-col ProductCard grid + seller sidebar (seller details, top reviews, related products). Mock data. Sort dropdown + results-only toggle. |
 | `(public)/deals` page | ✅ | |
 | `(public)/product/[slug]` page | ✅ | |
 | `(public)/categories/[slug]` page | ✅ | |
@@ -248,6 +241,8 @@ All sections are independently scrollable without effecting other sections. For 
 | Product detail page (`/product/[slug]`) | ✅ | 3-column dashboard layout: left=image+specs, center=title+price+DudScore gauge+marketplace prices+price chart, right=reviews. Independently scrollable columns. 6 new components: `dud-score-gauge`, `marketplace-prices`, `category-score-bars`, `price-chart` (Recharts), `reviews/rating-distribution`, `reviews/review-card`. Mock data in `mock-product-detail.ts`. |
 | Price history chart | ✅ | `price-chart.tsx` — Recharts LineChart, 3 marketplace lines, 1M/3M/Max tabs |
 | DudScore badge component | ✅ | `dud-score-gauge.tsx` — SVG semi-circular gauge, red→green gradient, needle indicator |
+| `(public)/compare` page | ✅ | Full comparison: sticky tabs (Highlights/Summary/Detailed/TCO), 3-product header with VS markers, highlights cards, category score dots (5-dot rows), ratings + DudScore, key specs with "Best" badges, detailed summary table, quick TCO. Mock data in `mock-pages-data.ts`. |
+| `(public)/seller/[slug]` page | ✅ | Seller header card (avatar, name, verified badge, stars, TrustScore gauge), 4 tabs, seller info content (description, category pills, photo grid, socials, contact), right sidebar (performance metrics, report/enquire, feedback). Mock data. |
 | Inbox / Purchase dashboard | ⬜ | Sprint 3 |
 
 ---

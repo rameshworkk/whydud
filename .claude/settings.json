@@ -22,7 +22,11 @@
       "Bash(findstr:*)",
       "Bash(wmic:*)",
       "Bash(taskkill:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(find:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller"
     ]
   }
 }
