@@ -5,16 +5,17 @@
 **Architecture Reference:** `docs/ARCHITECTURE.md`
 
 ## 🎯 CURRENT TASK
+## 🎯 CURRENT TASK
 Build 3 pages with mock data:
 
-1. src/app/(public)/search/page.tsx — match docs/figma/Search_result_page-1.png
-   "Results for X" + sort dropdown + 4-col ProductCard grid + right sidebar seller card
+1. src/app/(dashboard)/dashboard/page.tsx — match docs/figma/expense_tracker_mockup.png (use ₹ not $)
+   4 stat cards, tab nav (Overview|Platforms|Categories|Timeline|Insights), Recharts line chart + donut + horizontal bars, 3 insight cards
 
-2. src/app/(public)/compare/page.tsx — match docs/figma/Comparison_results.png
-   Product header row, sticky tabs (Highlights|Summary|Detailed|TCO), highlights cards, category score dots, spec rows with "Best" badges
+2. src/app/(auth)/login/page.tsx — no Figma, use docs/DESIGN-SYSTEM.md "Screen: Login Page"
+   Centered card, email+password inputs, "Sign in" orange button, Google OAuth, register link
 
-3. src/app/(public)/seller/[slug]/page.tsx — match docs/figma/Seller_detail_page-1.png
-   Header (avatar, name, verified badge, stars, TrustScore gauge), tabs, performance sidebar, category pills
+3. src/app/(auth)/register/page.tsx — no Figma, use docs/DESIGN-SYSTEM.md "Screen: Registration"
+   3-step flow: account → @whydud.com username → marketplace onboarding. Step indicator dots.
 
 ## Legend
 
@@ -235,14 +236,15 @@ Build 3 pages with mock data:
 | `src/lib/mock-data.ts` | ✅ | 8 products + 4 deals, MockProduct + MockDeal types |
 | `src/components/product/product-card.tsx` | ✅ | Matches Figma — Recommended badge, stars, teal brand, marketplace badge, Best buy |
 | Homepage | ✅ | Redesigned to match Figma: split hero (text+search left, floating visuals right), review CTA strip, trending with filter chips, Buyer's/Reviewer's Zone cards, deals, rate-&-review section, top picks/bestsellers/top-rated/most-bought side-by-side, helpful reviews section |
-| Auth pages (login, register, verify email) | ⬜ | Sprint 1 remaining |
-| @whyd.xyz onboarding flow | ⬜ | Sprint 1 remaining |
+| Auth pages (login, register) | ✅ | Login: centered card, email+password with show/hide, remember me, forgot password, Google OAuth. Register: 3-step flow (account → @whyd.xyz email → marketplace onboarding) with step indicator dots, password strength bar, terms checkbox, Google OAuth, marketplace checklist with expand/collapse. |
+| @whyd.xyz onboarding flow | ✅ | Step 2+3 of register page: username picker with availability check, marketplace setup checklist (8 sites) with progress bar |
 | Wishlist pages | ⬜ | Sprint 2 |
 | Product detail page (`/product/[slug]`) | ✅ | 3-column dashboard layout: left=image+specs, center=title+price+DudScore gauge+marketplace prices+price chart, right=reviews. Independently scrollable columns. 6 new components: `dud-score-gauge`, `marketplace-prices`, `category-score-bars`, `price-chart` (Recharts), `reviews/rating-distribution`, `reviews/review-card`. Mock data in `mock-product-detail.ts`. |
 | Price history chart | ✅ | `price-chart.tsx` — Recharts LineChart, 3 marketplace lines, 1M/3M/Max tabs |
 | DudScore badge component | ✅ | `dud-score-gauge.tsx` — SVG semi-circular gauge, red→green gradient, needle indicator |
 | `(public)/compare` page | ✅ | Full comparison: sticky tabs (Highlights/Summary/Detailed/TCO), 3-product header with VS markers, highlights cards, category score dots (5-dot rows), ratings + DudScore, key specs with "Best" badges, detailed summary table, quick TCO. Mock data in `mock-pages-data.ts`. |
 | `(public)/seller/[slug]` page | ✅ | Seller header card (avatar, name, verified badge, stars, TrustScore gauge), 4 tabs, seller info content (description, category pills, photo grid, socials, contact), right sidebar (performance metrics, report/enquire, feedback). Mock data. |
+| `(dashboard)/dashboard` page | ✅ | Expense Tracker matching Figma (₹ not $): 4 stat cards, tab nav (Overview/Platforms/Categories/Timeline/Insights), Monthly Spend Recharts line chart, Spend by Platform donut chart, Spend by Category horizontal bars, 3 insight cards. Mock data in `mock-dashboard-data.ts`. Client component `DashboardCharts.tsx`. |
 | Inbox / Purchase dashboard | ⬜ | Sprint 3 |
 
 ---
@@ -290,6 +292,34 @@ Figma reference: `docs/figma/homepage.png`.
 Use `MOCK_PRODUCTS` and `MOCK_DEALS` from `src/lib/mock-data.ts`.
 Use `ProductCard` from `src/components/product/product-card.tsx` for product grids.
 Sections: hero search bar, featured/recommended products grid (use is_recommended), all products grid, blockbuster deals strip (use MOCK_DEALS).
+
+## 2026-02-24 — Dashboard, Login, Register pages
+
+Built 3 pages with mock data:
+
+1. **Dashboard** (`/dashboard`) — Expense Tracker matching Figma mockup:
+   - 4 stat cards (Total spend, Orders, Average order, Top platform) in ₹
+   - Tab navigation (Overview/Platforms/Categories/Timeline/Insights)
+   - Monthly Spend line chart (Recharts `LineChart`, 4 weekly data points)
+   - Spend by Platform donut chart (Recharts `PieChart` with inner radius)
+   - Spend by Category horizontal progress bars
+   - 3 insight cards at bottom
+   - New files: `mock-dashboard-data.ts`, `components/dashboard/DashboardCharts.tsx`
+
+2. **Login** (`/login`) — From DESIGN-SYSTEM.md spec:
+   - Centered card with Whydud logo, "Welcome back" heading
+   - Email + Password inputs with show/hide toggle (eye icon SVG)
+   - Remember me checkbox + Forgot password link
+   - Orange "Sign in" button, "or" divider, Google OAuth with real G icon
+   - Register link at bottom
+
+3. **Register** (`/register`) — 3-step flow from DESIGN-SYSTEM.md:
+   - Step indicator: 3 connected dots (filled/active/inactive states)
+   - Step 1: Name, email, password (with strength bar), terms checkbox, Google OAuth
+   - Step 2: @whyd.xyz username picker with availability check, skip option
+   - Step 3: Marketplace onboarding checklist (8 Indian sites), expand/collapse per site, progress bar, "I'll do this later" link
+
+---
 
 ## Known Issues / Tech Debt
 
