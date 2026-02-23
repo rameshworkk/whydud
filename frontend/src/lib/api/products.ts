@@ -1,7 +1,19 @@
 import { apiClient } from "./client";
-import type { Deal, MarketplaceOffer, PaginatedResponse, ProductDetail, ProductSummary, PricePoint, Review } from "@/types";
+import type {
+  Deal,
+  DiscussionThread,
+  MarketplaceOffer,
+  ProductDetail,
+  ProductSummary,
+  PricePoint,
+  Review,
+} from "@/types";
 
 export const productsApi = {
+  /** Returns ProductSummary[] in .data (paginated, cursor in pagination.next) */
+  list: (params?: { category?: string; brand?: string; cursor?: string }) =>
+    apiClient.get<ProductSummary[]>("/api/v1/products", { params }),
+
   getDetail: (slug: string) =>
     apiClient.get<ProductDetail>(`/api/v1/products/${slug}`),
 
@@ -11,7 +23,7 @@ export const productsApi = {
     }),
 
   getReviews: (slug: string, cursor?: string) =>
-    apiClient.get<PaginatedResponse<Review>>(`/api/v1/products/${slug}/reviews`, {
+    apiClient.get<Review[]>(`/api/v1/products/${slug}/reviews`, {
       params: { cursor },
     }),
 
@@ -22,7 +34,7 @@ export const productsApi = {
     apiClient.get<Record<string, unknown>>(`/api/v1/products/${slug}/tco`, { params }),
 
   getDiscussions: (slug: string, cursor?: string) =>
-    apiClient.get<PaginatedResponse<Record<string, unknown>>>(`/api/v1/products/${slug}/discussions`, {
+    apiClient.get<DiscussionThread[]>(`/api/v1/products/${slug}/discussions`, {
       params: { cursor },
     }),
 
@@ -33,8 +45,9 @@ export const productsApi = {
 };
 
 export const dealsApi = {
+  /** Returns Deal[] in .data (paginated) */
   list: (params?: { dealType?: string; cursor?: string }) =>
-    apiClient.get<PaginatedResponse<Deal>>(`/api/v1/deals`, { params }),
+    apiClient.get<Deal[]>(`/api/v1/deals`, { params }),
 
   get: (id: string) => apiClient.get<Deal>(`/api/v1/deals/${id}`),
 

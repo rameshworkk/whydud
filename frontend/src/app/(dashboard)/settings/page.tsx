@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { authApi, whydudEmailApi, cardVaultApi } from "@/lib/api/auth";
+import type { User, WhydudEmail, PaymentMethod } from "@/types";
 
 const TABS = [
   "Profile",
@@ -13,31 +15,38 @@ const TABS = [
 
 type Tab = (typeof TABS)[number];
 
-const MOCK_CARDS = [
-  { id: "c1", bank: "HDFC Bank", variant: "Millennia", network: "Visa", nickname: "Daily use" },
-  { id: "c2", bank: "ICICI Bank", variant: "Amazon Pay", network: "Visa", nickname: "Amazon orders" },
-  { id: "c3", bank: "SBI", variant: "SimplyCLICK", network: "Visa", nickname: "Online shopping" },
+const MARKETPLACES = [
+  "Amazon.in",
+  "Flipkart",
+  "Myntra",
+  "Ajio",
+  "Nykaa",
+  "Croma",
 ];
 
-const MOCK_MARKETPLACES_ONBOARDED = [
-  { name: "Amazon.in", connected: true },
-  { name: "Flipkart", connected: true },
-  { name: "Myntra", connected: false },
-  { name: "Ajio", connected: false },
-  { name: "Nykaa", connected: false },
-  { name: "Croma", connected: true },
-];
+function TabSkeleton() {
+  return (
+    <div className="max-w-lg flex flex-col gap-5 animate-pulse">
+      <div className="w-48 h-4 rounded bg-slate-200" />
+      <div className="w-full h-10 rounded-lg bg-slate-200" />
+      <div className="w-full h-10 rounded-lg bg-slate-200" />
+      <div className="w-full h-10 rounded-lg bg-slate-200" />
+      <div className="w-24 h-10 rounded-lg bg-slate-200" />
+    </div>
+  );
+}
 
-function ProfileTab() {
+function ProfileTab({ user, loading }: { user: User | null; loading: boolean }) {
+  if (loading) return <TabSkeleton />;
+
   return (
     <div className="max-w-lg flex flex-col gap-5">
-      {/* Avatar */}
       <div className="flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-[#F97316] flex items-center justify-center text-white text-xl font-bold">
-          R
+          {user?.name?.charAt(0)?.toUpperCase() ?? "U"}
         </div>
         <div>
-          <p className="text-sm font-semibold text-slate-800">Ramesh Kumar</p>
+          <p className="text-sm font-semibold text-slate-800">{user?.name ?? "—"}</p>
           <button className="text-xs text-[#F97316] hover:text-[#EA580C] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
             Change photo
           </button>
@@ -47,7 +56,7 @@ function ProfileTab() {
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium text-slate-700">Full name</label>
         <input
-          defaultValue="Ramesh Kumar"
+          defaultValue={user?.name ?? ""}
           className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
         />
       </div>
@@ -55,21 +64,13 @@ function ProfileTab() {
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium text-slate-700">Email</label>
         <input
-          defaultValue="ramesh@gmail.com"
+          defaultValue={user?.email ?? ""}
           disabled
           className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5 text-sm text-slate-500"
         />
         <p className="text-xs text-slate-400">
           Email cannot be changed. Contact support if needed.
         </p>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-slate-700">City</label>
-        <input
-          defaultValue="Bangalore"
-          className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
-        />
       </div>
 
       <button className="self-start rounded-lg bg-[#F97316] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2">
@@ -102,68 +103,89 @@ function ProfileTab() {
   );
 }
 
-function WhydEmailTab() {
+function WhydEmailTab({ whydEmail, loading }: { whydEmail: WhydudEmail | null; loading: boolean }) {
+  if (loading) return <TabSkeleton />;
+
   return (
     <div className="max-w-lg flex flex-col gap-5">
-      <div className="rounded-xl border border-[#E2E8F0] bg-white p-5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-semibold text-slate-800">
-            ramesh@whyd.xyz
-          </span>
-          <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-            Active
-          </span>
+      {whydEmail ? (
+        <div className="rounded-xl border border-[#E2E8F0] bg-white p-5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-slate-800">
+              {whydEmail.emailAddress}
+            </span>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              whydEmail.isActive
+                ? "text-green-600 bg-green-50"
+                : "text-slate-500 bg-slate-100"
+            }`}>
+              {whydEmail.isActive ? "Active" : "Inactive"}
+            </span>
+          </div>
+          <div className="flex gap-4 text-xs text-slate-500 mt-1">
+            <span>{whydEmail.totalEmailsReceived} emails received</span>
+            <span>{whydEmail.totalOrdersDetected} orders tracked</span>
+          </div>
         </div>
-        <div className="flex gap-4 text-xs text-slate-500 mt-1">
-          <span>42 emails received</span>
-          <span>23 orders tracked</span>
-          <span>Active since Feb 2026</span>
+      ) : (
+        <div className="rounded-xl border border-dashed border-[#E2E8F0] bg-white p-8 text-center">
+          <p className="text-sm text-slate-500">No @whyd.xyz email set up yet.</p>
+          <button className="mt-3 rounded-lg bg-[#F97316] px-4 py-2 text-sm font-semibold text-white hover:bg-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2">
+            Create @whyd.xyz email
+          </button>
         </div>
-      </div>
+      )}
 
       <div>
         <h3 className="text-sm font-semibold text-slate-800 mb-3">
           Marketplace setup
         </h3>
         <div className="flex flex-col gap-2">
-          {MOCK_MARKETPLACES_ONBOARDED.map((mp) => (
-            <div
-              key={mp.name}
-              className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-4 py-3"
-            >
-              <span className="text-sm text-slate-700">{mp.name}</span>
-              {mp.connected ? (
-                <span className="text-xs font-medium text-green-600">
-                  Connected
-                </span>
-              ) : (
-                <button className="text-xs font-medium text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
-                  Set up
-                </button>
-              )}
-            </div>
-          ))}
+          {MARKETPLACES.map((mp) => {
+            const connected = whydEmail?.marketplacesRegistered?.includes(mp) ?? false;
+            return (
+              <div
+                key={mp}
+                className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white px-4 py-3"
+              >
+                <span className="text-sm text-slate-700">{mp}</span>
+                {connected ? (
+                  <span className="text-xs font-medium text-green-600">
+                    Connected
+                  </span>
+                ) : (
+                  <button className="text-xs font-medium text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
+                    Set up
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      <hr className="border-[#E2E8F0]" />
-
-      <div>
-        <h3 className="text-sm font-semibold text-red-600 mb-2">
-          Danger zone
-        </h3>
-        <button className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-          Deactivate @whyd.xyz email
-        </button>
-      </div>
+      {whydEmail && (
+        <>
+          <hr className="border-[#E2E8F0]" />
+          <div>
+            <h3 className="text-sm font-semibold text-red-600 mb-2">
+              Danger zone
+            </h3>
+            <button className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+              Deactivate @whyd.xyz email
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function CardVaultTab() {
+function CardVaultTab({ cards, loading }: { cards: PaymentMethod[]; loading: boolean }) {
+  if (loading) return <TabSkeleton />;
+
   return (
     <div className="flex flex-col gap-5">
-      {/* Security badge */}
       <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-3">
         <span className="text-lg">🔒</span>
         <div>
@@ -176,47 +198,51 @@ function CardVaultTab() {
         </div>
       </div>
 
-      {/* Saved cards */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-800">
-            Your Cards ({MOCK_CARDS.length})
+            Your Cards ({cards.length})
           </h3>
           <button className="text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
             + Add card
           </button>
         </div>
-        <div className="flex flex-col gap-3">
-          {MOCK_CARDS.map((card) => (
-            <div
-              key={card.id}
-              className="rounded-xl border border-[#E2E8F0] bg-white p-4 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-600">
-                  {card.bank
-                    .split(" ")
-                    .map((w) => w[0])
-                    .join("")}
+        {cards.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-[#E2E8F0] bg-white p-8 text-center">
+            <p className="text-sm text-slate-400">No cards saved yet. Add a card to get personalized bank offer matching.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {cards.map((card) => (
+              <div
+                key={card.id}
+                className="rounded-xl border border-[#E2E8F0] bg-white p-4 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-600">
+                    {card.bankName
+                      .split(" ")
+                      .map((w) => w[0])
+                      .join("")}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {card.bankName} — {card.cardVariant}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {card.cardNetwork}{card.nickname ? ` · ${card.nickname}` : ""}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    {card.bank} — {card.variant}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {card.network} · {card.nickname}
-                  </p>
-                </div>
+                <button className="text-xs text-slate-400 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
+                  Remove
+                </button>
               </div>
-              <button className="text-xs text-slate-400 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Wallets */}
       <div>
         <h3 className="text-sm font-semibold text-slate-800 mb-3">
           Wallets & Memberships
@@ -247,7 +273,8 @@ function TCOPreferencesTab() {
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium text-slate-700">City</label>
         <input
-          defaultValue="Bangalore"
+          defaultValue=""
+          placeholder="Enter your city"
           className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
         />
         <p className="text-xs text-slate-400">
@@ -313,7 +340,9 @@ function TCOPreferencesTab() {
   );
 }
 
-function SubscriptionTab() {
+function SubscriptionTab({ user }: { user: User | null }) {
+  const isPremium = user?.subscriptionTier === "premium";
+
   return (
     <div className="max-w-lg flex flex-col gap-5">
       <div className="rounded-xl border border-[#E2E8F0] bg-white p-5">
@@ -321,49 +350,53 @@ function SubscriptionTab() {
           <span className="text-sm font-semibold text-slate-800">
             Current Plan
           </span>
-          <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-            Free
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+            isPremium ? "text-[#F97316] bg-orange-50" : "text-slate-500 bg-slate-100"
+          }`}>
+            {isPremium ? "Premium" : "Free"}
           </span>
         </div>
         <p className="text-xs text-slate-500">
-          You&apos;re on the free plan. Upgrade to Premium for advanced
-          features.
+          {isPremium
+            ? "You're on the Premium plan. Enjoy all features."
+            : "You're on the free plan. Upgrade to Premium for advanced features."}
         </p>
       </div>
 
-      <div className="rounded-xl border-2 border-[#F97316] bg-[#FFF7ED] p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg">⭐</span>
-          <h3 className="text-base font-bold text-slate-900">
-            Whydud Premium
-          </h3>
+      {!isPremium && (
+        <div className="rounded-xl border-2 border-[#F97316] bg-[#FFF7ED] p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">⭐</span>
+            <h3 className="text-base font-bold text-slate-900">
+              Whydud Premium
+            </h3>
+          </div>
+          <ul className="text-sm text-slate-600 space-y-2 mb-4">
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span> Unlimited price alerts
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span> Advanced TCO calculator
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span> Priority deal notifications
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span> Export purchase data
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span> Ad-free experience
+            </li>
+          </ul>
+          <div className="flex items-baseline gap-1 mb-3">
+            <span className="text-2xl font-bold text-slate-900">₹199</span>
+            <span className="text-sm text-slate-500">/ month</span>
+          </div>
+          <button className="w-full rounded-lg bg-[#F97316] py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2">
+            Upgrade to Premium
+          </button>
         </div>
-        <ul className="text-sm text-slate-600 space-y-2 mb-4">
-          <li className="flex items-center gap-2">
-            <span className="text-green-500">✓</span> Unlimited price alerts
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-green-500">✓</span> Advanced TCO calculator
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-green-500">✓</span> Priority deal
-            notifications
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-green-500">✓</span> Export purchase data
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-green-500">✓</span> Ad-free experience
-          </li>
-        </ul>
-        <div className="flex items-baseline gap-1 mb-3">
-          <span className="text-2xl font-bold text-slate-900">₹199</span>
-          <span className="text-sm text-slate-500">/ month</span>
-        </div>
-        <button className="w-full rounded-lg bg-[#F97316] py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2">
-          Upgrade to Premium
-        </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -371,15 +404,14 @@ function SubscriptionTab() {
 function DataPrivacyTab() {
   return (
     <div className="max-w-lg flex flex-col gap-5">
-      {/* Connected services */}
       <div>
         <h3 className="text-sm font-semibold text-slate-800 mb-3">
           Connected Services
         </h3>
         <div className="flex flex-col gap-2">
           {[
-            { name: "Gmail (Google OAuth)", status: "Connected", connected: true },
-            { name: "@whyd.xyz Email", status: "Active", connected: true },
+            { name: "Gmail (Google OAuth)", status: "Connected" },
+            { name: "@whyd.xyz Email", status: "Active" },
           ].map((svc) => (
             <div
               key={svc.name}
@@ -401,7 +433,6 @@ function DataPrivacyTab() {
 
       <hr className="border-[#E2E8F0]" />
 
-      {/* Export */}
       <div>
         <h3 className="text-sm font-semibold text-slate-800 mb-2">
           Export my data
@@ -416,7 +447,6 @@ function DataPrivacyTab() {
 
       <hr className="border-[#E2E8F0]" />
 
-      {/* Danger zone */}
       <div>
         <h3 className="text-sm font-semibold text-red-600 mb-2">
           Delete account
@@ -435,6 +465,31 @@ function DataPrivacyTab() {
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("Profile");
+  const [user, setUser] = useState<User | null>(null);
+  const [whydEmail, setWhydEmail] = useState<WhydudEmail | null>(null);
+  const [cards, setCards] = useState<PaymentMethod[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const [userRes, emailRes, cardsRes] = await Promise.all([
+          authApi.me(),
+          whydudEmailApi.getStatus(),
+          cardVaultApi.list(),
+        ]);
+
+        if (userRes.success && "data" in userRes) setUser(userRes.data);
+        if (emailRes.success && "data" in emailRes) setWhydEmail(emailRes.data);
+        if (cardsRes.success && "data" in cardsRes) setCards(cardsRes.data);
+      } catch {
+        // Tabs show empty/default state on failure
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSettings();
+  }, []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -458,11 +513,11 @@ export default function SettingsPage() {
       </div>
 
       {/* Tab content */}
-      {activeTab === "Profile" && <ProfileTab />}
-      {activeTab === "@whyd.xyz" && <WhydEmailTab />}
-      {activeTab === "Card Vault" && <CardVaultTab />}
+      {activeTab === "Profile" && <ProfileTab user={user} loading={loading} />}
+      {activeTab === "@whyd.xyz" && <WhydEmailTab whydEmail={whydEmail} loading={loading} />}
+      {activeTab === "Card Vault" && <CardVaultTab cards={cards} loading={loading} />}
       {activeTab === "TCO Preferences" && <TCOPreferencesTab />}
-      {activeTab === "Subscription" && <SubscriptionTab />}
+      {activeTab === "Subscription" && <SubscriptionTab user={user} />}
       {activeTab === "Data & Privacy" && <DataPrivacyTab />}
     </div>
   );

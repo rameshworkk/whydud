@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Purchase History" };
 
 export default async function PurchasesPage() {
   const res = await purchasesApi.list().catch(() => null);
-  const orders = res?.success ? res.data.data : [];
+  const orders = res?.success && Array.isArray(res.data) ? res.data : [];
 
   return (
     <div className="flex flex-col gap-6">

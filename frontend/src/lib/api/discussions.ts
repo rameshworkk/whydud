@@ -1,13 +1,14 @@
 import { apiClient } from "./client";
+import type { DiscussionReply, DiscussionThread } from "@/types";
 
 export const discussionsApi = {
   create: (productSlug: string, payload: { threadType: string; title: string; body: string }) =>
-    apiClient.post(`/api/v1/products/${productSlug}/discussions`, payload),
+    apiClient.post<DiscussionThread>(`/api/v1/products/${productSlug}/discussions`, payload),
 
-  get: (id: string) => apiClient.get<Record<string, unknown>>(`/api/v1/discussions/${id}`),
+  get: (id: string) => apiClient.get<DiscussionThread & { replies: DiscussionReply[] }>(`/api/v1/discussions/${id}`),
 
   reply: (threadId: string, body: string, parentReplyId?: string) =>
-    apiClient.post(`/api/v1/discussions/${threadId}/replies`, { body, parentReplyId }),
+    apiClient.post<DiscussionReply>(`/api/v1/discussions/${threadId}/replies`, { body, parentReplyId }),
 
   voteThread: (id: string, vote: 1 | -1) =>
     apiClient.post(`/api/v1/discussions/${id}/vote`, { vote }),

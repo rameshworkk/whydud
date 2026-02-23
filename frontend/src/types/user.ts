@@ -64,7 +64,7 @@ export interface Wishlist {
 
 export interface WishlistItem {
   id: string;
-  product: string; // product UUID
+  product: string;
   priceWhenAdded: number | null;
   targetPrice: number | null;
   alertEnabled: boolean;
@@ -81,6 +81,33 @@ export interface RewardBalance {
   totalExpired: number;
   currentBalance: number;
   updatedAt: string;
+}
+
+export interface RewardPointsLedger {
+  id: string;
+  action: string;
+  points: number;
+  description: string;
+  createdAt: string;
+}
+
+export interface GiftCard {
+  id: number;
+  brandName: string;
+  brandSlug: string;
+  brandLogoUrl: string;
+  denominations: number[];
+  category: string;
+}
+
+export interface GiftCardRedemption {
+  id: string;
+  giftCardBrand: string;
+  denomination: number;
+  pointsSpent: number;
+  deliveryEmail: string;
+  status: "pending" | "delivered" | "failed";
+  createdAt: string;
 }
 
 export interface InboxEmail {
@@ -113,4 +140,49 @@ export interface ParsedOrder {
   paymentMethod: string;
   matchStatus: "pending" | "matched" | "unmatched";
   createdAt: string;
+}
+
+export interface RefundTracking {
+  id: string;
+  order: string;
+  marketplace: string;
+  productName: string;
+  refundAmount: number;
+  status: "initiated" | "processing" | "completed" | "failed";
+  expectedByDate: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface ReturnWindow {
+  id: string;
+  order: string;
+  marketplace: string;
+  productName: string;
+  returnDeadline: string;
+  isExpired: boolean;
+  daysRemaining: number;
+}
+
+export interface DetectedSubscription {
+  id: string;
+  serviceName: string;
+  marketplace: string;
+  amount: number;
+  frequency: "monthly" | "quarterly" | "yearly";
+  lastChargeDate: string | null;
+  nextChargeDate: string | null;
+  isActive: boolean;
+}
+
+export interface PurchaseDashboard {
+  totalSpent: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  topMarketplace: string | null;
+  monthlySpending: Array<{ month: string; amount: number }>;
+  categoryBreakdown: Array<{ category: string; amount: number; count: number }>;
+  activeRefunds: number;
+  expiringReturns: number;
+  activeSubscriptions: number;
 }

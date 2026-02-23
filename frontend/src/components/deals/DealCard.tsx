@@ -21,6 +21,9 @@ const CONFIDENCE_COLOURS: Record<Deal["confidence"], string> = {
 
 /** Deal card for the Blockbuster Deals page. */
 export function DealCard({ deal }: DealCardProps) {
+  const productSlug = deal.product?.slug ?? "";
+  const productTitle = deal.product?.title ?? "Unknown Product";
+
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
       <div className="flex items-start justify-between gap-2">
@@ -32,8 +35,8 @@ export function DealCard({ deal }: DealCardProps) {
 
       <div>
         <p className="text-xs text-muted-foreground">{DEAL_TYPE_LABELS[deal.dealType]}</p>
-        <Link href={`/product/${deal.productSlug}`} className="mt-0.5 font-semibold hover:underline line-clamp-2">
-          {deal.productTitle}
+        <Link href={`/product/${productSlug}`} className="mt-0.5 font-semibold hover:underline line-clamp-2">
+          {productTitle}
         </Link>
       </div>
 
@@ -57,7 +60,7 @@ export function DealCard({ deal }: DealCardProps) {
       </div>
 
       <Link
-        href={`/product/${deal.productSlug}`}
+        href={`/product/${productSlug}`}
         className="mt-auto rounded-lg bg-primary py-2 text-center text-sm font-medium text-primary-foreground hover:opacity-90"
       >
         View Deal

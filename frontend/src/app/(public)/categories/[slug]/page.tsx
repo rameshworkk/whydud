@@ -16,7 +16,8 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params;
   const res = await searchApi.search("", { category: slug }).catch(() => null);
-  const products = res?.success ? res.data.data : [];
+  const data = res?.success ? res.data : null;
+  const products = data && "results" in data ? data.results : [];
 
   return (
     <>

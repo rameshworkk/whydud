@@ -1,23 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import {
-  MOCK_EMAILS,
-  INBOX_FOLDER_COUNTS,
-  MARKETPLACE_FILTERS,
-  type MockEmail,
-} from "@/lib/mock-inbox-data";
-import { formatPrice } from "@/lib/utils/format";
+import { useState, useEffect, useCallback } from "react";
+import { inboxApi } from "@/lib/api/inbox";
+import type { InboxEmail } from "@/types";
 
 const FOLDERS = [
-  { id: "all", label: "All Mail", icon: "📥" },
-  { id: "order", label: "Orders", icon: "📦" },
-  { id: "shipping", label: "Shipping", icon: "🚚" },
-  { id: "refund", label: "Refunds", icon: "💰" },
-  { id: "return", label: "Returns", icon: "🔄" },
-  { id: "subscription", label: "Subscriptions", icon: "🔁" },
-  { id: "promo", label: "Promotions", icon: "📢" },
-  { id: "starred", label: "Starred", icon: "⭐" },
+  { id: "all", label: "All Mail", icon: "\uD83D\uDCE5" },
+  { id: "order", label: "Orders", icon: "\uD83D\uDCE6" },
+  { id: "shipping", label: "Shipping", icon: "\uD83D\uDE9A" },
+  { id: "refund", label: "Refunds", icon: "\uD83D\uDCB0" },
+  { id: "return", label: "Returns", icon: "\uD83D\uDD04" },
+  { id: "subscription", label: "Subscriptions", icon: "\uD83D\uDD01" },
+  { id: "promo", label: "Promotions", icon: "\uD83D\uDCE2" },
+  { id: "starred", label: "Starred", icon: "\u2B50" },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -27,6 +22,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   return: "bg-orange-100 text-orange-700",
   subscription: "bg-pink-100 text-pink-700",
   promo: "bg-slate-100 text-slate-600",
+  other: "bg-slate-100 text-slate-600",
 };
 
 function timeAgo(iso: string): string {
@@ -40,18 +36,108 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
-export default function InboxPage() {
-  const [activeFolder, setActiveFolder] = useState("all");
-  const [selectedEmail, setSelectedEmail] = useState<MockEmail | null>(
-    MOCK_EMAILS[0] ?? null
+/** Extended email with optional body from detail endpoint */
+interface EmailWithBody extends InboxEmail {
+  bodyHtml?: string;
+}
+
+function EmailListSkeleton() {
+  return (
+    <div className="flex flex-col">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="px-4 py-3 border-b border-[#F1F5F9] animate-pulse">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-24 h-3 rounded bg-slate-200" />
+            <div className="ml-auto w-10 h-2.5 rounded bg-slate-200" />
+          </div>
+          <div className="w-48 h-3 rounded bg-slate-200 mb-1.5" />
+          <div className="w-32 h-2.5 rounded bg-slate-200" />
+        </div>
+      ))}
+    </div>
   );
+}
+
+export default function InboxPage() {
+  const [emails, setEmails] = useState<InboxEmail[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeFolder, setActiveFolder] = useState("all");
+  const [selectedEmail, setSelectedEmail] = useState<EmailWithBody | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredEmails = MOCK_EMAILS.filter((e) => {
-    if (activeFolder === "starred") return e.isStarred;
-    if (activeFolder !== "all") return e.category === activeFolder;
-    return true;
-  }).filter(
+  // Fetch email list
+  useEffect(() => {
+    async function fetchEmails() {
+      setLoading(true);
+      setError(null);
+      try {
+        const filters: Record<string, string | boolean | undefined> = {};
+        if (activeFolder === "starred") {
+          filters.isStarred = true;
+        } else if (activeFolder !== "all") {
+          filters.category = activeFolder;
+        }
+        const res = await inboxApi.list(filters);
+        if (res.success && "data" in res) {
+          setEmails(res.data);
+        } else if (!res.success && "error" in res) {
+          setError(res.error.message);
+        }
+      } catch {
+        setError("Failed to load emails.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchEmails();
+  }, [activeFolder]);
+
+  // Fetch individual email detail
+  const handleSelectEmail = useCallback(async (email: InboxEmail) => {
+    setSelectedEmail({ ...email });
+    setDetailLoading(true);
+    try {
+      const res = await inboxApi.get(email.id);
+      if (res.success && "data" in res) {
+        setSelectedEmail(res.data);
+        // Mark as read if not already
+        if (!email.isRead) {
+          await inboxApi.markRead(email.id, true);
+          setEmails((prev) =>
+            prev.map((e) => (e.id === email.id ? { ...e, isRead: true } : e))
+          );
+        }
+      }
+    } catch {
+      // Keep the basic email info even if detail fails
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  // Compute folder counts from current email list
+  const folderCounts: Record<string, number> = {};
+  emails.forEach((e) => {
+    folderCounts["all"] = (folderCounts["all"] ?? 0) + 1;
+    folderCounts[e.category] = (folderCounts[e.category] ?? 0) + 1;
+    if (e.isStarred) folderCounts["starred"] = (folderCounts["starred"] ?? 0) + 1;
+  });
+
+  // Compute marketplace counts
+  const marketplaceCounts: Record<string, number> = {};
+  emails.forEach((e) => {
+    if (e.marketplace) {
+      marketplaceCounts[e.marketplace] = (marketplaceCounts[e.marketplace] ?? 0) + 1;
+    }
+  });
+  const marketplaceFilters = Object.entries(marketplaceCounts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // Client-side search filter
+  const filteredEmails = emails.filter(
     (e) =>
       !searchQuery ||
       e.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -62,8 +148,14 @@ export default function InboxPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-bold text-slate-900">Inbox</h1>
 
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <div className="flex rounded-xl border border-[#E2E8F0] overflow-hidden bg-white min-h-[620px]">
-        {/* ── Folder sidebar ──────────────────────────────────── */}
+        {/* Folder sidebar */}
         <div className="w-[180px] shrink-0 border-r border-[#E2E8F0] bg-[#F8FAFC] flex flex-col">
           <nav className="flex flex-col gap-0.5 p-2">
             {FOLDERS.map((f) => (
@@ -78,7 +170,7 @@ export default function InboxPage() {
               >
                 <span className="text-base">{f.icon}</span>
                 <span className="flex-1">{f.label}</span>
-                {(INBOX_FOLDER_COUNTS[f.id] ?? 0) > 0 && (
+                {(folderCounts[f.id] ?? 0) > 0 && (
                   <span
                     className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                       activeFolder === f.id
@@ -86,7 +178,7 @@ export default function InboxPage() {
                         : "bg-slate-200 text-slate-500"
                     }`}
                   >
-                    {INBOX_FOLDER_COUNTS[f.id]}
+                    {folderCounts[f.id]}
                   </span>
                 )}
               </button>
@@ -99,20 +191,24 @@ export default function InboxPage() {
               Marketplaces
             </p>
             <div className="flex flex-col gap-1">
-              {MARKETPLACE_FILTERS.map((mp) => (
-                <div
-                  key={mp.name}
-                  className="flex items-center justify-between text-xs text-slate-500"
-                >
-                  <span>{mp.name}</span>
-                  <span className="text-slate-400">{mp.count}</span>
-                </div>
-              ))}
+              {marketplaceFilters.length > 0 ? (
+                marketplaceFilters.map((mp) => (
+                  <div
+                    key={mp.name}
+                    className="flex items-center justify-between text-xs text-slate-500"
+                  >
+                    <span>{mp.name}</span>
+                    <span className="text-slate-400">{mp.count}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-400">No marketplaces</p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* ── Email list ──────────────────────────────────────── */}
+        {/* Email list */}
         <div className="w-[300px] shrink-0 border-r border-[#E2E8F0] flex flex-col">
           {/* Search bar */}
           <div className="p-3 border-b border-[#E2E8F0]">
@@ -141,58 +237,68 @@ export default function InboxPage() {
 
           {/* Email items */}
           <div className="flex-1 overflow-y-auto no-scrollbar">
-            {filteredEmails.map((email) => (
-              <button
-                key={email.id}
-                onClick={() => setSelectedEmail(email)}
-                className={`w-full flex flex-col gap-1 px-4 py-3 text-left border-b border-[#F1F5F9] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#F97316] ${
-                  selectedEmail?.id === email.id
-                    ? "bg-[#FFF7ED]"
-                    : "hover:bg-slate-50"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  {!email.isRead && (
-                    <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                  )}
-                  <span
-                    className={`text-sm truncate flex-1 ${
-                      !email.isRead
-                        ? "font-semibold text-slate-900"
-                        : "text-slate-700"
-                    }`}
-                  >
-                    {email.senderName}
-                  </span>
-                  <span className="text-[10px] text-slate-400 shrink-0">
-                    {timeAgo(email.receivedAt)}
-                  </span>
-                </div>
-                <p
-                  className={`text-xs truncate ${
-                    !email.isRead ? "text-slate-700" : "text-slate-500"
+            {loading ? (
+              <EmailListSkeleton />
+            ) : filteredEmails.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center p-6 text-sm text-slate-400 text-center">
+                {searchQuery
+                  ? "No emails match your search"
+                  : "No emails in this folder"}
+              </div>
+            ) : (
+              filteredEmails.map((email) => (
+                <button
+                  key={email.id}
+                  onClick={() => handleSelectEmail(email)}
+                  className={`w-full flex flex-col gap-1 px-4 py-3 text-left border-b border-[#F1F5F9] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#F97316] ${
+                    selectedEmail?.id === email.id
+                      ? "bg-[#FFF7ED]"
+                      : "hover:bg-slate-50"
                   }`}
                 >
-                  {email.subject}
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 truncate flex-1">
-                    {email.snippet.slice(0, 50)}...
-                  </span>
-                  <span
-                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${
-                      CATEGORY_COLORS[email.category]
+                  <div className="flex items-center gap-2">
+                    {!email.isRead && (
+                      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                    )}
+                    <span
+                      className={`text-sm truncate flex-1 ${
+                        !email.isRead
+                          ? "font-semibold text-slate-900"
+                          : "text-slate-700"
+                      }`}
+                    >
+                      {email.senderName}
+                    </span>
+                    <span className="text-[10px] text-slate-400 shrink-0">
+                      {timeAgo(email.receivedAt)}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-xs truncate ${
+                      !email.isRead ? "text-slate-700" : "text-slate-500"
                     }`}
                   >
-                    {email.category}
-                  </span>
-                </div>
-              </button>
-            ))}
+                    {email.subject}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 truncate flex-1">
+                      {email.marketplace || email.senderAddress}
+                    </span>
+                    <span
+                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${
+                        CATEGORY_COLORS[email.category] ?? "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {email.category}
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
-        {/* ── Email reader ────────────────────────────────────── */}
+        {/* Email reader */}
         <div className="flex-1 flex flex-col overflow-y-auto">
           {selectedEmail ? (
             <div className="p-6">
@@ -218,63 +324,57 @@ export default function InboxPage() {
                     }
                   )}
                 </span>
+                <span className="text-slate-300">|</span>
+                <span
+                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                    CATEGORY_COLORS[selectedEmail.category] ?? "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {selectedEmail.category}
+                </span>
+                {selectedEmail.parseStatus && (
+                  <>
+                    <span className="text-slate-300">|</span>
+                    <span
+                      className={`text-xs font-medium ${
+                        selectedEmail.parseStatus === "parsed"
+                          ? "text-green-600"
+                          : selectedEmail.parseStatus === "failed"
+                          ? "text-red-500"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {selectedEmail.parseStatus === "parsed"
+                        ? "Parsed"
+                        : selectedEmail.parseStatus === "failed"
+                        ? "Parse failed"
+                        : selectedEmail.parseStatus === "pending"
+                        ? "Parsing..."
+                        : "Skipped"}
+                    </span>
+                  </>
+                )}
               </div>
-
-              {/* Parsed data card */}
-              {selectedEmail.parsedData && (
-                <div className="rounded-lg border-2 border-green-200 bg-green-50 p-4 mb-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-base">
-                      {selectedEmail.parsedData.type === "order"
-                        ? "📦"
-                        : selectedEmail.parsedData.type === "refund"
-                        ? "💰"
-                        : "🚚"}
-                    </span>
-                    <span className="text-sm font-bold text-green-800">
-                      {selectedEmail.parsedData.type === "order"
-                        ? "Order Detected"
-                        : selectedEmail.parsedData.type === "refund"
-                        ? "Refund Detected"
-                        : "Shipping Update"}
-                    </span>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    {selectedEmail.parsedData.productName}
-                  </p>
-                  <p className="text-sm text-slate-600 mt-0.5">
-                    {formatPrice(selectedEmail.parsedData.amount)} on{" "}
-                    {selectedEmail.parsedData.marketplace}
-                  </p>
-                  {selectedEmail.parsedData.dudScore && (
-                    <p className="text-sm text-slate-600 mt-0.5">
-                      DudScore:{" "}
-                      <span className="font-semibold">
-                        {selectedEmail.parsedData.dudScore}
-                      </span>{" "}
-                      <span
-                        className={
-                          selectedEmail.parsedData.dudScore >= 80
-                            ? "text-green-600"
-                            : selectedEmail.parsedData.dudScore >= 60
-                            ? "text-yellow-600"
-                            : "text-red-600"
-                        }
-                      >
-                        {selectedEmail.parsedData.dudScoreLabel}
-                      </span>
-                    </p>
-                  )}
-                  <button className="mt-3 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
-                    View in Dashboard →
-                  </button>
-                </div>
-              )}
 
               {/* Email body */}
-              <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
-                {selectedEmail.body}
-              </div>
+              {detailLoading ? (
+                <div className="animate-pulse space-y-3">
+                  <div className="h-3 w-full rounded bg-slate-200" />
+                  <div className="h-3 w-5/6 rounded bg-slate-200" />
+                  <div className="h-3 w-4/6 rounded bg-slate-200" />
+                  <div className="h-3 w-full rounded bg-slate-200" />
+                  <div className="h-3 w-3/4 rounded bg-slate-200" />
+                </div>
+              ) : selectedEmail.bodyHtml ? (
+                <div
+                  className="text-sm text-slate-600 leading-relaxed prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: selectedEmail.bodyHtml }}
+                />
+              ) : (
+                <div className="text-sm text-slate-400 italic">
+                  Email body not available. The email may still be processing.
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center text-sm text-slate-400">

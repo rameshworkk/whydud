@@ -1,11 +1,11 @@
 import Link from "next/link";
 import Image from "next/image";
-import type { MockProduct } from "@/lib/mock-data";
+import type { ProductSummary } from "@/types";
 import { formatPrice } from "@/lib/utils/format";
 import { getMarketplace } from "@/config/marketplace";
 
 interface ProductCardProps {
-  product: MockProduct;
+  product: ProductSummary;
 }
 
 /** Render 5 stars with filled/half/empty based on a 0–5 rating. */
@@ -56,9 +56,12 @@ function formatReviewCount(n: number): string {
   return String(n);
 }
 
-/** Product card for the homepage grid — uses MockProduct flat shape. */
+/** Product card for grids — uses ProductSummary from API. */
 export function ProductCard({ product }: ProductCardProps) {
-  const marketplace = getMarketplace(product.marketplace);
+  const marketplace = getMarketplace(product.currentBestMarketplace ?? "");
+  const imageUrl = product.images?.[0] ?? null;
+  const rating = product.avgRating ?? 0;
+  const reviewCount = product.totalReviews ?? 0;
 
   return (
     <Link
@@ -67,26 +70,25 @@ export function ProductCard({ product }: ProductCardProps) {
     >
       {/* Image area */}
       <div className="relative overflow-hidden rounded-t-lg bg-slate-50 aspect-square">
-        <Image
-          src={product.image}
-          alt={product.title}
-          fill
-          className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          unoptimized
-        />
-
-        {/* Recommended badge */}
-        {product.is_recommended && (
-          <span className="absolute top-2 left-2 rounded-sm bg-[#F97316] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white leading-tight">
-            Recommended
-          </span>
+        {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt={product.title}
+            fill
+            className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            unoptimized
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-muted-foreground text-xs">
+            No image
+          </div>
         )}
 
-        {/* Discount badge */}
-        {product.discount_pct > 0 && (
-          <span className="absolute top-2 right-2 rounded-sm bg-[#DC2626] px-1.5 py-0.5 text-[10px] font-bold text-white leading-tight">
-            -{product.discount_pct}%
+        {/* DudScore badge */}
+        {product.dudScore != null && (
+          <span className="absolute top-2 left-2 rounded-sm bg-[#F97316] px-1.5 py-0.5 text-[10px] font-semibold text-white leading-tight">
+            DudScore {product.dudScore}
           </span>
         )}
       </div>
@@ -94,7 +96,7 @@ export function ProductCard({ product }: ProductCardProps) {
       {/* Card body */}
       <div className="flex flex-col gap-1 p-3">
         {/* Brand */}
-        <p className="text-xs font-medium text-[#4DB6AC] truncate">{product.brand}</p>
+        <p className="text-xs font-medium text-[#4DB6AC] truncate">{product.brandName ?? ""}</p>
 
         {/* Title */}
         <h3 className="text-sm font-medium leading-snug text-slate-800 line-clamp-2 min-h-[2.5rem]">
@@ -102,35 +104,30 @@ export function ProductCard({ product }: ProductCardProps) {
         </h3>
 
         {/* Stars + rating */}
-        <div className="flex items-center gap-1.5">
-          <StarRating rating={product.rating} />
-          <span className="text-xs text-slate-500">
-            {product.rating.toFixed(1)}{" "}
-            <span className="text-slate-400">({formatReviewCount(product.review_count)})</span>
-          </span>
-        </div>
+        {rating > 0 && (
+          <div className="flex items-center gap-1.5">
+            <StarRating rating={rating} />
+            <span className="text-xs text-slate-500">
+              {rating.toFixed(1)}{" "}
+              <span className="text-slate-400">({formatReviewCount(reviewCount)})</span>
+            </span>
+          </div>
+        )}
 
         {/* Price row */}
         <div className="mt-1 flex items-end justify-between gap-2">
           <div>
             <p className="text-base font-bold text-slate-900 leading-tight">
-              {formatPrice(product.price)}
+              {formatPrice(product.currentBestPrice)}
             </p>
-            {product.mrp > product.price && (
-              <p className="text-xs text-slate-400 line-through leading-tight">
-                {formatPrice(product.mrp)}
+            {product.lowestPriceEver != null && product.lowestPriceEver < (product.currentBestPrice ?? Infinity) && (
+              <p className="text-xs text-green-600 leading-tight">
+                Lowest: {formatPrice(product.lowestPriceEver)}
               </p>
             )}
           </div>
 
           <div className="flex flex-col items-end gap-1 shrink-0">
-            {/* Best buy label */}
-            {product.is_recommended && (
-              <span className="text-[10px] font-semibold text-[#16A34A] leading-tight">
-                Best buy
-              </span>
-            )}
-
             {/* Marketplace badge */}
             {marketplace && (
               <span

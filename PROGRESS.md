@@ -5,13 +5,34 @@
 **Architecture Reference:** `docs/ARCHITECTURE.md`
 
 ## 🎯 CURRENT TASK
-Build remaining pages with mock data:
+Now wire everything together:
 
-1. src/app/(dashboard)/inbox/page.tsx — 3-column layout (folder sidebar | email list | reader). Use docs/DESIGN-SYSTEM.md "Screen: Inbox" wireframe.
-2. src/app/(dashboard)/wishlists/page.tsx — wishlist cards grid + item list with price tracking
-3. src/app/(dashboard)/rewards/page.tsx — points balance + earn cards + gift card catalog
-4. src/app/(dashboard)/settings/page.tsx — tabbed: Profile | @whyd.xyz | Cards | TCO | Subscription | Privacy
+1. Complete all src/lib/api/ files with real API calls:
+   - products.ts: getProduct, searchProducts, getProductReviews, getPriceHistory, getBestDeals
+   - search.ts: search, autocomplete
+   - auth.ts: login, register, googleAuth, logout, getMe
+   - inbox.ts: getEmails, getEmail, markRead, bulkAction
+   - wishlists.ts: getWishlists, createWishlist, addItem, removeItem, setAlert
+   - deals.ts: getDeals, getDeal
+   - rewards.ts: getBalance, getHistory, getGiftCards, redeem
+   - discussions.ts: getThreads, createThread, reply, vote
+   - cards.ts: getCards, addCard, removeCard
+   - tco.ts: calculate, compare, getCities
+   - purchases.ts: getDashboard, getOrders, getRefunds
 
+2. Replace ALL mock data in pages with real API calls:
+   - Server components: await api calls directly
+   - Client components: useEffect + state
+
+3. Add loading states (Skeleton components) to every page
+
+4. Add error boundaries to every route group
+
+5. Test the full flow:
+   - Homepage loads products from API
+   - Search works with filters
+   - Product page shows all data
+   - Auth flow works (register → login → dashboard)
 ## Legend
 
 | Symbol | Meaning |
@@ -223,7 +244,7 @@ Build remaining pages with mock data:
 | `(public)/categories/[slug]` page | ✅ | |
 | `(dashboard)/purchases` page | ✅ | |
 | `(dashboard)/layout` | ✅ | |
-| `src/lib/api/` — API client layer | ✅ | `inbox.ts`, `index.ts`, `types.ts` |
+| `src/lib/api/` — API client layer | ✅ | auth, client, discussions, inbox, products, rewards, search, sellers, tco, wishlists |
 | `src/lib/utils/` — format helpers | ✅ | `format.ts`, `cn.ts` |
 | `src/config/marketplace.ts` | ✅ | |
 | shadcn/ui components (`src/components/ui/`) | ✅ | Installed via components.json |
@@ -238,7 +259,7 @@ Build remaining pages with mock data:
 | Price history chart | ✅ | `price-chart.tsx` — Recharts LineChart, 3 marketplace lines, 1M/3M/Max tabs |
 | DudScore badge component | ✅ | `dud-score-gauge.tsx` — SVG semi-circular gauge, red→green gradient, needle indicator |
 | `(public)/compare` page | ✅ | Full comparison: sticky tabs (Highlights/Summary/Detailed/TCO), 3-product header with VS markers, highlights cards, category score dots (5-dot rows), ratings + DudScore, key specs with "Best" badges, detailed summary table, quick TCO. Mock data in `mock-pages-data.ts`. |
-| `(public)/seller/[slug]` page | ✅ | Seller header card (avatar, name, verified badge, stars, TrustScore gauge), 4 tabs, seller info content (description, category pills, photo grid, socials, contact), right sidebar (performance metrics, report/enquire, feedback). Mock data. |
+| `(public)/seller/[slug]` page | ✅ | Seller header card (avatar, name, verified badge, stars, TrustScore gauge), 4 tabs, seller info content (description, category pills, photo grid, socials, contact), right sidebar (performance metrics, report/enquire, feedback). Real API. |
 | `(dashboard)/dashboard` page | ✅ | Expense Tracker matching Figma (₹ not $): 4 stat cards, tab nav (Overview/Platforms/Categories/Timeline/Insights), Monthly Spend Recharts line chart, Spend by Platform donut chart, Spend by Category horizontal bars, 3 insight cards. Mock data in `mock-dashboard-data.ts`. Client component `DashboardCharts.tsx`. |
 | `(dashboard)/inbox` page | ✅ | 3-column layout: folder sidebar (8 folders with unread counts + marketplace filter) | email list (search, category badges, unread blue dot, time ago) | email reader (header, parsed data card with green border for order/refund/shipping detection, email body). Mock data in `mock-inbox-data.ts`. |
 | `(dashboard)/rewards` page | ✅ | Points balance card with progress bar to next milestone, 4 "How to Earn" cards (Review/Email/Refer/Streak), 6 gift card redemption cards (disabled if insufficient points), chronological points history. Mock data in `mock-rewards-data.ts`. |
@@ -351,6 +372,153 @@ New mock data files: `mock-inbox-data.ts`, `mock-wishlists-data.ts`, `mock-rewar
 
 ---
 
+## 2026-02-24 — Search page: replace mock data with real API calls
+
+Rewrote `frontend/src/app/(public)/search/page.tsx`:
+- Removed `MOCK_PRODUCTS` and `MOCK_SELLER_SIDEBAR` imports (no more mock data)
+- Imports `searchApi` from `@/lib/api/search` and `productsApi` from `@/lib/api/products`
+- Server component calls `searchApi.search(query)` first, falls back to `productsApi.list()` if Meilisearch is unavailable or returns no results
+- Reads search params: `q`, `category`, `sortBy`, `offset`
+- Removed seller sidebar section (no backend endpoint)
+- Shows product count in results header
+- Empty state with helpful message when no products found
+- Kept sort dropdown and results-only toggle
+
+---
+
+## 2026-02-24 — Product detail page: replace mock data with real API calls
+
+Rewrote `frontend/src/app/(public)/product/[slug]/page.tsx`:
+- Removed `MOCK_PRODUCT_DETAIL` import (no more mock data)
+- Imports `productsApi` from `@/lib/api/products`; fetches product detail, price history, and reviews in parallel via `Promise.all`
+- Uses `notFound()` from `next/navigation` when the API returns an error (product not found)
+- Data transformations to bridge API types to component expectations:
+  - `p.brand.name` / `p.category.name` (objects, not strings)
+  - `p.currentBestPrice` instead of `p.bestPrice`
+  - MRP derived from the best-price listing (`getBestListing()`)
+  - DudScore label derived from score value (`getDudScoreLabel()`)
+  - DudScore components: placeholder values since backend doesn't return breakdown yet
+  - Specs converted from `Record<string,string|number|boolean>` to `{label,value}[]`
+  - Rating distribution normalized from raw counts to percentages
+  - Breadcrumb constructed from category and brand names
+  - Marketplace chart color map built from listing marketplace slugs
+
+Updated child components to use real API types:
+- `components/product/marketplace-prices.tsx`: accepts `ProductListing[]` + `bestPrice` instead of `MockMarketplaceListing[]`; computes diff percentage internally
+- `components/product/price-chart.tsx`: accepts `PricePoint[]` (time/price/marketplaceId) instead of `MockPricePoint[]` (date/amazon/flipkart/croma); pivots data by marketplace dynamically; supports arbitrary number of marketplaces
+- `components/reviews/review-card.tsx`: accepts `Review` type instead of `MockReviewDetail`; generates avatar color from name hash; computes relative date from ISO timestamp; shows flagged badge
+
+---
+
+## 2026-02-24 — Compare page: replace mock data with real API calls
+
+Rewrote `frontend/src/app/(public)/compare/page.tsx`:
+- Removed `MOCK_COMPARE` import (no more mock data)
+- Imports `productsApi.compare(slugs)` from `@/lib/api/products`; parses `?slugs=slug1,slug2` from search params
+- Server component calls `productsApi.compare(slugs)` with real API data
+- Empty/error states: shows helpful message when no slugs provided, API fails, or no products found
+- **Product header row**: Uses `ProductDetail.images[0]`, title, `currentBestPrice`; "Best Buy" badge on cheapest product
+- **Highlights**: Dynamically generated by comparing products — Best Price, Highest Rated, Best DudScore
+- **Category Scores**: Derived from DudScore availability + reviewSummary (credibility, verified purchase %) using 5-dot scale
+- **Ratings**: Uses real `avgRating`, `totalReviews`, `dudScore` (out of 100 instead of mock's out of 10)
+- **Key Specs**: Built dynamically from `specs` Record — finds all keys across products, shows "Best" badge on highest numeric values
+- **Detailed Summary**: Same specs as flat string values in a detailed table
+- **Quick TCO**: Replaced with "Coming soon" placeholder (no TCO endpoint ready)
+- Kept all existing CSS classes, grid layout, ScoreDots, Stars components unchanged
+
+---
+
+## 2026-02-24 — Dashboard client pages: wired to real API calls
+
+Replaced mock data with real API calls in 4 dashboard client components:
+
+1. **Dashboard** (`/dashboard`) — Now fetches from `purchasesApi.getDashboard()`:
+   - Converted from server component to `"use client"` with `useState`/`useEffect`
+   - Stat cards populated from `PurchaseDashboard` fields (totalSpent, totalOrders, averageOrderValue, topMarketplace)
+   - `DashboardCharts.tsx` refactored to accept `dashboard: PurchaseDashboard` prop instead of importing mock data
+   - Charts derived from real `monthlySpending` and `categoryBreakdown` arrays
+   - Insight cards dynamically generated from dashboard data (activeRefunds, expiringReturns, activeSubscriptions)
+   - Loading skeleton and error/empty states added
+
+2. **Inbox** (`/inbox`) — Now fetches from `inboxApi.list(filters)` + `inboxApi.get(id)`:
+   - Email list fetched on mount and when folder changes (passes category/isStarred filters)
+   - Individual email detail fetched on selection via `inboxApi.get(id)`, renders `bodyHtml`
+   - Auto-marks emails as read via `inboxApi.markRead()`
+   - Folder counts and marketplace filters computed from fetched email list
+   - Adapted to real `InboxEmail` type (no snippet/body/parsedData on list, bodyHtml on detail)
+
+3. **Wishlists** (`/wishlists`) — Now fetches from `wishlistsApi.list()`:
+   - Fetches all wishlists with items on mount
+   - `WishlistItem.product` is a UUID string (no product name/image) — shows product ID with placeholder image
+   - Price tracking works with real `priceWhenAdded`, `currentPrice`, `priceChangePct`
+   - Alert toggle calls `wishlistsApi.updateItem()` to persist
+   - Remove button calls `wishlistsApi.removeItem()` with optimistic UI update
+
+4. **Rewards** (`/rewards`) — Now fetches from `rewardsApi.getBalance()`, `getGiftCards()`, `getHistory()`:
+   - Three parallel API calls via `Promise.all`
+   - Balance card uses real `RewardBalance` (totalEarned, totalSpent, totalExpired, currentBalance)
+   - Gift cards from `GiftCard[]` with `denominations` array, `brandLogoUrl`, `category`
+   - Points history from `RewardPointsLedger[]` with `action`, `points`, `description`, `createdAt`
+   - "How to Earn" cards kept as static content (not from API)
+
+---
+
+## 2026-02-24 — Full stack wiring complete (API client → seed data → all pages)
+
+Completed the entire frontend-to-backend wiring in a single session:
+
+### Phase 1: API Client snake_case → camelCase Transform
+- Added recursive `snakeToCamel()` key transformer in `src/lib/api/client.ts`
+- Runs on every API response before returning to callers
+- Handles arrays, nested objects, null, primitives
+
+### Phase 2: Docker Stack & Migrations
+- Started PostgreSQL+TimescaleDB, Redis, Meilisearch via Docker Compose
+- All 13 Django apps migrated cleanly
+
+### Phase 3: Production-Grade Seed Data
+- Created `backend/apps/products/management/commands/seed_data.py`
+- Seeds: 15 categories, 20 brands, 31 products, 20 sellers, ~100 listings, ~5000 price snapshots, ~200 reviews, 15 deals, DudScore history, marketplace offers, bank cards, discussions, TCO models, city reference data, gift card catalog
+- Test user: test@whydud.com / testpass123
+
+### Phase 4-5: Frontend Types & API Endpoint Fixes
+- Rewrote `src/types/product.ts` — flat `ProductSummary` vs nested `ProductDetail`
+- Added missing types: Seller, ReviewSummary, SearchResponse, DiscussionThread/Reply, BankCard, City, TCOModel, DudScoreConfig, PriceAlert
+- Fixed all API files (`products.ts`, `search.ts`, `rewards.ts`, `inbox.ts`, `discussions.ts`) to use correct generic types (`T[]` instead of `PaginatedResponse<T>`)
+
+### Phase 6: All Frontend Pages Wired to Real API
+- Homepage: `productsApi.list()` + `dealsApi.list()`
+- Search: `searchApi.search()` with Meilisearch fallback to `productsApi.list()`
+- Product detail: `productsApi.getDetail()` + `getPriceHistory()` + `getReviews()`
+- Compare: `productsApi.compare(slugs)`
+- Dashboard: `purchasesApi.getDashboard()` (client component)
+- Inbox: `inboxApi.list()` + `inboxApi.get()` (client component)
+- Wishlists: `wishlistsApi.list()` (client component)
+- Rewards: `rewardsApi.getBalance()` + `getGiftCards()` + `getHistory()` (client component)
+
+### Phase 7-8: Loading Skeletons & Error Boundaries
+- Created `loading.tsx` for: `(public)/`, `(public)/search/`, `(public)/product/[slug]/`, `(public)/compare/`, `(dashboard)/`
+- Created `error.tsx` for: `(public)/`, `(dashboard)/`, `(auth)/`
+
+### Phase 9: Meilisearch Sync
+- Created `backend/apps/search/management/commands/sync_meilisearch.py`
+- Synced 31 products with searchable/filterable/sortable attributes
+
+### Phase 10: End-to-End Verification
+- TypeScript: 0 errors (`npx tsc --noEmit` passes clean)
+- Backend: All API endpoints returning real data (products, deals, product detail, search)
+- Frontend: All pages rendering with real product data from backend API
+- Search: Meilisearch returning results for queries like "samsung"
+- Fixed: Deals view `CursorPagination` ordering (model has `detected_at`, not `created_at`)
+
+### Bug Fixes During Wiring
+- `DealCard.tsx`: `deal.productSlug` → `deal.product?.slug` (Deal type now has nested product)
+- `purchases/page.tsx`: Fixed double-wrapped API response unwrapping
+- `categories/[slug]/page.tsx`: Fixed to use `SearchResponse.results` shape
+- `deals/views.py`: Set `paginator.ordering = "-detected_at"` (model lacks `created_at`)
+
+---
+
 ## Known Issues / Tech Debt
 
 | Issue | Priority | Notes |
@@ -358,5 +526,41 @@ New mock data files: `mock-inbox-data.ts`, `mock-wishlists-data.ts`, `mock-rewar
 | Rate limit values hardcoded in `common/rate_limiting.py` | Medium | Should move to `app_settings` like search/pagination limits |
 | `DudScoreHistory` and `PriceSnapshot` have no `__str__` | Low | `managed=False` models — low impact |
 | No test suite yet | High | pytest + pytest-django; should cover serializers + views before Sprint 2 |
-| Meilisearch index not yet configured | High | Product sync task needed before search is live |
+| Meilisearch index not yet configured | ✅ Done | `sync_meilisearch` command created and 31 products synced |
 | `ProductBestDealsView` requires auth but `permission_classes = [IsAuthenticated]` stub needs card vault data | Medium | Sprint 3 dependency |
+
+---
+
+## 2026-02-24 — Complete API wiring: all pages use real API calls
+
+Completed the remaining API wiring work to eliminate all mock data usage:
+
+### New API files
+- `src/lib/api/tco.ts` — TCO calculator endpoints: `calculate`, `compare`, `getCities`, `getProfile`, `updateProfile`
+- `src/lib/api/sellers.ts` — Seller endpoints: `getDetail`, `getProducts`, `getReviews`
+
+### New types
+- `SellerDetail` in `src/types/product.ts` — Full seller profile with performance metrics, categories, socials, contact info
+
+### Pages wired to real API (previously using mock data)
+1. **Seller** (`/seller/[slug]`) — Now uses `sellersApi.getDetail(slug)` instead of `MOCK_SELLER_DETAIL`. Returns `notFound()` on API failure. Changed `s.avatar` → `s.avatarUrl`, `s.verified` → `s.isVerified`, `s.rating` → `s.avgRating`.
+2. **Settings** (`/settings`) — Now fetches user, email, and cards via `Promise.all([authApi.me(), whydudEmailApi.getStatus(), cardVaultApi.list()])`. Each tab receives real data as props. Added `TabSkeleton` loading component. Marketplace list derived from `whydEmail.marketplacesRegistered`. Subscription tab uses `user.subscriptionTier`.
+3. **Refunds** (`/refunds`) — Now fetches from `purchasesApi.getRefunds()`. Shows status badges (initiated/processing/completed/failed) with semantic colors. Empty state with explanatory message.
+4. **Subscriptions** (`/subscriptions`) — Now fetches from `purchasesApi.getSubscriptions()`. Shows active/inactive badge, frequency, next charge date. Empty state with explanatory message.
+
+### New loading skeletons
+- `(public)/deals/loading.tsx` — Deal cards grid skeleton
+- `(public)/seller/[slug]/loading.tsx` — Seller header + sidebar skeleton
+- `(public)/categories/[slug]/loading.tsx` — Category product grid skeleton
+- `discussions/[id]/loading.tsx` — Thread + replies skeleton
+
+### API index updated
+- `src/lib/api/index.ts` now exports: auth, client, discussions, inbox, products, rewards, search, sellers, tco, wishlists
+
+### Summary
+- **0 pages use mock data** — all pages call real API endpoints
+- **13 API modules** covering all backend endpoints
+- **Loading states** for every route (either via `loading.tsx` or inline skeletons)
+- **Error boundaries** for all 3 route groups (public, dashboard, auth)
+- TypeScript: 0 errors
+- All 13 routes return HTTP 200

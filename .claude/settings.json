@@ -23,7 +23,12 @@
       "Bash(wmic:*)",
       "Bash(taskkill:*)",
       "Bash(npm run dev:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(POSTGRES_PASSWORD=whydud_dev DJANGO_SETTINGS_MODULE=whydud.settings.dev python manage.py:*)",
+      "Bash(POSTGRES_PASSWORD=whydud_dev MEILISEARCH_MASTER_KEY=whydud_dev_meili_key_32chars!! DJANGO_SETTINGS_MODULE=whydud.settings.dev python manage.py:*)",
+      "Bash(python3:*)",
+      "Bash(MEILISEARCH_MASTER_KEY=\"whydud_dev_meili_key_32chars!!\" python manage.py sync_meilisearch:*)",
+      "Bash(MEILISEARCH_MASTER_KEY=\"whydud_dev_meili_key_32chars!!\" POSTGRES_PASSWORD=whydud_dev python manage.py:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller"

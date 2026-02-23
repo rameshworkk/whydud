@@ -42,7 +42,7 @@ export function ProductCard({ product }: ProductCardProps) {
       </div>
 
       {/* Info */}
-      <p className="text-xs text-muted-foreground">{product.brand.name}</p>
+      <p className="text-xs text-muted-foreground">{product.brandName}</p>
       <h3 className="mt-0.5 line-clamp-2 text-sm font-medium leading-snug">{product.title}</h3>
 
       <div className="mt-auto pt-2 flex items-end justify-between gap-2">

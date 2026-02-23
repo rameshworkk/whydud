@@ -1,5 +1,12 @@
 import { apiClient } from "./client";
-import type { InboxEmail, PaginatedResponse, ParsedOrder } from "@/types";
+import type {
+  DetectedSubscription,
+  InboxEmail,
+  ParsedOrder,
+  PurchaseDashboard,
+  RefundTracking,
+  ReturnWindow,
+} from "@/types";
 
 export interface InboxFilters {
   [key: string]: string | boolean | undefined;
@@ -11,7 +18,7 @@ export interface InboxFilters {
 
 export const inboxApi = {
   list: (filters?: InboxFilters) =>
-    apiClient.get<PaginatedResponse<InboxEmail>>("/api/v1/inbox", { params: filters }),
+    apiClient.get<InboxEmail[]>("/api/v1/inbox", { params: filters }),
 
   get: (id: string) => apiClient.get<InboxEmail & { bodyHtml?: string }>(`/api/v1/inbox/${id}`),
 
@@ -28,17 +35,17 @@ export const inboxApi = {
 
 export const purchasesApi = {
   list: (cursor?: string) =>
-    apiClient.get<PaginatedResponse<ParsedOrder>>("/api/v1/purchases", { params: { cursor } }),
+    apiClient.get<ParsedOrder[]>("/api/v1/purchases", { params: { cursor } }),
 
   getDashboard: () =>
-    apiClient.get<Record<string, unknown>>("/api/v1/purchases/dashboard"),
+    apiClient.get<PurchaseDashboard>("/api/v1/purchases/dashboard"),
 
   getRefunds: () =>
-    apiClient.get<Record<string, unknown>[]>("/api/v1/purchases/refunds"),
+    apiClient.get<RefundTracking[]>("/api/v1/purchases/refunds"),
 
   getReturnWindows: () =>
-    apiClient.get<Record<string, unknown>[]>("/api/v1/purchases/return-windows"),
+    apiClient.get<ReturnWindow[]>("/api/v1/purchases/return-windows"),
 
   getSubscriptions: () =>
-    apiClient.get<Record<string, unknown>[]>("/api/v1/purchases/subscriptions"),
+    apiClient.get<DetectedSubscription[]>("/api/v1/purchases/subscriptions"),
 };

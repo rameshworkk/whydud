@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/product/product-card";
-import { MOCK_PRODUCTS } from "@/lib/mock-data";
-import { MOCK_SELLER_SIDEBAR } from "@/lib/mock-pages-data";
-import { formatPrice } from "@/lib/utils/format";
+import { searchApi } from "@/lib/api/search";
+import { productsApi } from "@/lib/api/products";
+import type { ProductSummary } from "@/types";
 
 interface SearchPageProps {
-  searchParams: Promise<{ q?: string; cursor?: string; sortBy?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; sortBy?: string; offset?: string }>;
 }
 
 export function generateMetadata(): Metadata {
@@ -17,8 +16,51 @@ export function generateMetadata(): Metadata {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
-  const query = params.q ?? "Uppercase bags";
-  const seller = MOCK_SELLER_SIDEBAR;
+  const query = params.q ?? "";
+  const category = params.category;
+  const sortBy = params.sortBy as
+    | "relevance"
+    | "dudscore"
+    | "price_asc"
+    | "price_desc"
+    | "newest"
+    | undefined;
+  const offset = params.offset ? parseInt(params.offset, 10) : undefined;
+
+  let products: ProductSummary[] = [];
+
+  // Try Meilisearch-backed search first, fallback to products list
+  if (query) {
+    try {
+      const searchRes = await searchApi.search(query, { category, sortBy, offset });
+      if (searchRes.success && "data" in searchRes) {
+        const data = searchRes.data;
+        // SearchResponse has a .results array; plain array fallback
+        if (data && typeof data === "object" && "results" in data && Array.isArray(data.results)) {
+          products = data.results;
+        } else if (Array.isArray(data)) {
+          products = data as unknown as ProductSummary[];
+        }
+      }
+    } catch {
+      // Meilisearch may not be synced — fall through to fallback
+    }
+  }
+
+  // Fallback: list products from Django API
+  if (products.length === 0) {
+    try {
+      const listRes = await productsApi.list({ category });
+      if (listRes.success && "data" in listRes) {
+        const data = listRes.data;
+        if (Array.isArray(data)) {
+          products = data;
+        }
+      }
+    } catch {
+      // API unreachable — render empty state
+    }
+  }
 
   return (
     <>
@@ -28,8 +70,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-lg font-bold text-slate-900">
-              Results for <span className="text-slate-700">{query}</span>
+              {query ? (
+                <>
+                  Results for <span className="text-slate-700">{query}</span>
+                </>
+              ) : (
+                "All Products"
+              )}
             </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {products.length} {products.length === 1 ? "product" : "products"} found
+            </p>
           </div>
           <div className="flex items-center gap-4">
             {/* Sort dropdown */}
@@ -54,141 +105,23 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </div>
         </div>
 
-        <div className="flex gap-6">
-          {/* ── Product grid (4 cols) ──────────────────────────────── */}
-          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {MOCK_PRODUCTS.map((p) => (
+        {/* Product grid */}
+        {products.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {products.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>
-
-          {/* ── Right sidebar: Seller Details ──────────────────────── */}
-          <aside className="w-[280px] shrink-0 hidden lg:flex flex-col gap-4">
-            {/* Seller card */}
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h2 className="text-sm font-bold text-slate-800 mb-3">
-                Seller Details
-              </h2>
-              <div className="flex items-start gap-3 mb-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={seller.avatar}
-                  alt={seller.name}
-                  className="w-10 h-10 rounded-lg shrink-0"
-                />
-                <div className="min-w-0">
-                  <Link
-                    href={`/seller/${seller.slug}`}
-                    className="text-sm font-semibold text-slate-800 hover:text-[#F97316] transition-colors leading-snug block"
-                  >
-                    {seller.name}
-                  </Link>
-                  {seller.verified && (
-                    <span className="text-xs text-green-600 font-medium">
-                      ✓ Verified seller
-                    </span>
-                  )}
-                </div>
-              </div>
-              <p className="text-xs text-slate-500 leading-relaxed mb-3">
-                {seller.description}
-              </p>
-              {/* Stars */}
-              <div className="flex items-center gap-1.5">
-                <div className="flex gap-0.5">
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <span
-                      key={i}
-                      className={`text-sm ${
-                        i < Math.round(seller.rating)
-                          ? "text-yellow-400"
-                          : "text-slate-200"
-                      }`}
-                    >
-                      ★
-                    </span>
-                  ))}
-                </div>
-                <span className="text-xs text-slate-500">
-                  {seller.rating} ({seller.reviewCount.toLocaleString("en-IN")})
-                </span>
-              </div>
-            </div>
-
-            {/* Top reviews */}
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-bold text-slate-800 mb-3">
-                Top reviews from{" "}
-                <span className="lowercase">{query.split(" ")[0]}</span>
-              </h3>
-              <div className="flex flex-col gap-3">
-                {seller.reviews.map((r) => (
-                  <div key={r.reviewer} className="flex items-start gap-2.5">
-                    <span
-                      className="inline-flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold shrink-0"
-                      style={{ backgroundColor: r.avatarColor }}
-                    >
-                      {r.reviewer.charAt(0)}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-700">
-                        {r.reviewer}
-                      </p>
-                      <div className="flex gap-0.5 my-0.5">
-                        {Array.from({ length: 5 }, (_, i) => (
-                          <span
-                            key={i}
-                            className={`text-[10px] ${
-                              i < r.rating
-                                ? "text-yellow-400"
-                                : "text-slate-200"
-                            }`}
-                          >
-                            ★
-                          </span>
-                        ))}
-                      </div>
-                      <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
-                        {r.text}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Related products */}
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-bold text-slate-800 mb-3">
-                Related products
-              </h3>
-              <div className="flex flex-col gap-3">
-                {seller.relatedProducts.map((rp) => (
-                  <Link
-                    key={rp.slug}
-                    href={`/product/${rp.slug}`}
-                    className="flex items-center gap-3 group"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={rp.image}
-                      alt={rp.title}
-                      className="w-14 h-14 rounded-md border border-slate-100 object-contain shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs text-slate-700 group-hover:text-[#F97316] transition-colors line-clamp-2 leading-snug">
-                        {rp.title}
-                      </p>
-                      <p className="text-sm font-bold text-slate-900 mt-0.5">
-                        {formatPrice(rp.price)}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </aside>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-lg font-semibold text-slate-700">No products found</p>
+            <p className="text-sm text-slate-500 mt-1">
+              {query
+                ? `We couldn't find any products matching "${query}". Try a different search term.`
+                : "No products are available at the moment."}
+            </p>
+          </div>
+        )}
       </main>
       <Footer />
     </>

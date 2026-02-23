@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { MOCK_SELLER_DETAIL } from "@/lib/mock-pages-data";
+import { sellersApi } from "@/lib/api/sellers";
 
 interface SellerPageProps {
   params: Promise<{ slug: string }>;
@@ -9,8 +10,9 @@ interface SellerPageProps {
 
 export async function generateMetadata({ params }: SellerPageProps): Promise<Metadata> {
   const { slug } = await params;
-  void slug;
-  return { title: `${MOCK_SELLER_DETAIL.name} — Whydud` };
+  const res = await sellersApi.getDetail(slug).catch(() => null);
+  const name = res?.success ? res.data.name : "Seller";
+  return { title: `${name} — Whydud` };
 }
 
 /** Mini TrustScore gauge — same approach as DudScoreGauge but smaller. */
@@ -74,8 +76,10 @@ function TrustScoreGauge({ score }: { score: number }) {
 
 export default async function SellerPage({ params }: SellerPageProps) {
   const { slug } = await params;
-  void slug;
-  const s = MOCK_SELLER_DETAIL;
+  const res = await sellersApi.getDetail(slug).catch(() => null);
+  if (!res?.success) notFound();
+
+  const s = res.data;
 
   const tabs = [
     "Seller info",
@@ -89,7 +93,7 @@ export default async function SellerPage({ params }: SellerPageProps) {
       <Header />
       <main className="mx-auto max-w-[1280px] px-4 py-6">
         <div className="flex gap-6">
-          {/* ── Left content ─────────────────────────────────────── */}
+          {/* Left content */}
           <div className="flex-1 min-w-0">
             {/* Seller header card */}
             <div className="rounded-xl border border-slate-200 bg-white p-6 mb-6">
@@ -97,7 +101,7 @@ export default async function SellerPage({ params }: SellerPageProps) {
                 <div className="flex items-center gap-4">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={s.avatar}
+                    src={s.avatarUrl}
                     alt={s.name}
                     className="w-16 h-16 rounded-xl border border-slate-200 shrink-0"
                   />
@@ -106,7 +110,7 @@ export default async function SellerPage({ params }: SellerPageProps) {
                       <h1 className="text-xl font-bold text-slate-900">
                         {s.name}
                       </h1>
-                      {s.verified && (
+                      {s.isVerified && (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
                           ✓ Verified seller
                         </span>
@@ -118,7 +122,7 @@ export default async function SellerPage({ params }: SellerPageProps) {
                           <span
                             key={i}
                             className={`text-base ${
-                              i < Math.round(s.rating)
+                              i < Math.round(s.avgRating ?? 0)
                                 ? "text-yellow-400"
                                 : "text-slate-200"
                             }`}
@@ -128,7 +132,7 @@ export default async function SellerPage({ params }: SellerPageProps) {
                         ))}
                       </div>
                       <span className="text-sm font-semibold text-slate-700">
-                        {s.rating}
+                        {s.avgRating ?? "—"}
                       </span>
                       <span className="text-sm text-slate-400 mx-1">·</span>
                       <span className="text-sm text-slate-500">
@@ -141,7 +145,9 @@ export default async function SellerPage({ params }: SellerPageProps) {
                     </div>
                   </div>
                 </div>
-                <TrustScoreGauge score={s.trustScore} />
+                {s.trustScore != null && (
+                  <TrustScoreGauge score={s.trustScore} />
+                )}
               </div>
             </div>
 
@@ -163,78 +169,80 @@ export default async function SellerPage({ params }: SellerPageProps) {
 
             {/* Seller info tab content */}
             <div className="space-y-6">
-              {/* Description */}
               <p className="text-base text-slate-600 leading-relaxed">
                 {s.description}
               </p>
 
-              {/* Product Categories */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">
-                  Product Categories
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {s.categories.map((cat) => (
-                    <span
-                      key={cat}
-                      className="px-3 py-1.5 rounded-full border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors"
-                    >
-                      {cat}
-                    </span>
-                  ))}
+              {s.categories.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800 mb-3">
+                    Product Categories
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {s.categories.map((cat) => (
+                      <span
+                        key={cat}
+                        className="px-3 py-1.5 rounded-full border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors"
+                      >
+                        {cat}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Customer photos & videos */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">
-                  Customer photos &amp; videos
-                </h3>
-                <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                  {Array.from({ length: s.photoCount }, (_, i) => (
-                    <div
-                      key={i}
-                      className="w-16 h-16 rounded-lg bg-slate-200 shrink-0"
-                    />
-                  ))}
+              {s.photoCount > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800 mb-3">
+                    Customer photos &amp; videos
+                  </h3>
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                    {Array.from({ length: s.photoCount }, (_, i) => (
+                      <div
+                        key={i}
+                        className="w-16 h-16 rounded-lg bg-slate-200 shrink-0"
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Socials */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">
-                  Socials
-                </h3>
-                <div className="flex gap-2">
-                  {s.socials.map((social) => (
-                    <a
-                      key={social.label}
-                      href={social.url}
-                      className="px-3 py-1.5 rounded-full bg-slate-100 text-sm text-slate-600 hover:bg-slate-200 transition-colors"
-                    >
-                      {social.label}
-                    </a>
-                  ))}
+              {s.socials.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800 mb-3">
+                    Socials
+                  </h3>
+                  <div className="flex gap-2">
+                    {s.socials.map((social) => (
+                      <a
+                        key={social.label}
+                        href={social.url}
+                        className="px-3 py-1.5 rounded-full bg-slate-100 text-sm text-slate-600 hover:bg-slate-200 transition-colors"
+                      >
+                        {social.label}
+                      </a>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Contact */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800 mb-2">
-                  Contact
-                </h3>
-                <div className="text-sm text-slate-500 leading-relaxed">
-                  {s.contact.address.map((line) => (
-                    <p key={line}>{line}</p>
-                  ))}
+              {s.contact.address.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800 mb-2">
+                    Contact
+                  </h3>
+                  <div className="text-sm text-slate-500 leading-relaxed">
+                    {s.contact.address.map((line) => (
+                      <p key={line}>{line}</p>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* ── Right sidebar ────────────────────────────────────── */}
+          {/* Right sidebar */}
           <aside className="w-[320px] shrink-0 hidden lg:flex flex-col gap-4">
-            {/* Seller Performance */}
             <div className="rounded-xl border border-slate-200 bg-white p-5">
               <h2 className="text-base font-bold text-slate-900 mb-1">
                 Seller Performance
@@ -274,7 +282,6 @@ export default async function SellerPage({ params }: SellerPageProps) {
               </div>
             </div>
 
-            {/* Report / Enquire */}
             <div className="rounded-xl border border-slate-200 bg-white p-5">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-bold text-slate-900">
@@ -295,7 +302,6 @@ export default async function SellerPage({ params }: SellerPageProps) {
               </div>
             </div>
 
-            {/* Write feedback */}
             <div className="rounded-xl border border-slate-200 bg-white p-5">
               <h3 className="text-sm font-bold text-slate-900">
                 Write seller feedback

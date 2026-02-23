@@ -32,8 +32,8 @@ class DealListView(APIView):
         if category:
             qs = qs.filter(product__category__slug=category)
 
-        qs = qs.order_by("-detected_at")
         paginator = CursorPagination()
+        paginator.ordering = "-detected_at"
         page = paginator.paginate_queryset(qs, request)
         if page is not None:
             return paginator.get_paginated_response(DealSerializer(page, many=True).data)

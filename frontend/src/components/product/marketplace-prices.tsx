@@ -1,8 +1,9 @@
 import { formatPrice } from "@/lib/utils";
-import type { MockMarketplaceListing } from "@/lib/mock-product-detail";
+import type { ProductListing } from "@/types";
 
 interface MarketplacePricesProps {
-  listings: MockMarketplaceListing[];
+  listings: ProductListing[];
+  bestPrice: number | null;
 }
 
 const MARKETPLACE_LOGOS: Record<string, string> = {
@@ -23,18 +24,23 @@ const MARKETPLACE_COLORS: Record<string, string> = {
   reliance_digital: "bg-[#3366CC] text-white",
 };
 
-export function MarketplacePrices({ listings }: MarketplacePricesProps) {
+export function MarketplacePrices({ listings, bestPrice }: MarketplacePricesProps) {
   return (
     <div className="flex flex-col gap-2">
       {listings.map((listing) => {
-        const isBest = listing.diffPct === null;
+        const isBest = listing.currentPrice !== null && listing.currentPrice === bestPrice;
+        const diffPct =
+          bestPrice && listing.currentPrice && !isBest
+            ? ((listing.currentPrice - bestPrice) / bestPrice) * 100
+            : null;
         const logoClass =
-          MARKETPLACE_COLORS[listing.marketplaceSlug] ?? "bg-slate-500 text-white";
-        const logoLetter = MARKETPLACE_LOGOS[listing.marketplaceSlug] ?? listing.marketplace[0];
+          MARKETPLACE_COLORS[listing.marketplace.slug] ?? "bg-slate-500 text-white";
+        const logoLetter =
+          MARKETPLACE_LOGOS[listing.marketplace.slug] ?? listing.marketplace.name[0];
 
         return (
           <div
-            key={listing.marketplaceSlug}
+            key={listing.id}
             className={`flex items-center justify-between rounded-lg px-4 py-3 border ${
               isBest
                 ? "bg-green-50 border-green-200"
@@ -50,14 +56,14 @@ export function MarketplacePrices({ listings }: MarketplacePricesProps) {
               </span>
               <div>
                 <p className="text-sm font-semibold text-slate-800">
-                  {listing.marketplace}
+                  {listing.marketplace.name}
                 </p>
                 {isBest && (
                   <p className="text-xs text-green-700 font-medium">Best Price</p>
                 )}
-                {listing.diffPct !== null && (
+                {diffPct !== null && (
                   <p className="text-xs text-slate-500">
-                    {listing.diffPct.toFixed(1)}% higher
+                    {diffPct.toFixed(1)}% higher
                   </p>
                 )}
               </div>
@@ -70,11 +76,11 @@ export function MarketplacePrices({ listings }: MarketplacePricesProps) {
                   isBest ? "text-green-700" : "text-slate-800"
                 }`}
               >
-                {formatPrice(listing.price)}
+                {formatPrice(listing.currentPrice)}
               </span>
               {listing.inStock ? (
                 <a
-                  href={listing.affiliateUrl}
+                  href={listing.buyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${

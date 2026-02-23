@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { PaginatedResponse, ProductSummary } from "@/types";
+import type { SearchResponse } from "@/types";
 
 export interface SearchFilters {
   category?: string;
@@ -9,12 +9,13 @@ export interface SearchFilters {
   minDudScore?: number;
   inStock?: boolean;
   sortBy?: "relevance" | "dudscore" | "price_asc" | "price_desc" | "newest";
-  cursor?: string;
+  offset?: number;
+  limit?: number;
 }
 
 export const searchApi = {
   search: (query: string, filters?: SearchFilters) =>
-    apiClient.get<PaginatedResponse<ProductSummary>>("/api/v1/search", {
+    apiClient.get<SearchResponse>("/api/v1/search", {
       params: { q: query, ...filters },
     }),
 

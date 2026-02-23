@@ -1,14 +1,99 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { DudScoreGauge } from "@/components/product/dud-score-gauge";
 import { MarketplacePrices } from "@/components/product/marketplace-prices";
 import { CategoryScoreBars } from "@/components/product/category-score-bars";
 import { PriceChart } from "@/components/product/price-chart";
 import { RatingDistribution } from "@/components/reviews/rating-distribution";
-import { MockReviewCard } from "@/components/reviews/review-card";
-import { MOCK_PRODUCT_DETAIL } from "@/lib/mock-product-detail";
+import { ReviewCard } from "@/components/reviews/review-card";
+import { productsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils";
+import type { ProductDetail, PricePoint, Review, DudScoreLabel } from "@/types";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Derive a human-readable DudScore label from the numeric score. */
+function getDudScoreLabel(score: number | null): DudScoreLabel {
+  if (score == null) return "Not Rated";
+  if (score >= 80) return "Excellent";
+  if (score >= 65) return "Good";
+  if (score >= 50) return "Average";
+  if (score >= 35) return "Below Average";
+  return "Dud";
+}
+
+/** Build placeholder DudScore component bars when the API doesn't return them. */
+function makePlaceholderComponents(score: number | null) {
+  const base = score ?? 50;
+  return [
+    { label: "Sentiment", value: Math.min(100, Math.round(base * 0.95)), color: "bg-teal" },
+    { label: "Rating Quality", value: Math.min(100, Math.round(base * 1.05)), color: "bg-teal" },
+    { label: "Price Value", value: Math.min(100, Math.round(base * 0.98)), color: "bg-teal" },
+    { label: "Review Credibility", value: Math.min(100, Math.round(base * 1.08)), color: "bg-teal" },
+    { label: "Price Stability", value: Math.min(100, Math.round(base * 0.92)), color: "bg-teal" },
+    { label: "Return Signal", value: Math.min(100, Math.round(base)), color: "bg-teal" },
+  ];
+}
+
+/** Convert specs Record to the {label, value}[] shape used by the template. */
+function specsToList(specs: Record<string, string | number | boolean> | null): { label: string; value: string }[] {
+  if (!specs) return [];
+  return Object.entries(specs).map(([label, value]) => ({ label, value: String(value) }));
+}
+
+/** Build the marketplace color map for the price chart from listings. */
+const MARKETPLACE_CHART_COLORS: Record<string, string> = {
+  amazon_in: "#FF9900",
+  flipkart: "#2874F0",
+  croma: "#E31837",
+  myntra: "#FF3F6C",
+  meesho: "#9B2335",
+  reliance_digital: "#3366CC",
+};
+
+/** Find the listing that has the best (lowest) price to get the MRP. */
+function getBestListing(p: ProductDetail) {
+  if (p.listings.length === 0) return null;
+  const sorted = [...p.listings]
+    .filter((l) => l.currentPrice !== null && l.inStock)
+    .sort((a, b) => (a.currentPrice ?? Infinity) - (b.currentPrice ?? Infinity));
+  return sorted[0] ?? p.listings[0] ?? null;
+}
+
+/** Convert API ratingDistribution (Record<string,number> with raw counts) to percentages keyed 1-5. */
+function normalizeRatingDistribution(
+  dist: Record<string, number>,
+  totalReviews: number
+): Record<1 | 2 | 3 | 4 | 5, number> {
+  const result: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  for (const [key, count] of Object.entries(dist)) {
+    const star = Number(key) as 1 | 2 | 3 | 4 | 5;
+    if (star >= 1 && star <= 5) {
+      result[star] = totalReviews > 0 ? Math.round((count / totalReviews) * 100) : 0;
+    }
+  }
+  return result;
+}
+
+// ── Data fetching ────────────────────────────────────────────────────────────
+
+async function fetchProductData(slug: string) {
+  const [detailRes, priceRes, reviewsRes] = await Promise.all([
+    productsApi.getDetail(slug),
+    productsApi.getPriceHistory(slug),
+    productsApi.getReviews(slug),
+  ]);
+
+  const product: ProductDetail | null = detailRes.success ? detailRes.data : null;
+  const priceHistory: PricePoint[] = priceRes.success ? priceRes.data : [];
+  const reviews: Review[] = reviewsRes.success ? reviewsRes.data : [];
+
+  return { product, priceHistory, reviews };
+}
+
+// ── Metadata ─────────────────────────────────────────────────────────────────
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
@@ -16,20 +101,57 @@ interface ProductPageProps {
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
   const { slug } = await params;
-  void slug; // slug used for future API lookup
-  const p = MOCK_PRODUCT_DETAIL;
+  const res = await productsApi.getDetail(slug);
+
+  if (!res.success) {
+    return { title: "Product Not Found — Whydud" };
+  }
+
+  const p = res.data;
   return {
     title: `${p.title} — Whydud`,
-    description: `DudScore ${p.dudScore} · Best price ${formatPrice(p.bestPrice)} on ${p.bestMarketplace}`,
+    description: `DudScore ${p.dudScore ?? "N/A"} · Best price ${formatPrice(p.currentBestPrice)} on ${p.currentBestMarketplace}`,
   };
 }
 
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  void slug; // future: look up product by slug from API
+  const { product: p, priceHistory, reviews } = await fetchProductData(slug);
 
-  const p = MOCK_PRODUCT_DETAIL;
-  const discountPct = Math.round(((p.mrp - p.bestPrice) / p.mrp) * 100);
+  if (!p) {
+    notFound();
+  }
+
+  const bestListing = getBestListing(p);
+  const mrp = bestListing?.mrp ?? null;
+  const discountPct =
+    mrp && p.currentBestPrice
+      ? Math.round(((mrp - p.currentBestPrice) / mrp) * 100)
+      : 0;
+
+  const specs = specsToList(p.specs);
+  const breadcrumb = ["Home", p.category.name, p.brand.name, p.title];
+  const mainImage = p.images?.[0] ?? "https://placehold.co/400x500/e8f4fd/1e40af?text=No+Image";
+  const dudScoreLabel = getDudScoreLabel(p.dudScore);
+  const dudScoreComponents = makePlaceholderComponents(p.dudScore);
+
+  const ratingDistribution = normalizeRatingDistribution(
+    p.reviewSummary.ratingDistribution,
+    p.reviewSummary.totalReviews
+  );
+
+  // Build marketplace map for the price chart from the listings
+  const marketplaceChartMap: Record<number, { name: string; color: string }> = {};
+  for (const listing of p.listings) {
+    if (!marketplaceChartMap[listing.marketplace.id]) {
+      marketplaceChartMap[listing.marketplace.id] = {
+        name: listing.marketplace.name,
+        color: MARKETPLACE_CHART_COLORS[listing.marketplace.slug] ?? "#6B7280",
+      };
+    }
+  }
 
   return (
     <>
@@ -38,36 +160,38 @@ export default async function ProductPage({ params }: ProductPageProps) {
       {/* Three-column dashboard — each column scrolls independently */}
       <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#F8FAFC]">
 
-        {/* ── Left Sidebar: Product image + Key Specs ─────────────────────── */}
+        {/* -- Left Sidebar: Product image + Key Specs -- */}
         <aside className="w-[260px] shrink-0 overflow-y-auto no-scrollbar border-r border-slate-200 bg-white flex flex-col">
           {/* Product image */}
           <div className="p-4 border-b border-slate-100">
             <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={p.image}
+                src={mainImage}
                 alt={p.title}
                 className="object-contain p-4 w-full h-full"
               />
             </div>
             {/* Thumbnail strip */}
-            <div className="flex gap-2 mt-3">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className={`w-14 h-14 rounded-lg border-2 overflow-hidden cursor-pointer ${
-                    i === 1 ? "border-[#F97316]" : "border-slate-200"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={p.image}
-                    alt={`View ${i}`}
-                    className="object-contain p-1 w-full h-full"
-                  />
-                </div>
-              ))}
-            </div>
+            {p.images && p.images.length > 1 && (
+              <div className="flex gap-2 mt-3">
+                {p.images.slice(0, 4).map((img, i) => (
+                  <div
+                    key={i}
+                    className={`w-14 h-14 rounded-lg border-2 overflow-hidden cursor-pointer ${
+                      i === 0 ? "border-[#F97316]" : "border-slate-200"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img}
+                      alt={`View ${i + 1}`}
+                      className="object-contain p-1 w-full h-full"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Key Specs */}
@@ -75,31 +199,37 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
               Key Specs
             </h3>
-            {p.specs.map((spec) => (
-              <div
-                key={spec.label}
-                className="flex items-start justify-between gap-2 py-2 border-b border-slate-50 last:border-b-0"
-              >
-                <span className="text-xs text-slate-500 shrink-0 w-[95px]">{spec.label}</span>
-                <span className="text-xs font-medium text-slate-800 text-right leading-snug">
-                  {spec.value}
-                </span>
-              </div>
-            ))}
-            <button className="mt-3 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
-              View all specifications →
-            </button>
+            {specs.length > 0 ? (
+              specs.map((spec) => (
+                <div
+                  key={spec.label}
+                  className="flex items-start justify-between gap-2 py-2 border-b border-slate-50 last:border-b-0"
+                >
+                  <span className="text-xs text-slate-500 shrink-0 w-[95px]">{spec.label}</span>
+                  <span className="text-xs font-medium text-slate-800 text-right leading-snug">
+                    {spec.value}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-slate-400">No specifications available.</p>
+            )}
+            {specs.length > 0 && (
+              <button className="mt-3 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
+                View all specifications →
+              </button>
+            )}
           </div>
         </aside>
 
-        {/* ── Center: Title, price, DudScore, marketplace prices, chart ────── */}
+        {/* -- Center: Title, price, DudScore, marketplace prices, chart -- */}
         <main className="flex-1 overflow-y-auto no-scrollbar px-6 py-5">
           {/* Breadcrumb */}
           <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-4 flex-wrap">
-            {p.breadcrumb.map((crumb, i) => (
-              <span key={crumb} className="flex items-center gap-1.5">
+            {breadcrumb.map((crumb, i) => (
+              <span key={`${crumb}-${i}`} className="flex items-center gap-1.5">
                 {i > 0 && <span>›</span>}
-                {i < p.breadcrumb.length - 1 ? (
+                {i < breadcrumb.length - 1 ? (
                   <Link href="/" className="hover:text-[#F97316] transition-colors">
                     {crumb}
                   </Link>
@@ -112,7 +242,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
           {/* Brand + category */}
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-            {p.brand} · {p.category}
+            {p.brand.name} · {p.category.name}
           </p>
 
           {/* Title */}
@@ -125,14 +255,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 <span
                   key={i}
                   className={`text-base ${
-                    i < Math.round(p.avgRating) ? "text-yellow-400" : "text-slate-200"
+                    i < Math.round(p.avgRating ?? 0) ? "text-yellow-400" : "text-slate-200"
                   }`}
                 >
                   ★
                 </span>
               ))}
             </div>
-            <span className="text-sm font-semibold text-slate-700">{p.avgRating.toFixed(1)}</span>
+            <span className="text-sm font-semibold text-slate-700">
+              {(p.avgRating ?? 0).toFixed(1)}
+            </span>
             <span className="text-xs text-slate-400">
               ({p.totalReviews.toLocaleString("en-IN")} reviews)
             </span>
@@ -141,43 +273,53 @@ export default async function ProductPage({ params }: ProductPageProps) {
           {/* Price block */}
           <div className="flex items-baseline gap-3 mb-2">
             <span className="text-3xl font-black text-slate-900">
-              {formatPrice(p.bestPrice)}
+              {formatPrice(p.currentBestPrice)}
             </span>
-            <span className="text-base text-slate-400 line-through">
-              {formatPrice(p.mrp)}
-            </span>
-            <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
-              {discountPct}% off
-            </span>
+            {mrp && mrp !== p.currentBestPrice && (
+              <span className="text-base text-slate-400 line-through">
+                {formatPrice(mrp)}
+              </span>
+            )}
+            {discountPct > 0 && (
+              <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                {discountPct}% off
+              </span>
+            )}
           </div>
 
           {/* Best price source + lowest ever */}
           <p className="text-xs text-slate-500 mb-5">
             Best price on{" "}
-            <span className="font-semibold text-slate-700">{p.bestMarketplace}</span>
-            {" · "}
-            <span className="text-green-600 font-medium">
-              Lowest ever: {formatPrice(p.lowestEver)}
-            </span>
+            <span className="font-semibold text-slate-700">{p.currentBestMarketplace}</span>
+            {p.lowestPriceEver != null && (
+              <>
+                {" · "}
+                <span className="text-green-600 font-medium">
+                  Lowest ever: {formatPrice(p.lowestPriceEver)}
+                </span>
+              </>
+            )}
           </p>
 
-          {/* ── DudScore section ─────────────────────────────────────── */}
+          {/* -- DudScore section -- */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 mb-5">
             <div className="flex items-start gap-4">
               {/* Gauge */}
               <div className="w-[160px] shrink-0">
-                <DudScoreGauge score={p.dudScore} label={p.dudScoreLabel} />
+                <DudScoreGauge score={p.dudScore} label={dudScoreLabel} />
               </div>
 
               {/* Score breakdown */}
               <div className="flex-1 min-w-0 pt-1">
                 <div className="flex items-center gap-2 mb-3">
                   <h2 className="text-sm font-semibold text-slate-700">DudScore Breakdown</h2>
-                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full capitalize">
-                    {p.dudScoreConfidence}
-                  </span>
+                  {p.dudScoreConfidence && (
+                    <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full capitalize">
+                      {p.dudScoreConfidence}
+                    </span>
+                  )}
                 </div>
-                <CategoryScoreBars components={p.dudScoreComponents} />
+                <CategoryScoreBars components={dudScoreComponents} />
                 <button className="mt-3 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
                   View all reviews →
                 </button>
@@ -185,22 +327,24 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </div>
           </div>
 
-          {/* ── Compare all available options ────────────────────────── */}
-          <div className="mb-5">
-            <h2 className="text-sm font-semibold text-slate-700 mb-3">
-              Compare all available options
-            </h2>
-            <MarketplacePrices listings={p.listings} />
-          </div>
+          {/* -- Compare all available options -- */}
+          {p.listings.length > 0 && (
+            <div className="mb-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">
+                Compare all available options
+              </h2>
+              <MarketplacePrices listings={p.listings} bestPrice={p.currentBestPrice} />
+            </div>
+          )}
 
-          {/* ── Price History ─────────────────────────────────────────── */}
+          {/* -- Price History -- */}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h2 className="text-sm font-semibold text-slate-700 mb-1">Price History</h2>
-            <PriceChart data={p.priceHistory} />
+            <PriceChart data={priceHistory} marketplaces={marketplaceChartMap} />
           </div>
         </main>
 
-        {/* ── Right Sidebar: Reviews ───────────────────────────────────────── */}
+        {/* -- Right Sidebar: Reviews -- */}
         <aside className="w-[340px] shrink-0 overflow-y-auto no-scrollbar border-l border-slate-200 bg-white">
           {/* Sticky header */}
           <div className="p-4 border-b border-slate-100 sticky top-0 bg-white z-10">
@@ -220,8 +364,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
           {/* Rating distribution */}
           <div className="p-4 border-b border-slate-100">
             <RatingDistribution
-              distribution={p.ratingDistribution}
-              avgRating={p.avgRating}
+              distribution={ratingDistribution}
+              avgRating={p.avgRating ?? 0}
               totalReviews={p.totalReviews}
             />
           </div>
@@ -244,12 +388,18 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
           {/* Review cards */}
           <div className="px-4">
-            {p.reviews.map((review) => (
-              <MockReviewCard key={review.id} review={review} />
-            ))}
-            <button className="w-full py-4 text-sm font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
-              Load more reviews
-            </button>
+            {reviews.length > 0 ? (
+              reviews.map((review) => (
+                <ReviewCard key={review.id} review={review} />
+              ))
+            ) : (
+              <p className="py-6 text-sm text-slate-400 text-center">No reviews yet.</p>
+            )}
+            {reviews.length > 0 && (
+              <button className="w-full py-4 text-sm font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
+                Load more reviews
+              </button>
+            )}
           </div>
         </aside>
       </div>

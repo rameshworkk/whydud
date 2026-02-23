@@ -11,13 +11,17 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import type { MockPricePoint } from "@/lib/mock-product-detail";
+import type { PricePoint } from "@/types";
 
 interface PriceChartProps {
-  data: MockPricePoint[];
+  data: PricePoint[];
+  /** Map of marketplaceId → { name, color } for rendering lines */
+  marketplaces?: Record<number, { name: string; color: string }>;
 }
 
 type Range = "1M" | "3M" | "Max";
+
+const DEFAULT_COLORS = ["#FF9900", "#2874F0", "#E31837", "#FF3F6C", "#9B2335", "#3366CC"];
 
 function formatRupees(paisa: number): string {
   const rupees = paisa / 100;
@@ -31,27 +35,78 @@ function formatAxisDate(dateStr: string): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
-export function PriceChart({ data }: PriceChartProps) {
+/**
+ * Pivot PricePoint[] (one row per marketplace per time) into
+ * chart-friendly rows: { time, dateLabel, [marketplaceKey]: price, ... }
+ */
+function pivotData(
+  points: PricePoint[],
+  marketplaceMap: Record<number, { name: string; color: string }>
+): Record<string, string | number>[] {
+  const grouped = new Map<string, Record<string, string | number>>();
+
+  for (const pt of points) {
+    const key = pt.time.split("T")[0] ?? pt.time;
+    if (!grouped.has(key)) {
+      grouped.set(key, { time: key, dateLabel: formatAxisDate(key) });
+    }
+    const row = grouped.get(key)!;
+    const mpName = marketplaceMap[pt.marketplaceId]?.name ?? `mp_${pt.marketplaceId}`;
+    row[mpName] = pt.price;
+  }
+
+  return Array.from(grouped.values()).sort((a, b) =>
+    (a.time as string).localeCompare(b.time as string)
+  );
+}
+
+export function PriceChart({ data, marketplaces }: PriceChartProps) {
   const [range, setRange] = useState<Range>("3M");
+
+  // Discover marketplace IDs from data if not explicitly provided
+  const marketplaceMap = useMemo(() => {
+    if (marketplaces) return marketplaces;
+    const ids = [...new Set(data.map((p) => p.marketplaceId))];
+    const map: Record<number, { name: string; color: string }> = {};
+    ids.forEach((id, idx) => {
+      map[id] = { name: `Marketplace ${id}`, color: DEFAULT_COLORS[idx % DEFAULT_COLORS.length]! };
+    });
+    return map;
+  }, [data, marketplaces]);
 
   const filtered = useMemo(() => {
     if (range === "Max") return data;
     const days = range === "1M" ? 30 : 90;
-    return data.slice(-days);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString();
+    return data.filter((p) => p.time >= cutoffStr);
   }, [data, range]);
+
+  const pivoted = useMemo(() => pivotData(filtered, marketplaceMap), [filtered, marketplaceMap]);
 
   // Downsample to ~20 points for readability
   const chartData = useMemo(() => {
-    const step = Math.max(1, Math.floor(filtered.length / 20));
-    return filtered
-      .filter((_, i) => i % step === 0 || i === filtered.length - 1)
-      .map((p) => ({
-        ...p,
-        dateLabel: formatAxisDate(p.date),
-      }));
-  }, [filtered]);
+    const step = Math.max(1, Math.floor(pivoted.length / 20));
+    return pivoted.filter((_, i) => i % step === 0 || i === pivoted.length - 1);
+  }, [pivoted]);
+
+  const lineKeys = useMemo(() => {
+    return Object.values(marketplaceMap).map((mp) => ({
+      name: mp.name,
+      color: mp.color,
+    }));
+  }, [marketplaceMap]);
 
   const ranges: Range[] = ["1M", "3M", "Max"];
+
+  if (data.length === 0) {
+    return (
+      <div className="w-full py-8 text-center text-sm text-slate-400">
+        No price history data available yet.
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
@@ -111,33 +166,19 @@ export function PriceChart({ data }: PriceChartProps) {
             wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
             formatter={(v) => v.charAt(0).toUpperCase() + v.slice(1)}
           />
-          <Line
-            type="monotone"
-            dataKey="amazon"
-            name="amazon"
-            stroke="#FF9900"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="flipkart"
-            name="flipkart"
-            stroke="#2874F0"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="croma"
-            name="croma"
-            stroke="#E31837"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
+          {lineKeys.map((lk) => (
+            <Line
+              key={lk.name}
+              type="monotone"
+              dataKey={lk.name}
+              name={lk.name}
+              stroke={lk.color}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+              connectNulls
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </div>

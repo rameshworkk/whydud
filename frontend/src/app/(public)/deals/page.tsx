@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Blockbuster Deals" };
 export default async function DealsPage() {
   // TODO Sprint 4 Week 10: live deals
   const res = await dealsApi.list().catch(() => null);
-  const deals = res?.success ? res.data.data : [];
+  const deals = res?.success && Array.isArray(res.data) ? res.data : [];
 
   return (
     <>

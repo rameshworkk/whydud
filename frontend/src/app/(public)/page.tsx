@@ -7,14 +7,14 @@ import {
   ArrowRight,
   Star,
   SlidersHorizontal,
-  ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/product/product-card";
-import { MOCK_PRODUCTS, MOCK_DEALS, type MockDeal } from "@/lib/mock-data";
+import { productsApi, dealsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils/format";
+import type { ProductSummary, Deal } from "@/types";
 
 export const metadata: Metadata = {
   title: "Whydud — Discover Product Truth. Shop Smarter.",
@@ -53,17 +53,20 @@ const FILTER_CHIPS = [
 
 // ── Deal type config ──────────────────────────────────────────────────────────
 
-const DEAL_TYPE_CONFIG = {
+const DEAL_TYPE_CONFIG: Record<string, { label: string; bg: string; emoji: string }> = {
   error_price: { label: "Error Price", bg: "bg-[#DC2626]", emoji: "🔥" },
   lowest_ever: { label: "Lowest Ever", bg: "bg-[#4DB6AC]", emoji: "📉" },
-  massive_discount: { label: "Massive Discount", bg: "bg-[#F97316]", emoji: "💥" },
-} as const;
+  genuine_discount: { label: "Big Discount", bg: "bg-[#F97316]", emoji: "💥" },
+  flash_sale: { label: "Flash Sale", bg: "bg-[#7C3AED]", emoji: "⚡" },
+};
 
 // ── Deal card ─────────────────────────────────────────────────────────────────
 
-function DealCard({ deal }: { deal: MockDeal }) {
-  const config = DEAL_TYPE_CONFIG[deal.deal_type];
-  const savedPaisa = deal.reference_price - deal.current_price;
+function DealCard({ deal }: { deal: Deal }) {
+  const fallback = { label: "Deal", bg: "bg-[#F97316]", emoji: "💥" };
+  const config = DEAL_TYPE_CONFIG[deal.dealType] ?? fallback;
+  const savedPaisa = (deal.referencePrice ?? 0) - deal.currentPrice;
+  const imageUrl = deal.product?.images?.[0] ?? "https://placehold.co/72x72/f8fafc/94a3b8?text=?";
 
   return (
     <div className="flex flex-col rounded-xl border border-[#E2E8F0] bg-white shadow-sm hover:shadow-md transition-shadow">
@@ -76,8 +79,8 @@ function DealCard({ deal }: { deal: MockDeal }) {
       <div className="flex gap-3 p-3">
         <div className="relative h-[72px] w-[72px] shrink-0 rounded-lg overflow-hidden bg-[#F8FAFC]">
           <Image
-            src={deal.product.image}
-            alt={deal.product.title}
+            src={imageUrl}
+            alt={deal.product?.title ?? "Deal"}
             fill
             sizes="72px"
             className="object-contain p-1.5"
@@ -85,23 +88,25 @@ function DealCard({ deal }: { deal: MockDeal }) {
           />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] text-[#4DB6AC] font-medium truncate">{deal.product.brand}</p>
+          <p className="text-[11px] text-[#4DB6AC] font-medium truncate">{deal.product?.brandName ?? ""}</p>
           <Link
-            href={`/product/${deal.product.slug}`}
+            href={`/product/${deal.product?.slug ?? ""}`}
             className="text-sm font-medium text-[#1E293B] line-clamp-2 leading-snug hover:text-[#F97316] transition-colors"
           >
-            {deal.product.title}
+            {deal.product?.title ?? "Unknown Product"}
           </Link>
         </div>
       </div>
       <div className="px-3 pb-3 flex items-end justify-between gap-2">
         <div>
           <p className="text-xl font-black text-[#16A34A] leading-none">
-            {formatPrice(deal.current_price)}
+            {formatPrice(deal.currentPrice)}
           </p>
-          <p className="mt-0.5 text-xs text-[#94A3B8] line-through">
-            {formatPrice(deal.reference_price)}
-          </p>
+          {deal.referencePrice != null && (
+            <p className="mt-0.5 text-xs text-[#94A3B8] line-through">
+              {formatPrice(deal.referencePrice)}
+            </p>
+          )}
           {savedPaisa > 0 && (
             <p className="text-[11px] font-semibold text-[#16A34A]">
               Save {formatPrice(savedPaisa)}
@@ -109,11 +114,13 @@ function DealCard({ deal }: { deal: MockDeal }) {
           )}
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0">
-          <span className="rounded-full bg-[#DC2626] px-2 py-0.5 text-[11px] font-black text-white">
-            -{deal.discount_pct}%
-          </span>
+          {deal.discountPct != null && deal.discountPct > 0 && (
+            <span className="rounded-full bg-[#DC2626] px-2 py-0.5 text-[11px] font-black text-white">
+              -{Math.round(deal.discountPct)}%
+            </span>
+          )}
           <Link
-            href={`/product/${deal.product.slug}`}
+            href={`/product/${deal.product?.slug ?? ""}`}
             className="rounded-full bg-[#F97316] px-3 py-1 text-xs font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors"
           >
             View Deal
@@ -126,7 +133,7 @@ function DealCard({ deal }: { deal: MockDeal }) {
 
 // ── Horizontal product row ────────────────────────────────────────────────────
 
-function ProductRow({ products }: { products: typeof MOCK_PRODUCTS }) {
+function ProductRow({ products }: { products: ProductSummary[] }) {
   return (
     <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 md:-mx-0 md:px-0 snap-x snap-mandatory no-scrollbar">
       {products.map((product) => (
@@ -140,13 +147,33 @@ function ProductRow({ products }: { products: typeof MOCK_PRODUCTS }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function HomePage() {
-  const trendingProducts  = MOCK_PRODUCTS.slice(0, 8);
-  const topPicksProducts  = MOCK_PRODUCTS.filter((p) => p.is_recommended);
-  const bestsellers       = [...MOCK_PRODUCTS].sort((a, b) => b.review_count - a.review_count).slice(0, 6);
-  const topRatedProducts  = [...MOCK_PRODUCTS].sort((a, b) => b.rating - a.rating).slice(0, 6);
-  const mostBought        = [...MOCK_PRODUCTS].sort((a, b) => b.review_count - a.review_count).slice(0, 6);
-  const reviewProducts    = MOCK_PRODUCTS.slice(0, 3);
+export default async function HomePage() {
+  // Fetch products and deals from the real API
+  let products: ProductSummary[] = [];
+  let deals: Deal[] = [];
+
+  try {
+    const productsRes = await productsApi.list();
+    if (productsRes.success && "data" in productsRes) {
+      products = Array.isArray(productsRes.data) ? productsRes.data : [];
+    }
+  } catch {
+    // API unavailable — render empty
+  }
+
+  try {
+    const dealsRes = await dealsApi.list();
+    if (dealsRes.success && "data" in dealsRes) {
+      deals = Array.isArray(dealsRes.data) ? dealsRes.data : [];
+    }
+  } catch {
+    // API unavailable — render empty
+  }
+
+  const trendingProducts = products.slice(0, 8);
+  const topRatedProducts = [...products].sort((a, b) => (b.avgRating ?? 0) - (a.avgRating ?? 0)).slice(0, 6);
+  const bestsellers = [...products].sort((a, b) => (b.totalReviews ?? 0) - (a.totalReviews ?? 0)).slice(0, 6);
+  const reviewProducts = products.slice(0, 3);
 
   return (
     <>
@@ -467,268 +494,142 @@ export default function HomePage() {
         </section>
 
         {/* ── Blockbuster deals for you ─────────────────────────────────────── */}
-        <section className="bg-[#1E293B] py-8">
-          <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-[20px] font-bold text-white">Blockbuster deals for you</h2>
-              <Link
-                href="/deals"
-                className="flex items-center gap-1 text-sm font-medium text-[#4DB6AC] hover:text-teal-300 transition-colors"
-              >
-                View all <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
-              {MOCK_DEALS.map((deal) => (
-                <DealCard key={deal.id} deal={deal} />
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── Rate and review your products ────────────────────────────────── */}
-        <section className="bg-white py-8 border-b border-[#E2E8F0]">
-          <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
-
-            {/* User header */}
-            <div className="flex items-start gap-4 mb-5">
-              <div className="h-[60px] w-[60px] shrink-0 rounded-full overflow-hidden relative border-2 border-[#E2E8F0]">
-                <Image
-                  src="https://placehold.co/60x60/fef3c7/92400e?text=You"
-                  alt="Profile"
-                  fill
-                  className="object-cover"
-                  unoptimized
-                />
-              </div>
-              <div>
-                <p className="text-[#1E293B] text-[18px] font-semibold leading-snug">
-                  Rate and review your products
-                </p>
-                <p className="text-[#64748B] text-[13px] mt-1 flex flex-wrap items-center gap-1.5">
-                  Get{" "}
-                  <span className="inline-block bg-[#FFF7ED] border border-[#FED7AA] text-[#F97316] text-[11px] font-semibold rounded-full px-2.5 py-0.5">
-                    Rewards
-                  </span>{" "}
-                  by{" "}
-                  <span className="inline-block bg-[#FFF7ED] border border-[#FED7AA] text-[#F97316] text-[11px] font-semibold rounded-full px-2.5 py-0.5">
-                    reviewing
-                  </span>{" "}
-                  any product below
-                </p>
-              </div>
-            </div>
-
-            {/* Products to review + view all */}
-            <div className="flex gap-4 overflow-x-auto pb-1 no-scrollbar">
-              {reviewProducts.map((product) => (
-                <div key={product.id} className="shrink-0 w-[300px] md:w-[350px]">
-                  <div className="flex gap-3 rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="relative h-[90px] w-[90px] shrink-0 rounded-lg overflow-hidden bg-[#F8FAFC]">
-                      <Image
-                        src={product.image}
-                        alt={product.title}
-                        fill
-                        sizes="90px"
-                        className="object-contain p-2"
-                        unoptimized
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-                      <div>
-                        <p className="text-[11px] text-[#4DB6AC] font-medium">{product.brand}</p>
-                        <p className="text-[13px] font-medium text-[#1E293B] line-clamp-2 leading-snug mt-0.5">
-                          {product.title}
-                        </p>
-                      </div>
-                      <Link
-                        href={`/product/${product.slug}`}
-                        className="mt-2 self-start inline-flex items-center justify-center rounded-full bg-[#F97316] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#EA580C] transition-colors"
-                      >
-                        Write a review
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {/* View all tile */}
-              <div className="shrink-0 w-[80px] flex items-center justify-center">
+        {deals.length > 0 && (
+          <section className="bg-[#1E293B] py-8">
+            <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-[20px] font-bold text-white">Blockbuster deals for you</h2>
                 <Link
-                  href="/reviews"
-                  className="flex flex-col items-center gap-1.5 text-[#F97316] hover:text-[#EA580C] transition-colors"
+                  href="/deals"
+                  className="flex items-center gap-1 text-sm font-medium text-[#4DB6AC] hover:text-teal-300 transition-colors"
                 >
-                  <div className="h-10 w-10 rounded-full border-2 border-[#F97316] flex items-center justify-center">
-                    <ChevronRight className="h-5 w-5" />
-                  </div>
-                  <span className="text-[11px] font-semibold whitespace-nowrap">View All</span>
+                  View all <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Top Picks + Bestsellers ───────────────────────────────────────── */}
-        <section className="bg-[#F8FAFC] py-8">
-          <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-[20px] font-bold text-[#1E293B]">Top Picks for you</h2>
-                  <Link href="/search?sort=recommended" className="text-[13px] font-medium text-[#F97316] hover:text-[#EA580C] flex items-center gap-0.5">
-                    View all <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-                <ProductRow products={topPicksProducts} />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-[20px] font-bold text-[#1E293B]">Bestsellers</h2>
-                  <Link href="/search?sort=bestsellers" className="text-[13px] font-medium text-[#F97316] hover:text-[#EA580C] flex items-center gap-0.5">
-                    View all <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-                <ProductRow products={bestsellers} />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+                {deals.slice(0, 5).map((deal) => (
+                  <DealCard key={deal.id} deal={deal} />
+                ))}
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        {/* ── Top Rated + Most Bought ───────────────────────────────────────── */}
-        <section className="bg-white py-8">
-          <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* ── Rate and review your products ────────────────────────────────── */}
+        {reviewProducts.length > 0 && (
+          <section className="bg-white py-8 border-b border-[#E2E8F0]">
+            <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
 
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-[20px] font-bold text-[#1E293B]">Top rated</h2>
-                  <Link href="/search?sort=rating" className="text-[13px] font-medium text-[#F97316] hover:text-[#EA580C] flex items-center gap-0.5">
-                    View all <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+              {/* User header */}
+              <div className="flex items-start gap-4 mb-5">
+                <div className="h-[60px] w-[60px] shrink-0 rounded-full overflow-hidden relative border-2 border-[#E2E8F0]">
+                  <Image
+                    src="https://placehold.co/60x60/fef3c7/92400e?text=You"
+                    alt="Profile"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
                 </div>
-                <ProductRow products={topRatedProducts} />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-[20px] font-bold text-[#1E293B]">Most bought, least loved</h2>
-                  <Link href="/search?sort=review_count" className="text-[13px] font-medium text-[#F97316] hover:text-[#EA580C] flex items-center gap-0.5">
-                    View all <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+                <div>
+                  <p className="text-[#1E293B] text-[18px] font-semibold leading-snug">
+                    Rate and review your products
+                  </p>
+                  <p className="text-[#64748B] text-[13px] mt-1 flex flex-wrap items-center gap-1.5">
+                    Get{" "}
+                    <span className="inline-block bg-[#FFF7ED] border border-[#FED7AA] text-[#F97316] text-[11px] font-semibold rounded-full px-2.5 py-0.5">
+                      Rewards
+                    </span>{" "}
+                    by{" "}
+                    <span className="inline-block bg-[#FFF7ED] border border-[#FED7AA] text-[#F97316] text-[11px] font-semibold rounded-full px-2.5 py-0.5">
+                      reviewing
+                    </span>{" "}
+                    any product below
+                  </p>
                 </div>
-                <ProductRow products={mostBought} />
               </div>
-            </div>
-          </div>
-        </section>
 
-        {/* ── Product reviews others found helpful ─────────────────────────── */}
-        <section className="bg-[#F8FAFC] py-8">
-          <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
-
-            {/* Header with nav buttons */}
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-[20px] font-bold text-[#1E293B]">
-                Product reviews others found helpful
-              </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  aria-label="Previous reviews"
-                  className="h-10 w-10 rounded-full border border-[#E2E8F0] bg-white flex items-center justify-center text-[#64748B] hover:border-[#F97316] hover:text-[#F97316] transition-colors"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <button
-                  aria-label="Next reviews"
-                  className="h-10 w-10 rounded-full border border-[#E2E8F0] bg-white flex items-center justify-center text-[#64748B] hover:border-[#F97316] hover:text-[#F97316] transition-colors"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Review cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {MOCK_PRODUCTS.slice(0, 4).map((product, idx) => {
-                const reviewTexts = [
-                  "Absolutely love it! Build quality is excellent, performance is smooth. Very happy with the purchase. The DudScore was accurate — worth every rupee.",
-                  "Decent product for the price. Battery life could be better but overall satisfied. Matches the description well.",
-                  "Exceeded my expectations! Delivery was fast, packaging was great. Will definitely buy again.",
-                  "Good value for money. Some minor issues but customer support resolved them quickly. Recommended.",
-                ];
-                const reviewers = ["Priya M.", "Rahul K.", "Aarav S.", "Sneha P."];
-                return (
-                  <div
-                    key={product.id}
-                    className="flex flex-col rounded-xl border border-[#E2E8F0] bg-white shadow-sm p-4 hover:shadow-md transition-shadow"
-                  >
-                    {/* Product info */}
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="relative h-[56px] w-[56px] shrink-0 rounded-lg overflow-hidden bg-[#F8FAFC]">
-                        <Image
-                          src={product.image}
-                          alt={product.title}
-                          fill
-                          sizes="56px"
-                          className="object-contain p-1.5"
-                          unoptimized
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[11px] text-[#4DB6AC] font-medium truncate">{product.brand}</p>
-                        <p className="text-[12px] font-medium text-[#1E293B] line-clamp-2 leading-snug">
-                          {product.title}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Stars */}
-                    <div className="flex items-center gap-1 mb-2">
-                      {Array.from({ length: 5 }, (_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-3 w-3 ${
-                            i < Math.round(product.rating)
-                              ? "text-[#FBBF24] fill-[#FBBF24]"
-                              : "text-[#E2E8F0] fill-[#E2E8F0]"
-                          }`}
-                        />
-                      ))}
-                      <span className="text-[11px] text-[#64748B] ml-1">
-                        {product.rating.toFixed(1)}
-                      </span>
-                    </div>
-
-                    {/* Review text */}
-                    <p className="text-[12px] text-[#64748B] leading-relaxed line-clamp-4 flex-1">
-                      {reviewTexts[idx]}
-                    </p>
-
-                    {/* Footer */}
-                    <div className="mt-3 pt-3 border-t border-[#F1F5F9] flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <div className="h-6 w-6 rounded-full bg-[#F97316] flex items-center justify-center shrink-0">
-                          <span className="text-white text-[10px] font-bold">
-                            {reviewers[idx]?.charAt(0)}
-                          </span>
+              {/* Products to review + view all */}
+              <div className="flex gap-4 overflow-x-auto pb-1 no-scrollbar">
+                {reviewProducts.map((product) => {
+                  const imgUrl = product.images?.[0] ?? "https://placehold.co/90x90/f8fafc/94a3b8?text=?";
+                  return (
+                    <div key={product.id} className="shrink-0 w-[300px] md:w-[350px]">
+                      <div className="flex gap-3 rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="relative h-[90px] w-[90px] shrink-0 rounded-lg overflow-hidden bg-[#F8FAFC]">
+                          <Image
+                            src={imgUrl}
+                            alt={product.title}
+                            fill
+                            sizes="90px"
+                            className="object-contain p-2"
+                            unoptimized
+                          />
                         </div>
-                        <span className="text-[11px] text-[#64748B] font-medium">
-                          {reviewers[idx]}
-                        </span>
-                        <span className="text-[10px] text-[#4DB6AC] font-semibold bg-[#E0F7F5] px-1.5 py-0.5 rounded-full">
-                          ✓ Verified
-                        </span>
+                        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                          <div>
+                            <p className="text-[11px] text-[#4DB6AC] font-medium">{product.brandName}</p>
+                            <p className="text-[13px] font-medium text-[#1E293B] line-clamp-2 leading-snug mt-0.5">
+                              {product.title}
+                            </p>
+                          </div>
+                          <Link
+                            href={`/product/${product.slug}`}
+                            className="mt-2 self-start inline-flex items-center justify-center rounded-full bg-[#F97316] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#EA580C] transition-colors"
+                          >
+                            Write a review
+                          </Link>
+                        </div>
                       </div>
-                      <span className="text-[10px] text-[#94A3B8]">2d ago</span>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+
+                {/* View all tile */}
+                <div className="shrink-0 w-[80px] flex items-center justify-center">
+                  <Link
+                    href="/reviews"
+                    className="flex flex-col items-center gap-1.5 text-[#F97316] hover:text-[#EA580C] transition-colors"
+                  >
+                    <div className="h-10 w-10 rounded-full border-2 border-[#F97316] flex items-center justify-center">
+                      <ChevronRight className="h-5 w-5" />
+                    </div>
+                    <span className="text-[11px] font-semibold whitespace-nowrap">View All</span>
+                  </Link>
+                </div>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
+
+        {/* ── Top Rated + Bestsellers ───────────────────────────────────────── */}
+        {products.length > 0 && (
+          <section className="bg-[#F8FAFC] py-8">
+            <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-[20px] font-bold text-[#1E293B]">Top Rated</h2>
+                    <Link href="/search?sort=rating" className="text-[13px] font-medium text-[#F97316] hover:text-[#EA580C] flex items-center gap-0.5">
+                      View all <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                  <ProductRow products={topRatedProducts} />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-[20px] font-bold text-[#1E293B]">Bestsellers</h2>
+                    <Link href="/search?sort=bestsellers" className="text-[13px] font-medium text-[#F97316] hover:text-[#EA580C] flex items-center gap-0.5">
+                      View all <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                  <ProductRow products={bestsellers} />
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
       </main>
 

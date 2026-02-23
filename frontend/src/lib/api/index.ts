@@ -5,4 +5,6 @@ export * from "./inbox";
 export * from "./products";
 export * from "./rewards";
 export * from "./search";
+export * from "./sellers";
+export * from "./tco";
 export * from "./wishlists";
