@@ -5,17 +5,12 @@
 **Architecture Reference:** `docs/ARCHITECTURE.md`
 
 ## 🎯 CURRENT TASK
-## 🎯 CURRENT TASK
-Build 3 pages with mock data:
+Build remaining pages with mock data:
 
-1. src/app/(dashboard)/dashboard/page.tsx — match docs/figma/expense_tracker_mockup.png (use ₹ not $)
-   4 stat cards, tab nav (Overview|Platforms|Categories|Timeline|Insights), Recharts line chart + donut + horizontal bars, 3 insight cards
-
-2. src/app/(auth)/login/page.tsx — no Figma, use docs/DESIGN-SYSTEM.md "Screen: Login Page"
-   Centered card, email+password inputs, "Sign in" orange button, Google OAuth, register link
-
-3. src/app/(auth)/register/page.tsx — no Figma, use docs/DESIGN-SYSTEM.md "Screen: Registration"
-   3-step flow: account → @whydud.com username → marketplace onboarding. Step indicator dots.
+1. src/app/(dashboard)/inbox/page.tsx — 3-column layout (folder sidebar | email list | reader). Use docs/DESIGN-SYSTEM.md "Screen: Inbox" wireframe.
+2. src/app/(dashboard)/wishlists/page.tsx — wishlist cards grid + item list with price tracking
+3. src/app/(dashboard)/rewards/page.tsx — points balance + earn cards + gift card catalog
+4. src/app/(dashboard)/settings/page.tsx — tabbed: Profile | @whyd.xyz | Cards | TCO | Subscription | Privacy
 
 ## Legend
 
@@ -238,14 +233,16 @@ Build 3 pages with mock data:
 | Homepage | ✅ | Redesigned to match Figma: split hero (text+search left, floating visuals right), review CTA strip, trending with filter chips, Buyer's/Reviewer's Zone cards, deals, rate-&-review section, top picks/bestsellers/top-rated/most-bought side-by-side, helpful reviews section |
 | Auth pages (login, register) | ✅ | Login: centered card, email+password with show/hide, remember me, forgot password, Google OAuth. Register: 3-step flow (account → @whyd.xyz email → marketplace onboarding) with step indicator dots, password strength bar, terms checkbox, Google OAuth, marketplace checklist with expand/collapse. |
 | @whyd.xyz onboarding flow | ✅ | Step 2+3 of register page: username picker with availability check, marketplace setup checklist (8 sites) with progress bar |
-| Wishlist pages | ⬜ | Sprint 2 |
+| Wishlist pages (`/wishlists`) | ✅ | Wishlist cards grid (3 cols) with selection, item list with product image, DudScore badge, price tracking (added vs current with % change), target price, alert toggle, share link. Mock data in `mock-wishlists-data.ts`. |
 | Product detail page (`/product/[slug]`) | ✅ | 3-column dashboard layout: left=image+specs, center=title+price+DudScore gauge+marketplace prices+price chart, right=reviews. Independently scrollable columns. 6 new components: `dud-score-gauge`, `marketplace-prices`, `category-score-bars`, `price-chart` (Recharts), `reviews/rating-distribution`, `reviews/review-card`. Mock data in `mock-product-detail.ts`. |
 | Price history chart | ✅ | `price-chart.tsx` — Recharts LineChart, 3 marketplace lines, 1M/3M/Max tabs |
 | DudScore badge component | ✅ | `dud-score-gauge.tsx` — SVG semi-circular gauge, red→green gradient, needle indicator |
 | `(public)/compare` page | ✅ | Full comparison: sticky tabs (Highlights/Summary/Detailed/TCO), 3-product header with VS markers, highlights cards, category score dots (5-dot rows), ratings + DudScore, key specs with "Best" badges, detailed summary table, quick TCO. Mock data in `mock-pages-data.ts`. |
 | `(public)/seller/[slug]` page | ✅ | Seller header card (avatar, name, verified badge, stars, TrustScore gauge), 4 tabs, seller info content (description, category pills, photo grid, socials, contact), right sidebar (performance metrics, report/enquire, feedback). Mock data. |
 | `(dashboard)/dashboard` page | ✅ | Expense Tracker matching Figma (₹ not $): 4 stat cards, tab nav (Overview/Platforms/Categories/Timeline/Insights), Monthly Spend Recharts line chart, Spend by Platform donut chart, Spend by Category horizontal bars, 3 insight cards. Mock data in `mock-dashboard-data.ts`. Client component `DashboardCharts.tsx`. |
-| Inbox / Purchase dashboard | ⬜ | Sprint 3 |
+| `(dashboard)/inbox` page | ✅ | 3-column layout: folder sidebar (8 folders with unread counts + marketplace filter) | email list (search, category badges, unread blue dot, time ago) | email reader (header, parsed data card with green border for order/refund/shipping detection, email body). Mock data in `mock-inbox-data.ts`. |
+| `(dashboard)/rewards` page | ✅ | Points balance card with progress bar to next milestone, 4 "How to Earn" cards (Review/Email/Refer/Streak), 6 gift card redemption cards (disabled if insufficient points), chronological points history. Mock data in `mock-rewards-data.ts`. |
+| `(dashboard)/settings` page | ✅ | 6-tab layout: Profile (avatar, name, city, password change), @whyd.xyz (email status, marketplace setup checklist, deactivate), Card Vault (security badge, 3 saved cards, wallets), TCO Preferences (city, tariff, ownership years, AC hours), Subscription (Free plan + Premium upsell with features list at ₹199/mo), Data & Privacy (connected services, export, delete account). |
 
 ---
 
@@ -318,6 +315,39 @@ Built 3 pages with mock data:
    - Step 1: Name, email, password (with strength bar), terms checkbox, Google OAuth
    - Step 2: @whyd.xyz username picker with availability check, skip option
    - Step 3: Marketplace onboarding checklist (8 Indian sites), expand/collapse per site, progress bar, "I'll do this later" link
+
+---
+
+## 2026-02-24 — Inbox, Wishlists, Rewards, Settings pages
+
+Built 4 remaining dashboard pages with mock data:
+
+1. **Inbox** (`/inbox`) — 3-column email layout from DESIGN-SYSTEM.md:
+   - Folder sidebar (All/Orders/Shipping/Refunds/Returns/Subscriptions/Promotions/Starred) with unread counts + marketplace filter
+   - Email list with search, unread blue dot, category badges (semantic colors), time ago
+   - Email reader with parsed data card (green border, detected order/refund/shipping info with DudScore)
+   - 7 mock emails across Amazon, Flipkart, Myntra, Croma, Swiggy
+
+2. **Wishlists** (`/wishlists`) — Wishlist management:
+   - 3 wishlist cards (Birthday/Home/Tech) with item count, total price, price drop badges
+   - Item list: product image, title, brand, DudScore badge, added vs current price with % change
+   - Target price display, alert toggle (switch component), share link, remove button
+
+3. **Rewards** (`/rewards`) — Points & gift card system:
+   - Balance card (450 points ≈ ₹45) with progress bar to next milestone (₹100 gift card)
+   - 4 "How to Earn" cards: Review (+20), Email (+50), Refer (+30), Streak (+10)
+   - 6 gift cards (Amazon/Flipkart/Swiggy/Zomato/BookMyShow/Myntra) with Redeem buttons (disabled if insufficient points)
+   - Points history timeline (7 entries, earned + spent)
+
+4. **Settings** (`/settings`) — 6-tab layout:
+   - Profile: avatar, name, city, password change
+   - @whyd.xyz: email status, marketplace setup checklist (6 sites), deactivate
+   - Card Vault: "Never store card numbers" badge, 3 saved cards (HDFC/ICICI/SBI), wallets section
+   - TCO Preferences: city, electricity tariff, ownership years, AC hours, washer loads
+   - Subscription: Free plan badge + Premium upsell (₹199/mo, 5 features)
+   - Data & Privacy: connected services, data export, account deletion
+
+New mock data files: `mock-inbox-data.ts`, `mock-wishlists-data.ts`, `mock-rewards-data.ts`
 
 ---
 
