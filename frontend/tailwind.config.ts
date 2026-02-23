@@ -8,18 +8,15 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: {
-        // DudScore colours
-        "score-excellent": "#16a34a",
-        "score-good": "#65a30d",
-        "score-average": "#ca8a04",
-        "score-below": "#ea580c",
-        "score-dud": "#dc2626",
-        "score-unrated": "#6b7280",
-      },
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
-        mono: ["var(--font-geist-mono)", "monospace"],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"],
+      },
+      maxWidth: {
+        "site": "1280px",
+      },
+      height: {
+        "header": "64px",
       },
     },
   },

@@ -49,6 +49,7 @@ LOCAL_APPS = [
     "apps.deals",
     "apps.rewards",
     "apps.discussions",
+    "apps.tco",
     "apps.search",
     "apps.scraping",
 ]
@@ -159,9 +160,8 @@ AUTHENTICATION_BACKENDS = [
 
 SITE_ID = 1
 
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_AUTHENTICATION_METHOD = "email"
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
@@ -317,3 +317,52 @@ CORS_ALLOWED_ORIGINS = [
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# ---------------------------------------------------------------------------
+# Pagination
+# All page-size limits are driven by these settings and overridable via env
+# vars.  Sprint 4 admin panel will surface these as editable SiteConfig rows.
+# ---------------------------------------------------------------------------
+
+PAGINATION_PAGE_SIZE = int(os.environ.get("PAGINATION_PAGE_SIZE", "20"))
+PAGINATION_MAX_PAGE_SIZE = int(os.environ.get("PAGINATION_MAX_PAGE_SIZE", "100"))
+
+# ---------------------------------------------------------------------------
+# Product list
+# ---------------------------------------------------------------------------
+
+PRODUCT_LIST_PAGE_SIZE = int(os.environ.get("PRODUCT_LIST_PAGE_SIZE", "24"))
+PRODUCT_LIST_PAGE_SIZE_MAX = int(os.environ.get("PRODUCT_LIST_PAGE_SIZE_MAX", "100"))
+
+# Default ordering when no sort_by param is supplied.
+PRODUCT_LIST_DEFAULT_ORDERING: str = os.environ.get(
+    "PRODUCT_LIST_DEFAULT_ORDERING", "-dud_score"
+)
+
+# Allowed sort_by values → ORM ordering expressions.
+# Keys become the public API enum; values are passed to queryset.order_by().
+PRODUCT_SORT_OPTIONS: dict[str, list[str]] = {
+    "dud_score": ["-dud_score"],
+    "price_asc": ["current_best_price"],
+    "price_desc": ["-current_best_price"],
+    "newest": ["-created_at"],
+    "top_rated": ["-avg_rating"],
+}
+
+# ---------------------------------------------------------------------------
+# Search & Autocomplete
+# ---------------------------------------------------------------------------
+
+SEARCH_PAGE_SIZE_DEFAULT = int(os.environ.get("SEARCH_PAGE_SIZE_DEFAULT", "20"))
+SEARCH_PAGE_SIZE_MAX = int(os.environ.get("SEARCH_PAGE_SIZE_MAX", "100"))
+SEARCH_AUTOCOMPLETE_LIMIT = int(os.environ.get("SEARCH_AUTOCOMPLETE_LIMIT", "8"))
+SEARCH_MIN_QUERY_LENGTH = int(os.environ.get("SEARCH_MIN_QUERY_LENGTH", "2"))
+
+# Meilisearch sort param strings for each public sort_by value.
+SEARCH_SORT_MAP_MEILI: dict[str, list[str]] = {
+    "relevance": [],
+    "price_asc": ["current_best_price:asc"],
+    "price_desc": ["current_best_price:desc"],
+    "dud_score": ["dud_score:desc"],
+    "top_rated": ["avg_rating:desc"],
+}

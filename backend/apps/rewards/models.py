@@ -30,6 +30,9 @@ class RewardBalance(models.Model):
     class Meta:
         db_table = 'users"."reward_balances'
 
+    def __str__(self) -> str:
+        return f"{self.user.email} — {self.current_balance} pts"
+
 
 class GiftCardCatalog(models.Model):
     brand_name = models.CharField(max_length=200)
@@ -68,3 +71,6 @@ class GiftCardRedemption(models.Model):
 
     class Meta:
         db_table = 'users"."gift_card_redemptions'
+
+    def __str__(self) -> str:
+        return f"{self.user.email} — {self.catalog.brand_name} ₹{self.denomination} ({self.status})"

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 60 npm run build)",
+      "Bash(timeout 90 npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker ps:*)",
+      "Bash(pip show:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.dev POSTGRES_PASSWORD=whydud_dev python manage.py makemigrations:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.dev POSTGRES_PASSWORD=whydud_dev python manage.py migrate:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.dev POSTGRES_PASSWORD=whydud_dev python manage.py:*)"
+    ]
+  }
+}

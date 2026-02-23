@@ -1,101 +1,116 @@
 # CLAUDE.md — Whydud Project Instructions
 
+> Read `PROGRESS.md` first (current task + what exists). Read `docs/ARCHITECTURE.md` for full system design. Read `docs/DESIGN-SYSTEM.md` for all visual specs.
+
 ## What Is This Project?
 
-Whydud is a production-grade, India-first product intelligence and trust platform. Full architecture is in `docs/ARCHITECTURE.md` — READ IT BEFORE ANY WORK.
+Whydud is an India-first product intelligence and trust platform. Product aggregation across 12+ Indian marketplaces, price intelligence, review fraud detection, purchase analytics via @whyd.xyz email, DudScore (proprietary trust score), smart payment optimizer, and TCO calculator.
 
 ## Tech Stack
 
-- **Backend:** Django 5 + Django REST Framework + Celery + Redis
-- **Frontend:** Next.js 15 (App Router) + TypeScript + Tailwind CSS + shadcn/ui
-- **Database:** PostgreSQL 16 + TimescaleDB extension
-- **Search:** Meilisearch
-- **Scraping:** Scrapy + Playwright (Python)
-- **NLP:** spaCy + TextBlob
-- **Queue:** Celery + Redis (broker) + Celery Beat (scheduler)
-- **Cache:** Redis
-- **Email Receive:** Cloudflare Email Workers → Django webhook
-- **Payments:** Razorpay
-- **Deployment:** Docker Compose on Contabo VPS + Caddy reverse proxy
+**Backend:** Django 5 + DRF + Celery + Redis + PostgreSQL 16 + TimescaleDB + Meilisearch
+**Frontend:** Next.js 15 (App Router) + TypeScript strict + Tailwind CSS + shadcn/ui + Recharts + Lucide
+**Infra:** Docker Compose, Caddy, Cloudflare Email Workers, Razorpay
 
 ## Project Structure
 
 ```
 whydud/
-├── backend/                  # Django project
-│   ├── whydud/               # Django settings, urls, celery config
-│   ├── apps/                 # Django apps (accounts, products, pricing, reviews, scoring, email_intel, wishlists, deals, rewards, discussions, search, scraping)
-│   ├── common/               # Shared utilities
-│   └── requirements/         # pip requirements (base, dev, prod)
-├── frontend/                 # Next.js project
-│   ├── src/app/              # App Router pages
-│   ├── src/components/       # React components (ui/, product/, search/, dashboard/, inbox/, deals/, rewards/, tco/, payments/, discussions/, layout/)
-│   ├── src/lib/              # API client, utils
-│   └── src/hooks/            # React hooks
-├── docker/                   # Dockerfiles + docker-compose.yml + Caddyfile
-├── docs/                     # Architecture doc, API docs, design notes
-└── CLAUDE.md                 # This file
+├── CLAUDE.md               # This file
+├── PROGRESS.md             # What's done, what's next — READ FIRST
+├── backend/
+│   ├── whydud/             # Settings, URLs, Celery
+│   ├── apps/               # 13 Django apps
+│   ├── common/             # utils, pagination, rate_limiting, app_settings, permissions
+│   └── requirements/
+├── frontend/
+│   ├── src/app/            # (public)/, (auth)/, (dashboard)/
+│   ├── src/components/     # ui/, layout/, product/, search/, dashboard/, inbox/,
+│   │                       # reviews/, comparison/, deals/, rewards/, tco/,
+│   │                       # payments/, wishlists/, discussions/, seller/
+│   ├── src/lib/            # api/ (client, types, per-domain), utils/ (format, cn)
+│   ├── src/hooks/
+│   └── src/config/         # marketplace.ts
+├── docker/                 # Dockerfiles, compose, Caddyfile
+└── docs/                   # ARCHITECTURE.md, DESIGN-SYSTEM.md, figma/*.png
 ```
 
-## Coding Standards
+## Backend Standards
 
-### Python (Backend)
-- Python 3.12+
-- Type hints on ALL function signatures
-- Docstrings on all public functions
-- Django coding style (snake_case, class-based views where appropriate)
-- Use Django REST Framework serializers for all API validation
-- Use Celery tasks for ALL background work (scraping, scoring, email parsing, alerts)
-- NEVER put business logic in views — use service layer or model methods
-- All prices stored as Decimal(12,2) in paisa, never float
-- All timestamps as TIMESTAMPTZ (UTC)
-- Use structlog for structured JSON logging
-- Tests: pytest + pytest-django
+- Python 3.12+. Type hints on all functions. Docstrings on public functions.
+- DRF serializers for ALL API validation. Business logic in services/model methods, NOT views.
+- Celery for ALL background work. Never heavy processing in request/response cycle.
+- Prices: `Decimal(12,2)` in paisa. Timestamps: `TIMESTAMPTZ` (UTC).
+- Config values through `common/app_settings.py` — never hardcode tuneable values.
+- API response format: `{success: true, data: ...}` via `common/utils.py`.
+- Cursor pagination via `common/pagination.py`.
+- Logging: `structlog` JSON output.
 
-### TypeScript (Frontend)
-- Strict mode, no `any` types
-- All API responses typed with interfaces matching Django serializers
-- Use server components by default, client components only when needed (interactivity)
-- All API calls go through `src/lib/api/` abstraction layer — never raw fetch in components
-- shadcn/ui for base components, custom for domain components
-- Tailwind utility classes, no custom CSS unless absolutely necessary
-- Every data component must have a skeleton loading state
-- Error boundaries on every page
-- Mobile-first responsive design
+## Frontend Standards
 
-### Database
-- UUIDs for user-facing entities (products, users, orders)
-- BIGSERIAL for high-volume append tables (price_snapshots, audit_logs)
-- JSONB for flexible schemas (product specs, offer terms)
-- TimescaleDB hypertables for ALL time-series data
-- Indexes on all foreign keys and commonly queried columns
-- Schema isolation: public, users, email_intel, scoring, tco, community, admin
+- TypeScript strict. No `any`. Type every prop and API response (types in `src/lib/api/types.ts`).
+- Server Components by default. `"use client"` only for interactivity (useState, onClick, etc.).
+- All API calls through `src/lib/api/`. Never raw fetch in components.
+- Mobile-first responsive: `text-sm md:text-base lg:text-lg`.
+- Semantic HTML. ARIA labels. Keyboard navigation.
+- Prices always `₹` prefix, formatted via `src/lib/utils/format.ts`.
+- Never hardcode any tunable values/properties for visual changes unless unavoidable. Keep them flexible to be changed by user just by replacing hexcode,fonts etc at one place in the code
+## Design Rules
 
-### Security (CRITICAL)
-- NEVER store card numbers, CVV, expiry, PIN — card vault stores bank name + variant ONLY
-- NEVER persist raw email bodies without encryption
-- AES-256-GCM for OAuth tokens and email bodies at rest
-- bcrypt (cost 12) for passwords
-- HTTP-only, Secure, SameSite=Strict cookies
-- CSRF protection on all state-changing endpoints
-- Rate limiting on all public endpoints
-- HTML sanitization (nh3) on all email content before rendering
-- Proxy external images in emails (block tracking pixels)
+- **Match Figma exactly** for pages with Figma reference (see table below).
+- **Follow docs/DESIGN-SYSTEM.md wireframes** for pages without Figma.
+- Use **only** the Whydud color palette from `tailwind.config.ts`. Never default Tailwind colors.
+- Clean, professional UI. No textures, grain, noise filters, or novelty effects.
+- Font: **Inter only**. Headings: font-semibold/bold. Body: font-normal/medium.
+- Card pattern: `bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow`
+- Interactive states: `hover` + `focus-visible` on all clickable elements.
+- Consistent spacing: `p-4` card padding, `gap-4` between cards, `py-12` between page sections.
 
-## Key Design Decisions
-- Modular monolith (NOT microservices) — solo founder, single VPS
-- @whyd.xyz email is PRIMARY email intelligence path, Gmail OAuth is SUPPLEMENTARY
-- DudScore weights are versioned config, NOT hardcoded
-- Price data uses TimescaleDB hypertables with continuous aggregates
-- Email worker runs on isolated Celery queue (separate from main workers)
-- All scraping through Scrapy framework with anti-detection middleware
-- Affiliate links injected at API response level, not stored in DB
+### Colors
+```
+Primary Orange:  #F97316    Teal:           #4DB6AC    Navy:      #1E293B
+Star Yellow:     #FBBF24    Success Green:  #16A34A    Danger:    #DC2626
+Background:      #F8FAFC    Border:         #E2E8F0    Text Sec:  #64748B
+```
 
-## Current Sprint
-Sprint 1: Foundation (see docs/ARCHITECTURE.md Section "Development Plan")
+## Frontend Page → Figma Reference
 
-## When In Doubt
-- Read docs/ARCHITECTURE.md
-- Ask clarifying questions before writing code
-- Prefer simple, correct code over clever code
-- Log everything, cache aggressively, background all heavy work
+| Page | Route | Figma |
+|---|---|---|
+| Homepage | `/` | `docs/figma/homepage.png` |
+| Search | `/search` | `docs/figma/Search_result_page-1.png` |
+| Product | `/product/[slug]` | `docs/figma/Product_detail_page.png` |
+| Comparison | `/compare` | `docs/figma/Comparison_results.png` |
+| Dashboard | `/dashboard` | `docs/figma/expense_tracker_mockup.png` (₹ not $) |
+| Seller | `/seller/[slug]` | `docs/figma/Seller_detail_page-1.png` |
+| Login | `/login` | No Figma → `docs/DESIGN-SYSTEM.md` wireframe |
+| Register | `/register` | No Figma → `docs/DESIGN-SYSTEM.md` wireframe |
+| Inbox | `/inbox` | No Figma → `docs/DESIGN-SYSTEM.md` wireframe |
+| Wishlists | `/wishlists` | No Figma → `docs/DESIGN-SYSTEM.md` wireframe |
+| Deals | `/deals` | No Figma → `docs/DESIGN-SYSTEM.md` wireframe |
+| Rewards | `/rewards` | No Figma → `docs/DESIGN-SYSTEM.md` wireframe |
+| Settings | `/settings` | No Figma → `docs/DESIGN-SYSTEM.md` wireframe |
+
+## Security (NEVER VIOLATE)
+
+- **NEVER** store card numbers/CVV/expiry. Card vault = bank name + variant only.
+- **NEVER** persist raw email without AES-256-GCM encryption.
+- OAuth tokens encrypted at rest. Passwords bcrypt cost 12.
+- HTTP-only Secure SameSite=Strict cookies. CSRF on all mutations.
+- HTML sanitization (nh3) on all email content. External images proxied.
+
+## Key Decisions (Don't Change Without Discussion)
+
+- Modular monolith, NOT microservices.
+- @whyd.xyz = primary email path. Gmail OAuth = supplementary.
+- DudScore weights = versioned config, not hardcoded.
+- TimescaleDB hypertables for time-series. Migration pattern: `RunPython` + `autocommit=True`.
+- Affiliate URLs injected at API response time, not stored in DB.
+- All tuneable values through `common/app_settings.py`.
+
+## Workflow
+
+1. Read `PROGRESS.md` → see current task
+2. Build that task
+3. Update `PROGRESS.md` status at the end of the file in a chronological order. You are not supposed to edit the current task. That is a section I will manually update to tell you what to do.
+4. Git commit

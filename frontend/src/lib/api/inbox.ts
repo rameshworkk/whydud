@@ -2,6 +2,7 @@ import { apiClient } from "./client";
 import type { InboxEmail, PaginatedResponse, ParsedOrder } from "@/types";
 
 export interface InboxFilters {
+  [key: string]: string | boolean | undefined;
   category?: string;
   isRead?: boolean;
   isStarred?: boolean;

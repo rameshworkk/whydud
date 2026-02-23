@@ -1,19 +1,154 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ─── Whydud Design System Tokens ─────────────────────────────────────── */
+/* Tailwind v4: @theme inline maps CSS vars → utility classes              */
 
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* shadcn/ui required tokens (used by all generated components) */
+    --background: #ffffff;
+    --foreground: #1e293b;
+    --card: #ffffff;
+    --card-foreground: #1e293b;
+    --popover: #ffffff;
+    --popover-foreground: #1e293b;
+    --primary: #f97316;
+    --primary-foreground: #ffffff;
+    --secondary: #f8fafc;
+    --secondary-foreground: #1e293b;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --accent: #f1f5f9;
+    --accent-foreground: #1e293b;
+    --destructive: #dc2626;
+    --destructive-foreground: #ffffff;
+    --border: #e2e8f0;
+    --input: #e2e8f0;
+    --ring: #f97316;
+    --radius: 0.5rem;
+
+    /* Whydud brand colors */
+    --color-primary: #f97316;
+    --color-primary-hover: #ea580c;
+    --color-primary-light: #fff7ed;
+    --color-teal: #4db6ac;
+    --color-teal-dark: #2d8e85;
+    --color-navy: #1e293b;
+    --color-yellow: #f59e0b;
+    --color-yellow-star: #fbbf24;
+
+    /* Semantic colors */
+    --color-success: #16a34a;
+    --color-success-light: #dcfce7;
+    --color-warning: #f59e0b;
+    --color-danger: #dc2626;
+    --color-danger-light: #fee2e2;
+    --color-info: #3b82f6;
+
+    /* Neutral palette */
+    --color-bg-primary: #ffffff;
+    --color-bg-secondary: #f8fafc;
+    --color-bg-tertiary: #f1f5f9;
+    --color-border: #e2e8f0;
+    --color-border-light: #f1f5f9;
+    --color-text-primary: #1e293b;
+    --color-text-secondary: #64748b;
+    --color-text-tertiary: #94a3b8;
+    --color-text-inverse: #ffffff;
+
+    /* Layout */
+    --max-width: 1280px;
+    --header-height: 64px;
+    --sidebar-width: 320px;
+    --card-gap: 16px;
+    --section-gap: 48px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+/* Map shadcn CSS vars → Tailwind v4 theme utilities */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Whydud-specific utility classes */
+  --color-teal: #4db6ac;
+  --color-teal-dark: #2d8e85;
+  --color-navy: #1e293b;
+  --color-primary-light: #fff7ed;
+  --color-success: #16a34a;
+  --color-success-light: #dcfce7;
+  --color-warning: #f59e0b;
+  --color-danger: #dc2626;
+  --color-danger-light: #fee2e2;
+  --color-info: #3b82f6;
+  --color-yellow-star: #fbbf24;
+
+  /* DudScore tier colors */
+  --color-score-excellent: #16a34a;
+  --color-score-good: #65a30d;
+  --color-score-average: #ca8a04;
+  --color-score-below: #ea580c;
+  --color-score-dud: #dc2626;
+  --color-score-unrated: #6b7280;
+
+  /* Radius scale */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ─── Base Styles ──────────────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-inter, "Inter"), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-bg-tertiary);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-tertiary);
+  }
 }

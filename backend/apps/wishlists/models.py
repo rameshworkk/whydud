@@ -36,3 +36,6 @@ class WishlistItem(models.Model):
     class Meta:
         db_table = 'users"."wishlist_items'
         unique_together = [("wishlist", "product")]
+
+    def __str__(self) -> str:
+        return f"{self.wishlist.name} — {self.product_id}"

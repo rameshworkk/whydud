@@ -1,7 +1,8 @@
 """Serializers for the accounts app."""
 from rest_framework import serializers
 
-from .models import OAuthConnection, PaymentMethod, TCOProfile, User, WhydudEmail
+from apps.tco.models import UserTCOProfile
+from .models import OAuthConnection, PaymentMethod, User, WhydudEmail
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -56,8 +57,8 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
 
 class TCOProfileSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TCOProfile
+        model = UserTCOProfile
         fields = [
-            "city_id", "electricity_tariff_override",
+            "city", "electricity_tariff_override",
             "ac_hours_per_day", "ownership_years",
         ]

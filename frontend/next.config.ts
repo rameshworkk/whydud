@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
       { hostname: "m.media-amazon.com" },
       { hostname: "rukminim2.flixcart.com" },
       { hostname: "images.unsplash.com" },
+      { hostname: "placehold.co" },
     ],
   },
   // Proxy /api/* calls to Django backend during development

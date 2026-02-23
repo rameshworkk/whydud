@@ -107,3 +107,6 @@ class PriceAlert(models.Model):
     class Meta:
         db_table = "price_alerts"
         unique_together = [("user", "product")]
+
+    def __str__(self) -> str:
+        return f"{self.user.email} alert on {self.product_id} @ ₹{self.target_price}"

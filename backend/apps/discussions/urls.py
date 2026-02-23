@@ -2,10 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("products/<slug:slug>/discussions", views.CreateDiscussionView.as_view(), name="discussions-create"),
-    path("discussions/<uuid:pk>", views.DiscussionDetailView.as_view(), name="discussions-detail"),
-    path("discussions/<uuid:pk>/replies", views.DiscussionReplyView.as_view(), name="discussions-replies"),
-    path("discussions/<uuid:pk>/vote", views.DiscussionVoteView.as_view(), name="discussions-vote"),
-    path("discussions/replies/<uuid:pk>/vote", views.ReplyVoteView.as_view(), name="replies-vote"),
-    path("discussions/replies/<uuid:pk>/accept", views.ReplyAcceptView.as_view(), name="replies-accept"),
+    path("discussions/<str:pk>", views.ThreadDetailView.as_view(), name="discussion-detail"),
+    path("discussions/<str:pk>/replies", views.ThreadReplyCreateView.as_view(), name="discussion-replies"),
+    path("discussions/<str:pk>/vote", views.ThreadVoteView.as_view(), name="discussion-vote"),
+    path("discussions/replies/<str:pk>/vote", views.ReplyVoteView.as_view(), name="reply-vote"),
+    path("discussions/replies/<str:pk>/accept", views.ReplyAcceptView.as_view(), name="reply-accept"),
 ]

@@ -48,7 +48,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const reviews =
     reviewsRes.status === "fulfilled" && reviewsRes.value.success
-      ? reviewsRes.value.data
+      ? reviewsRes.value.data.data
       : [];
 
   return (

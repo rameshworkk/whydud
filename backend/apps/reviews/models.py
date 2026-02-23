@@ -58,3 +58,6 @@ class ReviewVote(models.Model):
         constraints = [
             models.CheckConstraint(check=models.Q(vote__in=[1, -1]), name="vote_value"),
         ]
+
+    def __str__(self) -> str:
+        return f"{self.user.email} {'▲' if self.vote == 1 else '▼'} review {self.review_id}"

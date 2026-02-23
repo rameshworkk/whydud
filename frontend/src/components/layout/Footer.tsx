@@ -1,42 +1,100 @@
 import Link from "next/link";
 
+const FOOTER_LINKS = {
+  Discover: [
+    { label: "Search Products", href: "/search" },
+    { label: "Hot Deals", href: "/deals" },
+    { label: "Compare Products", href: "/compare" },
+    { label: "Write a Review", href: "/reviews/new" },
+  ],
+  Account: [
+    { label: "Dashboard", href: "/dashboard" },
+    { label: "My Inbox", href: "/inbox" },
+    { label: "Wishlists", href: "/wishlists" },
+    { label: "Rewards", href: "/rewards" },
+  ],
+  Company: [
+    { label: "About Whydud", href: "/about" },
+    { label: "Blog", href: "/blog" },
+    { label: "Contact Us", href: "/contact" },
+    { label: "Advertise with Us", href: "/advertise" },
+  ],
+  Legal: [
+    { label: "Privacy Policy", href: "/privacy" },
+    { label: "Terms of Service", href: "/terms" },
+    { label: "Cookie Policy", href: "/cookies" },
+    { label: "Affiliate Disclosure", href: "/affiliate-disclosure" },
+  ],
+};
+
 /** Site footer — server component. */
 export function Footer() {
   return (
-    <footer className="border-t bg-muted/40 py-8 text-sm text-muted-foreground">
-      <div className="mx-auto max-w-7xl px-4">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
-          <div>
-            <p className="font-semibold text-foreground mb-2">Whydud</p>
-            <p className="text-xs">India&apos;s Product Intelligence Platform</p>
+    <footer className="border-t border-[#E2E8F0] bg-[#F8FAFC]">
+      <div
+        className="mx-auto px-4 md:px-6 py-12"
+        style={{ maxWidth: "var(--max-width)" }}
+      >
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
+          {/* Brand column */}
+          <div className="col-span-2 md:col-span-1">
+            <Link href="/" className="flex items-center gap-2 mb-3">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 32 32"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <rect width="32" height="32" rx="8" fill="#1E293B" />
+                <path
+                  d="M8 11L16 7L24 11V21L16 25L8 21V11Z"
+                  fill="none"
+                  stroke="#4DB6AC"
+                  strokeWidth="1.5"
+                />
+                <path d="M8 11L16 15M16 15L24 11M16 15V25" stroke="#4DB6AC" strokeWidth="1.5" />
+                <circle cx="16" cy="15" r="2.5" fill="#F97316" />
+              </svg>
+              <span className="text-lg font-semibold text-[#1E293B]">Whydud</span>
+            </Link>
+            <p className="text-sm text-[#64748B] leading-relaxed">
+              India&apos;s product intelligence platform. Discover product truth. Shop smarter.
+            </p>
+            <p className="mt-4 text-xs text-[#94A3B8]">
+              Prices sourced from public listings. We may earn affiliate commission.
+            </p>
           </div>
-          <div>
-            <p className="font-semibold text-foreground mb-2">Discover</p>
-            <ul className="space-y-1">
-              <li><Link href="/search" className="hover:text-foreground">Search</Link></li>
-              <li><Link href="/deals" className="hover:text-foreground">Deals</Link></li>
-              <li><Link href="/compare" className="hover:text-foreground">Compare</Link></li>
-            </ul>
-          </div>
-          <div>
-            <p className="font-semibold text-foreground mb-2">Account</p>
-            <ul className="space-y-1">
-              <li><Link href="/dashboard" className="hover:text-foreground">Dashboard</Link></li>
-              <li><Link href="/inbox" className="hover:text-foreground">Inbox</Link></li>
-              <li><Link href="/wishlists" className="hover:text-foreground">Wishlists</Link></li>
-            </ul>
-          </div>
-          <div>
-            <p className="font-semibold text-foreground mb-2">Legal</p>
-            <ul className="space-y-1">
-              <li><Link href="/privacy" className="hover:text-foreground">Privacy Policy</Link></li>
-              <li><Link href="/terms" className="hover:text-foreground">Terms of Service</Link></li>
-            </ul>
-          </div>
+
+          {/* Link columns */}
+          {Object.entries(FOOTER_LINKS).map(([heading, links]) => (
+            <div key={heading}>
+              <p className="mb-3 text-sm font-semibold text-[#1E293B]">{heading}</p>
+              <ul className="space-y-2">
+                {links.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="text-sm text-[#64748B] hover:text-[#F97316] transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
-        <p className="mt-8 text-xs text-center">
-          © {new Date().getFullYear()} Whydud. All rights reserved.
-        </p>
+
+        <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[#E2E8F0] pt-6">
+          <p className="text-xs text-[#94A3B8]">
+            © {new Date().getFullYear()} Whydud Technologies Pvt. Ltd. All rights reserved.
+          </p>
+          <p className="text-xs text-[#94A3B8]">
+            Made with ❤️ in India
+          </p>
+        </div>
       </div>
     </footer>
   );

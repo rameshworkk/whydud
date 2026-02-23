@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/v1/", include("apps.discussions.urls")),
     path("api/v1/", include("apps.search.urls")),
     path("api/v1/", include("apps.scoring.urls")),
+    path("api/v1/", include("apps.tco.urls")),
 
     # Webhooks (no /api/v1 prefix — matched by Caddy separately)
     path("webhooks/", include("apps.email_intel.urls.webhooks")),

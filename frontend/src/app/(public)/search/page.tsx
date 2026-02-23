@@ -32,7 +32,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
         {results?.success && (
           <p className="text-sm text-muted-foreground mb-6">
-            {results.data.length} products found
+            {results.data.data.length} products found
           </p>
         )}
 
@@ -45,7 +45,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           {/* Results grid */}
           <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {results?.success
-              ? results.data.map((p) => <ProductCard key={p.id} product={p} />)
+              ? results.data.data.map((p) => <ProductCard key={p.id} product={p} />)
               : Array.from({ length: 8 }).map((_, i) => <ProductCardSkeleton key={i} />)}
           </div>
         </div>

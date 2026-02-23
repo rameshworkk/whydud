@@ -50,3 +50,12 @@ export function formatRelative(iso: string): string {
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
+
+/** Alias for formatRelative — "3h ago", "just now", etc. */
+export const timeAgo = formatRelative;
+
+/** Truncate a string to maxLen characters, appending "…" if cut. */
+export function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 1) + "…";
+}

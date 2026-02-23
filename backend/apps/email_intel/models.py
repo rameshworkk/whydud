@@ -89,6 +89,9 @@ class ParsedOrder(models.Model):
         db_table = 'email_intel"."parsed_orders'
         unique_together = [("user", "email_message_id")]
 
+    def __str__(self) -> str:
+        return f"{self.order_id or 'order'} from {self.marketplace} ({self.order_date})"
+
 
 class RefundTracking(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -107,6 +110,9 @@ class RefundTracking(models.Model):
     class Meta:
         db_table = 'email_intel"."refund_tracking'
 
+    def __str__(self) -> str:
+        return f"Refund {self.status} — {self.marketplace} ({self.refund_amount})"
+
 
 class ReturnWindow(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -120,6 +126,9 @@ class ReturnWindow(models.Model):
 
     class Meta:
         db_table = 'email_intel"."return_windows'
+
+    def __str__(self) -> str:
+        return f"Return window ends {self.window_end_date} (order={self.order_id})"
 
 
 class DetectedSubscription(models.Model):
@@ -136,3 +145,6 @@ class DetectedSubscription(models.Model):
 
     class Meta:
         db_table = 'email_intel"."subscriptions'
+
+    def __str__(self) -> str:
+        return f"{self.service_name} ({self.billing_cycle}) — ₹{self.amount}"

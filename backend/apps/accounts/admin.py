@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import OAuthConnection, PaymentMethod, TCOProfile, User, WhydudEmail
+from .models import OAuthConnection, PaymentMethod, ReservedUsername, User, WhydudEmail
 
 
 @admin.register(User)

@@ -161,19 +161,16 @@ class PaymentMethod(models.Model):
         return f"{self.user.email} — {self.method_type} {self.bank_name}"
 
 
-class TCOProfile(models.Model):
-    """User's TCO preferences (city, electricity tariff, usage habits)."""
+class ReservedUsername(models.Model):
+    """Usernames that cannot be registered as @whyd.xyz addresses.
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="tco_profile")
-    city_id = models.IntegerField(null=True, blank=True)
-    electricity_tariff_override = models.DecimalField(
-        max_digits=6, decimal_places=2, null=True, blank=True
-    )
-    ac_hours_per_day = models.SmallIntegerField(null=True, blank=True)
-    ownership_years = models.SmallIntegerField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    Seeded via data migration with admin terms, brand names, and system words.
+    """
+
+    username = models.CharField(max_length=30, primary_key=True)
 
     class Meta:
-        db_table = 'users\".\"tco_profiles'
+        db_table = 'users"."reserved_usernames'
+
+    def __str__(self) -> str:
+        return self.username

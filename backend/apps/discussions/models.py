@@ -50,6 +50,9 @@ class DiscussionReply(models.Model):
     class Meta:
         db_table = 'community"."discussion_replies'
 
+    def __str__(self) -> str:
+        return f"Reply by {self.user.email} on thread {self.thread_id}"
+
 
 class DiscussionVote(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -63,3 +66,6 @@ class DiscussionVote(models.Model):
         db_table = 'community"."discussion_votes'
         unique_together = [("user", "target_type", "target_id")]
         constraints = [models.CheckConstraint(check=models.Q(vote__in=[1, -1]), name="disc_vote_value")]
+
+    def __str__(self) -> str:
+        return f"{self.user.email} {'▲' if self.vote == 1 else '▼'} {self.target_type} {self.target_id}"
