@@ -5,9 +5,21 @@
 **Architecture Reference:** `docs/ARCHITECTURE.md`
 
 ## 🎯 CURRENT TASK
-Fix the console error showing on the homepage (red "1 error" badge bottom-left).
-Check browser console, fix the error. Don't change any design — just fix the error.
+Build product detail page at src/app/(public)/product/[slug]/page.tsx. Match docs/figma/Product_detail_page.png.
 
+Create these components first, then assemble the page:
+- src/components/product/marketplace-prices.tsx (stacked cards, best=green bg, others="X% Higher")
+- src/components/product/category-score-bars.tsx (5 colored dots per row)
+- src/components/product/dud-score-gauge.tsx (semi-circular SVG, red→green, needle)
+- src/components/product/price-chart.tsx (Recharts LineChart, 3 marketplace lines, time tabs)
+- src/components/reviews/rating-distribution.tsx (5→1 star horizontal bars with %)
+- src/components/reviews/review-card.tsx (avatar, name, date, stars, title, body, actions)
+
+Layout: Left sidebar (image + key specs) | Center (title, price, scores, marketplace prices, chart) | Right sidebar (reviews)
+Use mock data.
+Figma design link- https://www.figma.com/design/j7Yg1g0xSHi3RNUBL7c1Ia/whydud?node-id=1081-11303&t=g9kbPj7oWrqOCJk9-1
+
+All sections are independently scrollable without effecting other sections. For example review section is scrollable with the product details staying at position. it should give user a feeling of using a dashboard or customer decision panel.
 
 ---
 
@@ -233,8 +245,9 @@ Check browser console, fix the error. Don't change any design — just fix the e
 | Auth pages (login, register, verify email) | ⬜ | Sprint 1 remaining |
 | @whyd.xyz onboarding flow | ⬜ | Sprint 1 remaining |
 | Wishlist pages | ⬜ | Sprint 2 |
-| Price history chart | ⬜ | Sprint 2 |
-| DudScore badge component | ⬜ | Sprint 3 |
+| Product detail page (`/product/[slug]`) | ✅ | 3-column dashboard layout: left=image+specs, center=title+price+DudScore gauge+marketplace prices+price chart, right=reviews. Independently scrollable columns. 6 new components: `dud-score-gauge`, `marketplace-prices`, `category-score-bars`, `price-chart` (Recharts), `reviews/rating-distribution`, `reviews/review-card`. Mock data in `mock-product-detail.ts`. |
+| Price history chart | ✅ | `price-chart.tsx` — Recharts LineChart, 3 marketplace lines, 1M/3M/Max tabs |
+| DudScore badge component | ✅ | `dud-score-gauge.tsx` — SVG semi-circular gauge, red→green gradient, needle indicator |
 | Inbox / Purchase dashboard | ⬜ | Sprint 3 |
 
 ---

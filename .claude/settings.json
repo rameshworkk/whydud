@@ -17,7 +17,12 @@
       "Bash(tasklist:*)",
       "Bash(powershell -Command:*)",
       "mcp__claude_ai_Figma__get_metadata",
-      "mcp__claude_ai_Figma__get_design_context"
+      "mcp__claude_ai_Figma__get_design_context",
+      "Bash(npx next build:*)",
+      "Bash(findstr:*)",
+      "Bash(wmic:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm run dev:*)"
     ]
   }
 }
