@@ -469,6 +469,7 @@ export default function SettingsPage() {
   const [whydEmail, setWhydEmail] = useState<WhydudEmail | null>(null);
   const [cards, setCards] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchSettings() {
@@ -482,8 +483,13 @@ export default function SettingsPage() {
         if (userRes.success && "data" in userRes) setUser(userRes.data);
         if (emailRes.success && "data" in emailRes) setWhydEmail(emailRes.data);
         if (cardsRes.success && "data" in cardsRes) setCards(cardsRes.data);
+
+        // If all requests failed, show error
+        if (!userRes.success && !emailRes.success && !cardsRes.success) {
+          setError("Failed to load settings.");
+        }
       } catch {
-        // Tabs show empty/default state on failure
+        setError("Failed to load settings.");
       } finally {
         setLoading(false);
       }
@@ -494,6 +500,21 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-bold text-slate-900">Settings</h1>
+
+      {/* Error state */}
+      {error && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+          <p className="text-sm font-medium text-slate-700 mb-2">
+            Please log in to view your settings.
+          </p>
+          <a
+            href="/login"
+            className="inline-block rounded-lg bg-[#F97316] px-5 py-2 text-sm font-semibold text-white hover:bg-[#EA580C] transition-colors"
+          >
+            Log In
+          </a>
+        </div>
+      )}
 
       {/* Tab navigation */}
       <div className="flex gap-1 border-b border-[#E2E8F0] overflow-x-auto no-scrollbar">

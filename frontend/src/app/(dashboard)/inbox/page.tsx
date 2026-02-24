@@ -149,8 +149,16 @@ export default function InboxPage() {
       <h1 className="text-xl font-bold text-slate-900">Inbox</h1>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+          <p className="text-sm font-medium text-slate-700 mb-2">
+            Please log in to view your inbox.
+          </p>
+          <a
+            href="/login"
+            className="inline-block rounded-lg bg-[#F97316] px-5 py-2 text-sm font-semibold text-white hover:bg-[#EA580C] transition-colors"
+          >
+            Log In
+          </a>
         </div>
       )}
 

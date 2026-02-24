@@ -1,14 +1,18 @@
-import { apiClient } from "./client";
+import { apiClient, clearToken } from "./client";
 import type { User, WhydudEmail, PaymentMethod } from "@/types";
 
 export const authApi = {
   register: (payload: { email: string; password: string; name?: string; whydudUsername?: string }) =>
-    apiClient.post<{ user: User; token?: string }>("/api/v1/auth/register", payload),
+    apiClient.post<{ user: User; token: string }>("/api/v1/auth/register", payload),
 
   login: (payload: { email: string; password: string }) =>
-    apiClient.post<{ user: User }>("/api/v1/auth/login", payload),
+    apiClient.post<{ user: User; token: string }>("/api/v1/auth/login", payload),
 
-  logout: () => apiClient.post("/api/v1/auth/logout"),
+  logout: async () => {
+    const res = await apiClient.post("/api/v1/auth/logout");
+    clearToken();
+    return res;
+  },
 
   me: () => apiClient.get<User>("/api/v1/me"),
 

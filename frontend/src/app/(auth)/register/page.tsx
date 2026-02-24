@@ -1,19 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { authApi } from "@/lib/api/auth";
+import { setToken } from "@/lib/api/client";
 
 const STEPS = ["Create Account", "Choose Email", "Get Started"];
 
 const MARKETPLACES = [
-  { name: "Amazon.in", logo: "🛒", instructions: "Go to Account → Manage email addresses → Add your @whyd.xyz email" },
-  { name: "Flipkart", logo: "🛍️", instructions: "Go to My Account → Edit Profile → Add email address" },
-  { name: "Myntra", logo: "👗", instructions: "Go to Profile → Edit → Update email to your @whyd.xyz" },
-  { name: "Ajio", logo: "🧥", instructions: "Go to My Account → Personal Information → Update email" },
-  { name: "Nykaa", logo: "💄", instructions: "Go to My Profile → Edit → Add your @whyd.xyz email" },
-  { name: "Croma", logo: "📱", instructions: "Go to My Account → Profile → Update email address" },
-  { name: "Tata CLiQ", logo: "🏬", instructions: "Go to My Account → Profile Settings → Update email" },
-  { name: "Meesho", logo: "🛒", instructions: "Go to My Account → Settings → Update email" },
+  { name: "Amazon.in", logo: "\uD83D\uDED2", instructions: "Go to Account \u2192 Manage email addresses \u2192 Add your @whyd.xyz email" },
+  { name: "Flipkart", logo: "\uD83D\uDECD\uFE0F", instructions: "Go to My Account \u2192 Edit Profile \u2192 Add email address" },
+  { name: "Myntra", logo: "\uD83D\uDC57", instructions: "Go to Profile \u2192 Edit \u2192 Update email to your @whyd.xyz" },
+  { name: "Ajio", logo: "\uD83E\uDDE5", instructions: "Go to My Account \u2192 Personal Information \u2192 Update email" },
+  { name: "Nykaa", logo: "\uD83D\uDC84", instructions: "Go to My Profile \u2192 Edit \u2192 Add your @whyd.xyz email" },
+  { name: "Croma", logo: "\uD83D\uDCF1", instructions: "Go to My Account \u2192 Profile \u2192 Update email address" },
+  { name: "Tata CLiQ", logo: "\uD83C\uDFEC", instructions: "Go to My Account \u2192 Profile Settings \u2192 Update email" },
+  { name: "Meesho", logo: "\uD83D\uDED2", instructions: "Go to My Account \u2192 Settings \u2192 Update email" },
 ];
 
 function StepIndicator({ current }: { current: number }) {
@@ -52,8 +55,43 @@ function StepIndicator({ current }: { current: number }) {
   );
 }
 
-function Step1CreateAccount({ onNext }: { onNext: () => void }) {
+function Step1CreateAccount({
+  onNext,
+}: {
+  onNext: (data: { name: string; email: string; token: string }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Simple password strength (0-4)
+  const strength = [
+    password.length >= 8,
+    /[A-Z]/.test(password),
+    /[0-9]/.test(password),
+    /[^a-zA-Z0-9]/.test(password),
+  ].filter(Boolean).length;
+  const strengthColors = ["bg-red-400", "bg-orange-400", "bg-yellow-400", "bg-green-400"];
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+
+    const res = await authApi.register({ email, password, name });
+
+    if (res.success) {
+      const { token } = res.data;
+      setToken(token);
+      onNext({ name, email, token });
+    } else {
+      setError(res.error.message);
+      setIsLoading(false);
+    }
+  }
 
   return (
     <>
@@ -66,13 +104,13 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
         </p>
       </div>
 
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onNext();
-        }}
-      >
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         {/* Full name */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="name" className="text-sm font-medium text-slate-700">
@@ -84,6 +122,8 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
             autoComplete="name"
             required
             placeholder="Enter your full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
           />
         </div>
@@ -99,6 +139,8 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
             autoComplete="email"
             required
             placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
           />
         </div>
@@ -119,6 +161,8 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
               required
               minLength={8}
               placeholder="Minimum 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
             />
             <button
@@ -141,12 +185,18 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
               )}
             </button>
           </div>
-          {/* Password strength bar placeholder */}
+          {/* Password strength bar */}
           <div className="flex gap-1 mt-1">
-            <div className="h-1 flex-1 rounded-full bg-slate-200" />
-            <div className="h-1 flex-1 rounded-full bg-slate-200" />
-            <div className="h-1 flex-1 rounded-full bg-slate-200" />
-            <div className="h-1 flex-1 rounded-full bg-slate-200" />
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className={`h-1 flex-1 rounded-full transition-colors ${
+                  password.length > 0 && i < strength
+                    ? strengthColors[strength - 1]
+                    : "bg-slate-200"
+                }`}
+              />
+            ))}
           </div>
           <p className="text-xs text-slate-400">Minimum 8 characters</p>
         </div>
@@ -173,9 +223,10 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
         {/* Create account button */}
         <button
           type="submit"
-          className="w-full rounded-lg bg-[#F97316] py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2"
+          disabled={isLoading}
+          className="w-full rounded-lg bg-[#F97316] py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Create account
+          {isLoading ? "Creating account\u2026" : "Create account"}
         </button>
       </form>
 
@@ -187,7 +238,10 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
       </div>
 
       {/* Google OAuth */}
-      <button className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-[#E2E8F0] bg-white py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2">
+      <a
+        href="/accounts/google/login/?process=login"
+        className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-[#E2E8F0] bg-white py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2"
+      >
         <svg width="18" height="18" viewBox="0 0 24 24">
           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
           <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -195,7 +249,7 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
           <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
         </svg>
         Continue with Google
-      </button>
+      </a>
 
       {/* Sign in link */}
       <p className="mt-6 text-center text-sm text-slate-500">
@@ -211,14 +265,45 @@ function Step1CreateAccount({ onNext }: { onNext: () => void }) {
   );
 }
 
-function Step2ChooseEmail({ onNext }: { onNext: () => void }) {
+function Step2ChooseEmail({ onNext, onSkip }: { onNext: (username: string) => void; onSkip: () => void }) {
   const [username, setUsername] = useState("");
-  const isAvailable = username.length >= 3;
+  const [checking, setChecking] = useState(false);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function checkAvailability(value: string) {
+    if (value.length < 3) {
+      setAvailable(null);
+      return;
+    }
+    setChecking(true);
+    const { whydudEmailApi } = await import("@/lib/api/auth");
+    const res = await whydudEmailApi.checkAvailability(value);
+    if (res.success) {
+      setAvailable(res.data.available);
+    }
+    setChecking(false);
+  }
+
+  async function handleCreate() {
+    if (!username || username.length < 3) return;
+    setError("");
+    setIsLoading(true);
+    const { whydudEmailApi } = await import("@/lib/api/auth");
+    const res = await whydudEmailApi.create(username);
+    if (res.success) {
+      onNext(username);
+    } else {
+      setError(res.error.message);
+      setIsLoading(false);
+    }
+  }
 
   return (
     <>
       <div className="mb-6 text-center">
-        <span className="text-3xl mb-3 block">📧</span>
+        <span className="text-3xl mb-3 block">{"\uD83D\uDCE7"}</span>
         <h1 className="text-2xl font-semibold text-slate-900">
           Get your free @whyd.xyz email
         </h1>
@@ -228,6 +313,12 @@ function Step2ChooseEmail({ onNext }: { onNext: () => void }) {
       </div>
 
       <div className="flex flex-col gap-4">
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         {/* Username input */}
         <div className="flex flex-col gap-1.5">
           <label
@@ -242,7 +333,12 @@ function Step2ChooseEmail({ onNext }: { onNext: () => void }) {
               type="text"
               placeholder="ramesh"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "");
+                setUsername(v);
+                setAvailable(null);
+                checkAvailability(v);
+              }}
               className="flex-1 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400"
             />
             <span className="flex items-center px-3 text-sm text-slate-500 bg-slate-50 border-l border-[#E2E8F0] font-medium">
@@ -252,29 +348,45 @@ function Step2ChooseEmail({ onNext }: { onNext: () => void }) {
           {username.length > 0 && (
             <p
               className={`text-xs font-medium ${
-                isAvailable ? "text-green-600" : "text-red-500"
+                checking
+                  ? "text-slate-400"
+                  : available === true
+                  ? "text-green-600"
+                  : available === false
+                  ? "text-red-500"
+                  : username.length < 3
+                  ? "text-red-500"
+                  : "text-slate-400"
               }`}
             >
-              {isAvailable ? "✅ Available!" : "Username must be at least 3 characters"}
+              {checking
+                ? "Checking\u2026"
+                : available === true
+                ? "\u2705 Available!"
+                : available === false
+                ? "Username is taken or reserved"
+                : username.length < 3
+                ? "Username must be at least 3 characters"
+                : ""}
             </p>
           )}
         </div>
 
         {/* Create email button */}
         <button
-          onClick={onNext}
-          disabled={!isAvailable}
+          onClick={handleCreate}
+          disabled={!available || isLoading}
           className="w-full rounded-lg bg-[#F97316] py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Create email
+          {isLoading ? "Creating email\u2026" : "Create email"}
         </button>
 
         {/* Skip */}
         <button
-          onClick={onNext}
+          onClick={onSkip}
           className="text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded"
         >
-          Skip for now →
+          Skip for now \u2192
         </button>
       </div>
     </>
@@ -403,7 +515,21 @@ function Step3Onboarding() {
 }
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
+
+  function handleAccountCreated() {
+    setStep(1);
+  }
+
+  function handleEmailCreated() {
+    setStep(2);
+  }
+
+  function handleSkipEmail() {
+    // User skipped email — go directly to dashboard
+    router.push("/dashboard");
+  }
 
   return (
     <>
@@ -421,8 +547,10 @@ export default function RegisterPage() {
       <StepIndicator current={step} />
 
       {/* Step content */}
-      {step === 0 && <Step1CreateAccount onNext={() => setStep(1)} />}
-      {step === 1 && <Step2ChooseEmail onNext={() => setStep(2)} />}
+      {step === 0 && <Step1CreateAccount onNext={handleAccountCreated} />}
+      {step === 1 && (
+        <Step2ChooseEmail onNext={handleEmailCreated} onSkip={handleSkipEmail} />
+      )}
       {step === 2 && <Step3Onboarding />}
     </>
   );

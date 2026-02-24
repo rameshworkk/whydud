@@ -3,9 +3,11 @@ import hashlib
 import hmac
 
 from django.conf import settings
-from django.db.models import Sum
+from django.db.models import Sum, Count, F
+from django.db.models.functions import TruncMonth
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -31,7 +33,7 @@ from .serializers import (
 
 
 class InboxListView(APIView):
-    permission_classes = [IsConnectedUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         qs = InboxEmail.objects.filter(user=request.user, is_deleted=False).order_by("-received_at")
@@ -55,7 +57,7 @@ class InboxListView(APIView):
 
 
 class InboxDetailView(APIView):
-    permission_classes = [IsConnectedUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, pk: str) -> Response:
         email = get_object_or_404(InboxEmail, pk=pk, user=request.user, is_deleted=False)
@@ -85,7 +87,7 @@ class InboxDetailView(APIView):
 
 class InboxReparseView(APIView):
     """POST /api/v1/inbox/:pk/reparse — re-trigger NLP parsing for an email."""
-    permission_classes = [IsConnectedUser]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk: str) -> Response:
         email = get_object_or_404(InboxEmail, pk=pk, user=request.user, is_deleted=False)
@@ -96,20 +98,54 @@ class InboxReparseView(APIView):
 
 
 class PurchaseDashboardView(APIView):
-    permission_classes = [IsConnectedUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         user = request.user
         orders = ParsedOrder.objects.filter(user=user)
         total_orders = orders.count()
-        total_spend = orders.aggregate(total=Sum("total_amount"))["total"] or 0
+        total_spent = orders.aggregate(total=Sum("total_amount"))["total"] or 0
+        average_order_value = (total_spent / total_orders) if total_orders > 0 else 0
 
-        active_return_windows = ReturnWindow.objects.filter(
-            user=user, window_end_date__gte=timezone.now().date()
+        # Top marketplace by order count
+        top_mp = (
+            orders.values("marketplace")
+            .annotate(cnt=Count("id"))
+            .order_by("-cnt")
+            .first()
+        )
+        top_marketplace = top_mp["marketplace"] if top_mp else None
+
+        # Monthly spending (last 6 months)
+        monthly_spending = list(
+            orders.filter(order_date__isnull=False)
+            .annotate(month=TruncMonth("order_date"))
+            .values("month")
+            .annotate(amount=Sum("total_amount"))
+            .order_by("month")[:6]
+        )
+        monthly_spending_out = [
+            {"month": row["month"].strftime("%b %Y"), "amount": float(row["amount"])}
+            for row in monthly_spending
+        ]
+
+        # Category breakdown (from marketplace field as proxy for now)
+        category_breakdown = list(
+            orders.values(category=F("marketplace"))
+            .annotate(amount=Sum("total_amount"), count=Count("id"))
+            .order_by("-amount")
+        )
+        category_breakdown_out = [
+            {"category": row["category"] or "Other", "amount": float(row["amount"]), "count": row["count"]}
+            for row in category_breakdown
+        ]
+
+        active_refunds = RefundTracking.objects.filter(
+            user=user, status__in=["initiated", "processing"]
         ).count()
 
-        pending_refunds = RefundTracking.objects.filter(
-            user=user, status__in=["initiated", "processing"]
+        expiring_returns = ReturnWindow.objects.filter(
+            user=user, window_end_date__gte=timezone.now().date()
         ).count()
 
         active_subscriptions = DetectedSubscription.objects.filter(
@@ -117,16 +153,20 @@ class PurchaseDashboardView(APIView):
         ).count()
 
         return success_response({
+            "total_spent": str(total_spent),
             "total_orders": total_orders,
-            "total_spend": str(total_spend),
-            "active_return_windows": active_return_windows,
-            "pending_refunds": pending_refunds,
+            "average_order_value": str(average_order_value),
+            "top_marketplace": top_marketplace,
+            "monthly_spending": monthly_spending_out,
+            "category_breakdown": category_breakdown_out,
+            "active_refunds": active_refunds,
+            "expiring_returns": expiring_returns,
             "active_subscriptions": active_subscriptions,
         })
 
 
 class PurchaseListView(APIView):
-    permission_classes = [IsConnectedUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         qs = ParsedOrder.objects.filter(user=request.user).order_by("-order_date", "-created_at")
@@ -143,7 +183,7 @@ class PurchaseListView(APIView):
 
 
 class RefundsView(APIView):
-    permission_classes = [IsConnectedUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         qs = RefundTracking.objects.filter(user=request.user).order_by("-created_at")
@@ -151,7 +191,7 @@ class RefundsView(APIView):
 
 
 class ReturnWindowsView(APIView):
-    permission_classes = [IsConnectedUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         qs = ReturnWindow.objects.filter(
@@ -161,7 +201,7 @@ class ReturnWindowsView(APIView):
 
 
 class SubscriptionsView(APIView):
-    permission_classes = [IsConnectedUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         qs = DetectedSubscription.objects.filter(user=request.user, is_active=True).order_by(

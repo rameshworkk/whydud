@@ -89,7 +89,7 @@ export default function WishlistsPage() {
         setWishlists((prev) =>
           prev.map((wl) =>
             wl.id === wishlistId
-              ? { ...wl, items: wl.items.filter((item) => item.product !== productId) }
+              ? { ...wl, items: (wl.items ?? []).filter((item) => item.product !== productId) }
               : wl
           )
         );
@@ -109,7 +109,7 @@ export default function WishlistsPage() {
           wl.id === wishlistId
             ? {
                 ...wl,
-                items: wl.items.map((i) =>
+                items: (wl.items ?? []).map((i) =>
                   i.id === item.id ? { ...i, alertEnabled: !i.alertEnabled } : i
                 ),
               }
@@ -133,8 +133,16 @@ export default function WishlistsPage() {
 
       {/* Error state */}
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+          <p className="text-sm font-medium text-slate-700 mb-2">
+            Please log in to view your wishlists.
+          </p>
+          <a
+            href="/login"
+            className="inline-block rounded-lg bg-[#F97316] px-5 py-2 text-sm font-semibold text-white hover:bg-[#EA580C] transition-colors"
+          >
+            Log In
+          </a>
         </div>
       )}
 
@@ -153,7 +161,8 @@ export default function WishlistsPage() {
             </div>
           )
           : wishlists.map((wl) => {
-            const drops = priceDropCount(wl.items);
+            const items = wl.items ?? [];
+            const drops = priceDropCount(items);
             return (
               <button
                 key={wl.id}
@@ -171,13 +180,13 @@ export default function WishlistsPage() {
                       {wl.name}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {wl.items.length} item{wl.items.length !== 1 ? "s" : ""}
+                      {items.length} item{items.length !== 1 ? "s" : ""}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-slate-900">
-                    {formatPrice(totalPrice(wl.items))}
+                    {formatPrice(totalPrice(items))}
                   </span>
                   <div className="flex items-center gap-2">
                     {drops > 0 && (
@@ -215,12 +224,12 @@ export default function WishlistsPage() {
                 {selectedWishlist.name}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {selectedWishlist.items.length} item{selectedWishlist.items.length !== 1 ? "s" : ""}
+                {(selectedWishlist.items ?? []).length} item{(selectedWishlist.items ?? []).length !== 1 ? "s" : ""}
               </p>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-sm font-semibold text-slate-700">
-                Total: {formatPrice(totalPrice(selectedWishlist.items))}
+                Total: {formatPrice(totalPrice(selectedWishlist.items ?? []))}
               </span>
               {selectedWishlist.shareSlug && (
                 <button className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-[#F97316] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
@@ -241,7 +250,7 @@ export default function WishlistsPage() {
             </div>
           </div>
 
-          {selectedWishlist.items.length === 0 ? (
+          {(selectedWishlist.items ?? []).length === 0 ? (
             <div className="rounded-xl border border-[#E2E8F0] bg-white p-12 text-center">
               <p className="text-sm text-slate-400">
                 No items in this wishlist yet. Add products to start tracking prices.
@@ -249,7 +258,7 @@ export default function WishlistsPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {selectedWishlist.items.map((item) => {
+              {(selectedWishlist.items ?? []).map((item) => {
                 const change = priceChange(item.priceWhenAdded, item.currentPrice);
                 return (
                   <div

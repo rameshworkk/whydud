@@ -1,13 +1,35 @@
 "use client";
 
-import type { Metadata } from "next";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-// export const metadata: Metadata = { title: "Sign in to Whydud" };
+import { authApi } from "@/lib/api/auth";
+import { setToken } from "@/lib/api/client";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+
+    const res = await authApi.login({ email, password });
+
+    if (res.success) {
+      const { token } = res.data as { token?: string };
+      if (token) setToken(token);
+      router.push("/dashboard");
+    } else {
+      setError(res.error.message);
+      setIsLoading(false);
+    }
+  }
 
   return (
     <>
@@ -27,7 +49,14 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <form className="flex flex-col gap-4" onSubmit={(e) => e.preventDefault()}>
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        {/* Error message */}
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         {/* Email */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="email" className="text-sm font-medium text-slate-700">
@@ -39,6 +68,8 @@ export default function LoginPage() {
             autoComplete="email"
             required
             placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
           />
         </div>
@@ -58,6 +89,8 @@ export default function LoginPage() {
               autoComplete="current-password"
               required
               placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
             />
             <button
@@ -120,9 +153,10 @@ export default function LoginPage() {
         {/* Sign in button */}
         <button
           type="submit"
-          className="w-full rounded-lg bg-[#F97316] py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2"
+          disabled={isLoading}
+          className="w-full rounded-lg bg-[#F97316] py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Sign in
+          {isLoading ? "Signing in…" : "Sign in"}
         </button>
       </form>
 
@@ -134,7 +168,10 @@ export default function LoginPage() {
       </div>
 
       {/* Google OAuth */}
-      <button className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-[#E2E8F0] bg-white py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2">
+      <a
+        href="/accounts/google/login/?process=login"
+        className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-[#E2E8F0] bg-white py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2"
+      >
         <svg width="18" height="18" viewBox="0 0 24 24">
           <path
             d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
@@ -154,7 +191,7 @@ export default function LoginPage() {
           />
         </svg>
         Continue with Google
-      </button>
+      </a>
 
       {/* Register link */}
       <p className="mt-6 text-center text-sm text-slate-500">

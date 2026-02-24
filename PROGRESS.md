@@ -5,34 +5,20 @@
 **Architecture Reference:** `docs/ARCHITECTURE.md`
 
 ## 🎯 CURRENT TASK
-Now wire everything together:
+Wire the login form to the backend API.
 
-1. Complete all src/lib/api/ files with real API calls:
-   - products.ts: getProduct, searchProducts, getProductReviews, getPriceHistory, getBestDeals
-   - search.ts: search, autocomplete
-   - auth.ts: login, register, googleAuth, logout, getMe
-   - inbox.ts: getEmails, getEmail, markRead, bulkAction
-   - wishlists.ts: getWishlists, createWishlist, addItem, removeItem, setAlert
-   - deals.ts: getDeals, getDeal
-   - rewards.ts: getBalance, getHistory, getGiftCards, redeem
-   - discussions.ts: getThreads, createThread, reply, vote
-   - cards.ts: getCards, addCard, removeCard
-   - tco.ts: calculate, compare, getCities
-   - purchases.ts: getDashboard, getOrders, getRefunds
+In frontend/src/app/(auth)/login/page.tsx:
+- Remove the e.preventDefault() no-op handler
+- Call authApi.login(email, password) from src/lib/api/auth.ts
+- On success: store the auth token in an HTTP-only cookie (or call the session endpoint)
+- Redirect to /dashboard
+- On error: show error message below form
 
-2. Replace ALL mock data in pages with real API calls:
-   - Server components: await api calls directly
-   - Client components: useEffect + state
+In frontend/src/lib/api/client.ts:
+- Ensure credentials: 'include' is set on all fetch calls (for session cookies)
+- Add a getMe() function that calls GET /api/v1/me/
 
-3. Add loading states (Skeleton components) to every page
-
-4. Add error boundaries to every route group
-
-5. Test the full flow:
-   - Homepage loads products from API
-   - Search works with filters
-   - Product page shows all data
-   - Auth flow works (register → login → dashboard)
+Test: User can type email/password → submit → see dashboard.
 ## Legend
 
 | Symbol | Meaning |
@@ -564,3 +550,122 @@ Completed the remaining API wiring work to eliminate all mock data usage:
 - **Error boundaries** for all 3 route groups (public, dashboard, auth)
 - TypeScript: 0 errors
 - All 13 routes return HTTP 200
+
+---
+
+## 2026-02-24 — Dashboard pages: friendly auth error prompts
+
+Replaced raw error messages with friendly "Please log in" prompts across all dashboard pages:
+
+### Client components (had raw red error divs showing API error text)
+- **Inbox** (`/inbox`) — `border-red-200 bg-red-50` → `border-amber-200 bg-amber-50` with "Please log in to view your inbox" + Log In button
+- **Wishlists** (`/wishlists`) — Same pattern → "Please log in to view your wishlists"
+- **Rewards** (`/rewards`) — Same pattern → "Please log in to view your rewards"
+
+### Server components (previously swallowed errors silently, showed empty state)
+- **Purchases** (`/purchases`) — Added `hasError` detection; shows login prompt instead of "No purchases detected" when API fails
+- **Refunds** (`/refunds`) — Added `hasError` detection; shows login prompt instead of "No refunds tracked"
+- **Subscriptions** (`/subscriptions`) — Added `hasError` detection; shows login prompt instead of "No subscriptions detected"
+
+### Settings (had no error handling at all)
+- **Settings** (`/settings`) — Added `error` state; shows login prompt when all 3 API calls (me, email status, card vault) fail
+
+### Dashboard page
+- Already had the correct amber prompt pattern — no changes needed
+
+All prompts use consistent styling: `rounded-xl border border-amber-200 bg-amber-50 p-6 text-center` with orange Log In button linking to `/login`.
+
+---
+
+## 2026-02-24 — Wire login form to backend API
+
+Connected the login page to the real Django auth endpoint (`POST /api/v1/auth/login`).
+
+### Changes
+
+1. **`src/lib/api/client.ts`** — Added DRF token management:
+   - `getToken()`, `setToken()`, `clearToken()` helpers using `localStorage`
+   - `request()` now attaches `Authorization: Token <key>` header when a token exists
+   - `credentials: "include"` was already set (unchanged)
+
+2. **`src/lib/api/auth.ts`** — Updated types and logout:
+   - `login()` return type updated to `{ user: User; token: string }` (was missing `token`)
+   - `register()` return type updated to `{ user: User; token: string }`
+   - `logout()` now calls `clearToken()` after the API call to remove stored token
+
+3. **`src/app/(auth)/login/page.tsx`** — Wired form to real API:
+   - Added `useState` for `email`, `password`, `error`, `isLoading`
+   - `handleSubmit`: calls `authApi.login()`, stores token via `setToken()`, redirects to `/dashboard`
+   - On error: displays error message in a red banner below the form heading
+   - Submit button shows "Signing in…" and is disabled during request
+   - All existing UI (show/hide password, remember me, forgot password, Google OAuth, register link) preserved
+
+4. **`src/hooks/useAuth.ts`** — Optimized auth check:
+   - Skips `/api/v1/me` call entirely if no token in `localStorage` (avoids unnecessary 401s)
+   - Clears stale token on failed `/me` response
+
+### Flow
+User types email/password → submits → `POST /api/v1/auth/login` → backend returns `{ user, token }` → token stored in localStorage → redirect to `/dashboard` → `useAuth` hook reads token, calls `/api/v1/me`, shows authenticated UI in Header.
+
+---
+
+## 2026-02-24 — Fix auth, dashboard crash, register, Google OAuth
+
+### Root causes found and fixed
+
+1. **Broken Django URLs (`../` prefix)**: `accounts/urls/auth.py` used `path("../me", ...)` etc. to break out of the `auth/` prefix. Django URL resolver treats `../` as a literal string — these routes were **unreachable** (404). This is why:
+   - `GET /api/v1/me` always failed → `useAuth` returned not authenticated → Header showed "Log In"
+   - `GET /api/v1/cards` always failed → card vault broken
+   - `GET /api/v1/email/whydud/*` always failed → email status broken
+
+2. **Dashboard crash**: Backend `PurchaseDashboardView` returned 5 fields with different names (e.g. `total_spend` not `total_spent`, `pending_refunds` not `active_refunds`) and was missing `monthlySpending`, `categoryBreakdown`, `averageOrderValue`, `topMarketplace`. Frontend accessed `undefined.length` → crash.
+
+3. **Register page**: Form was a no-op (all `onSubmit` did was `setStep(1)` without calling API).
+
+4. **Google OAuth**: Buttons were `<button>` with no click handler.
+
+### Backend fixes
+
+- **`accounts/urls/auth.py`** — Removed all `../` routes. Now only contains `register`, `login`, `logout`.
+- **New `accounts/urls/account.py`** — Contains `me`, `email/whydud/*`, `cards/*` routes (no `../` prefix).
+- **`whydud/urls.py`** — Added `path("api/v1/", include("apps.accounts.urls.account"))` so `/api/v1/me`, `/api/v1/cards/*`, `/api/v1/email/whydud/*` resolve correctly.
+- **`email_intel/views.py`** — `PurchaseDashboardView`:
+  - Changed `permission_classes` from `IsConnectedUser` to `IsAuthenticated` (dashboard should work without @whyd.xyz email).
+  - Now returns all 9 fields the frontend expects: `total_spent`, `total_orders`, `average_order_value`, `top_marketplace`, `monthly_spending` (TruncMonth aggregation), `category_breakdown` (by marketplace), `active_refunds`, `expiring_returns`, `active_subscriptions`.
+
+### Frontend fixes
+
+- **`dashboard/page.tsx`** — Added `??` defaults for all PurchaseDashboard fields so missing fields don't crash.
+- **`login/page.tsx`** — Google OAuth button changed from `<button>` to `<a href="/accounts/google/login/?process=login">`.
+- **`register/page.tsx`** — Fully wired:
+  - Step 1: calls `authApi.register()`, stores token, shows error on failure, loading state on button.
+  - Step 2: calls `whydudEmailApi.checkAvailability()` on input, calls `whydudEmailApi.create()` on submit, skip goes to dashboard.
+  - Step 3: unchanged (marketplace onboarding checklist).
+  - Google OAuth button also wired (`<a>` to allauth).
+- **`next.config.ts`** — Added `/accounts/*` rewrite to proxy allauth social auth routes to Django.
+
+---
+
+## 2026-02-24 — Fix remaining dashboard auth issues + wishlists crash
+
+### Root causes found and fixed
+
+1. **Server components can't access auth tokens**: `purchases/page.tsx`, `refunds/page.tsx`, `subscriptions/page.tsx` were `async` server components. Server-side Node.js has no access to `localStorage` → token never sent → 401 → "Please log in" even when user is authenticated.
+
+2. **Wishlists crash**: `wl.items.filter()` crashes when `items` is `undefined` from the API response (backend may return wishlists without inline items).
+
+3. **IsConnectedUser permission too restrictive**: All `email_intel` views (inbox, purchases, refunds, subscriptions dashboard) required `has_whydud_email=True` via `IsConnectedUser`. Newly registered users without a @whyd.xyz email got 403.
+
+### Backend fixes
+
+- **`email_intel/views.py`** — Changed ALL views from `IsConnectedUser` to `IsAuthenticated`:
+  - `InboxListView`, `InboxDetailView`, `InboxReparseView`
+  - `PurchaseDashboardView`, `PurchaseListView`
+  - `RefundsView`, `ReturnWindowsView`, `SubscriptionsView`
+
+### Frontend fixes
+
+- **`purchases/page.tsx`** — Converted from server component to `"use client"` with `useState`/`useEffect`. Added loading skeleton.
+- **`refunds/page.tsx`** — Same conversion to client component. Added loading skeleton.
+- **`subscriptions/page.tsx`** — Same conversion to client component. Added loading skeleton.
+- **`wishlists/page.tsx`** — Added `?? []` safety on all `wl.items` accesses (9 locations) to prevent crash when items is undefined.
