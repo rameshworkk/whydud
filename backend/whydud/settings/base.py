@@ -155,8 +155,9 @@ CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes soft limit
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
-# AllAuth OAuth redirects to this URL after login — frontend callback page
-LOGIN_REDIRECT_URL = "/auth/callback"
+# AllAuth OAuth redirects here after Google login.
+# This is a Django view that creates a one-time code and redirects to the frontend.
+LOGIN_REDIRECT_URL = "/oauth/complete/"
 
 # Password reset token validity (seconds) — 24 hours
 PASSWORD_RESET_TIMEOUT = 86400
@@ -172,6 +173,7 @@ AUTHENTICATION_BACKENDS = [
 
 SITE_ID = 1
 
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"

@@ -12,5 +12,5 @@ urlpatterns = [
     path("reset-password", views.ResetPasswordView.as_view(), name="auth-reset-password"),
     path("verify-email", views.VerifyEmailView.as_view(), name="auth-verify-email"),
     path("resend-verification", views.ResendVerificationEmailView.as_view(), name="auth-resend-verification"),
-    path("session-to-token", views.OAuthSessionToTokenView.as_view(), name="auth-session-to-token"),
+    path("oauth/exchange-code", views.OAuthExchangeCodeView.as_view(), name="auth-oauth-exchange-code"),
 ]

@@ -23,10 +23,9 @@ const nextConfig: NextConfig = {
         source: "/webhooks/:path*",
         destination: `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/webhooks/:path*`,
       },
-      {
-        source: "/accounts/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/accounts/:path*`,
-      },
+      // /accounts/* and /oauth/* use route handlers instead of rewrites
+      // to avoid Next.js trailing-slash issues with Django's APPEND_SLASH.
+      // See: src/app/accounts/[...path]/route.ts, src/app/oauth/[...path]/route.ts
     ];
   },
 };

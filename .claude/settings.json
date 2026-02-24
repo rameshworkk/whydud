@@ -34,10 +34,16 @@
       "Bash(test:*)",
       "Bash(npx next:*)",
       "Read(//c/Users/rames/AppData/Local/Temp/claude/c--Users-rames-Downloads-whydud-platform-whydud/tasks/**)",
-      "Read(//c/Users/rames/Downloads/whydud/**)"
+      "Read(//c/Users/rames/Downloads/whydud/**)",
+      "Bash(WMIC PROCESS WHERE \"Name=''python.exe''\" GET ProcessId,CommandLine)",
+      "Bash(POSTGRES_PASSWORD=whydud_dev python:*)",
+      "Bash(# Step 2: Test OAuth complete redirect \\(unauthenticated → should redirect to login error\\) curl -s -D- \"\"http://localhost:3000/oauth/complete/\"\")",
+      "Bash(git status:*)"
     ],
     "additionalDirectories": [
-      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller"
+      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",
+      "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\accounts",
+      "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\oauth"
     ]
   }
 }

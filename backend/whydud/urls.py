@@ -2,9 +2,15 @@
 from django.contrib import admin
 from django.urls import include, path
 
+from apps.accounts.views import OAuthCompleteView
+
 urlpatterns = [
     # Django admin
     path("admin/", admin.site.urls),
+
+    # OAuth completion — AllAuth redirects here after Google login;
+    # creates a one-time code and redirects to the frontend callback page.
+    path("oauth/complete/", OAuthCompleteView.as_view(), name="oauth-complete"),
 
     # API v1
     path("api/v1/auth/", include("apps.accounts.urls.auth")),

@@ -33,8 +33,8 @@ export const authApi = {
   resendVerification: () =>
     apiClient.post<{ detail: string }>("/api/v1/auth/resend-verification"),
 
-  sessionToToken: () =>
-    apiClient.get<{ user: User; token: string }>("/api/v1/auth/session-to-token"),
+  exchangeOAuthCode: (code: string) =>
+    apiClient.post<{ user: User; token: string }>("/api/v1/auth/oauth/exchange-code", { code }),
 };
 
 export const whydudEmailApi = {

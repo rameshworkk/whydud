@@ -1,19 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 import { authApi } from "@/lib/api/auth";
 import { useAuth } from "@/hooks/useAuth";
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [error, setError] = useState("");
 
   useEffect(() => {
-    async function exchangeSession() {
-      const res = await authApi.sessionToToken();
+    const code = searchParams.get("code");
+    const urlError = searchParams.get("error");
+
+    if (urlError) {
+      setError(urlError === "oauth_failed" ? "Google sign-in failed. Please try again." : urlError);
+      return;
+    }
+
+    if (!code) {
+      setError("No authorization code received.");
+      return;
+    }
+
+    async function exchangeCode(oauthCode: string) {
+      const res = await authApi.exchangeOAuthCode(oauthCode);
 
       if (res.success && "data" in res) {
         login(res.data.token, res.data.user);
@@ -23,8 +37,8 @@ export default function OAuthCallbackPage() {
       }
     }
 
-    exchangeSession();
-  }, [login, router]);
+    exchangeCode(code);
+  }, [searchParams, login, router]);
 
   if (error) {
     return (
@@ -74,5 +88,20 @@ export default function OAuthCallbackPage() {
         <p className="text-sm text-slate-500">Completing sign-in...</p>
       </div>
     </>
+  );
+}
+
+export default function OAuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-center py-4">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-[#F97316] border-r-transparent mb-3" />
+          <p className="text-sm text-slate-500">Loading...</p>
+        </div>
+      }
+    >
+      <OAuthCallbackContent />
+    </Suspense>
   );
 }

@@ -18,6 +18,11 @@ CSRF_TRUSTED_ORIGINS = [
 # OAuth requires Lax (not Strict) so session cookie survives the Google redirect
 SESSION_COOKIE_SAMESITE = "Lax"
 
+# Trust X-Forwarded-Host from the Next.js proxy so AllAuth builds
+# callback URLs pointing to localhost:3000 (matching Google Console)
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # Show emails in console during dev
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 

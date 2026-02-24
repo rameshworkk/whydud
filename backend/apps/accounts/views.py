@@ -1,11 +1,16 @@
 """Account views — auth, profile, card vault, @whyd.xyz email."""
 import re
+import secrets
 
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
+from django.http import HttpResponseRedirect
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.views import View
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -216,21 +221,66 @@ class ResendVerificationEmailView(APIView):
         return success_response({"detail": "Verification email sent."})
 
 
-class OAuthSessionToTokenView(APIView):
-    """Convert Django session (from AllAuth OAuth) to a DRF Token.
+class OAuthCompleteView(View):
+    """After AllAuth OAuth login, create a one-time code and redirect to frontend.
 
-    Uses GET to avoid CSRF issues with SessionAuthentication.
-    After Google OAuth, AllAuth creates a Django session. The frontend
-    callback page calls this endpoint (session cookie sent automatically),
-    gets a DRF token, and stores it in localStorage.
+    AllAuth redirects here after successful Google OAuth. We create a short-lived
+    code stored in Redis, then redirect the browser to the frontend callback page
+    with `?code=XXX`. The frontend exchanges that code for a DRF token via
+    OAuthExchangeCodeView. This avoids session cookie cross-port issues.
     """
-    permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request) -> Response:
+    def get(self, request):
+        frontend_url = settings.FRONTEND_URL
+
+        if not request.user.is_authenticated:
+            return HttpResponseRedirect(f"{frontend_url}/login?error=oauth_failed")
+
         token, _ = Token.objects.get_or_create(user=request.user)
-        return success_response({
-            "user": UserSerializer(request.user).data,
+
+        # One-time code: stored in Redis cache, expires in 60 seconds
+        code = secrets.token_urlsafe(32)
+        cache.set(f"oauth_code:{code}", {
             "token": token.key,
+            "user_id": str(request.user.pk),
+        }, timeout=60)
+
+        return HttpResponseRedirect(f"{frontend_url}/auth/callback?code={code}")
+
+
+class OAuthExchangeCodeView(APIView):
+    """Exchange a one-time OAuth code for a DRF token.
+
+    The frontend callback page sends the code it received from OAuthCompleteView.
+    We look it up in Redis, return the token + user, and delete the code.
+    """
+    # Explicitly exclude SessionAuthentication to avoid CSRF enforcement.
+    # The browser may carry a Django session cookie from the OAuth callback
+    # (cookies are shared across ports on localhost), and SessionAuthentication
+    # would reject the POST without a CSRF token.
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        code = request.data.get("code", "")
+        if not code:
+            return error_response("validation_error", "code is required.", status=400)
+
+        data = cache.get(f"oauth_code:{code}")
+        if not data:
+            return error_response("invalid_code", "Code is invalid or expired.", status=400)
+
+        # Delete immediately so the code can't be reused
+        cache.delete(f"oauth_code:{code}")
+
+        try:
+            user = User.objects.get(pk=data["user_id"])
+        except User.DoesNotExist:
+            return error_response("user_not_found", "User not found.", status=400)
+
+        return success_response({
+            "user": UserSerializer(user).data,
+            "token": data["token"],
         })
 
 
