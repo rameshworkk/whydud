@@ -79,11 +79,17 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class WhydudEmail(models.Model):
-    """@whyd.xyz email address assigned to a user."""
+    """@whyd.* email address assigned to a user (whyd.in / whyd.click / whyd.shop)."""
+
+    class Domain(models.TextChoices):
+        WHYD_IN = "whyd.in", "whyd.in"
+        WHYD_CLICK = "whyd.click", "whyd.click"
+        WHYD_SHOP = "whyd.shop", "whyd.shop"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="whydud_email")
-    username = models.CharField(max_length=30, unique=True)
+    username = models.CharField(max_length=30)
+    domain = models.CharField(max_length=20, choices=Domain.choices, default=Domain.WHYD_IN)
     is_active = models.BooleanField(default=True)
     total_emails_received = models.IntegerField(default=0)
     total_orders_detected = models.IntegerField(default=0)
@@ -94,13 +100,14 @@ class WhydudEmail(models.Model):
 
     class Meta:
         db_table = 'users\".\"whydud_emails'
+        unique_together = [("username", "domain")]
 
     @property
     def email_address(self) -> str:
-        return f"{self.username}@whyd.xyz"
+        return f"{self.username}@{self.domain}"
 
     def __str__(self) -> str:
-        return self.email_address
+        return f"{self.username}@{self.domain}"
 
 
 class OAuthConnection(models.Model):
@@ -174,3 +181,101 @@ class ReservedUsername(models.Model):
 
     def __str__(self) -> str:
         return self.username
+
+
+def _pref_in_app_and_email():
+    return {"in_app": True, "email": True}
+
+
+def _pref_in_app_only():
+    return {"in_app": True, "email": False}
+
+
+class Notification(models.Model):
+    """User notification — in-app and optionally emailed."""
+
+    class Type(models.TextChoices):
+        PRICE_DROP = "price_drop", "Price Drop"
+        RETURN_WINDOW = "return_window", "Return Window"
+        REFUND_DELAY = "refund_delay", "Refund Delay"
+        BACK_IN_STOCK = "back_in_stock", "Back in Stock"
+        REVIEW_UPVOTE = "review_upvote", "Review Upvote"
+        PRICE_ALERT = "price_alert", "Price Alert"
+        DISCUSSION_REPLY = "discussion_reply", "Discussion Reply"
+        LEVEL_UP = "level_up", "Level Up"
+        POINTS_EARNED = "points_earned", "Points Earned"
+        SUBSCRIPTION_RENEWAL = "subscription_renewal", "Subscription Renewal"
+
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    type = models.CharField(max_length=50, choices=Type.choices)
+    title = models.CharField(max_length=500)
+    body = models.TextField(null=True, blank=True)
+    action_url = models.CharField(max_length=500, null=True, blank=True)
+    action_label = models.CharField(max_length=100, null=True, blank=True)
+    entity_type = models.CharField(max_length=50, null=True, blank=True)
+    entity_id = models.CharField(max_length=200, null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    is_read = models.BooleanField(default=False)
+    email_sent = models.BooleanField(default=False)
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'users"."notifications'
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+            models.Index(
+                fields=["user", "is_read"],
+                condition=models.Q(is_read=False),
+                name="idx_notif_unread",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.type}: {self.title}"
+
+
+class NotificationPreference(models.Model):
+    """Per-user notification channel preferences."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="notification_preferences")
+    price_drops = models.JSONField(default=_pref_in_app_and_email)
+    return_windows = models.JSONField(default=_pref_in_app_and_email)
+    refund_delays = models.JSONField(default=_pref_in_app_and_email)
+    back_in_stock = models.JSONField(default=_pref_in_app_only)
+    review_upvotes = models.JSONField(default=_pref_in_app_only)
+    price_alerts = models.JSONField(default=_pref_in_app_and_email)
+    discussion_replies = models.JSONField(default=_pref_in_app_only)
+    level_up = models.JSONField(default=_pref_in_app_only)
+    points_earned = models.JSONField(default=_pref_in_app_only)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'users"."notification_preferences'
+
+    def __str__(self) -> str:
+        return f"NotifPrefs for {self.user.email}"
+
+
+class PurchasePreference(models.Model):
+    """Per-category recommendation questionnaire answers."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="purchase_preferences")
+    category = models.ForeignKey("products.Category", on_delete=models.CASCADE)
+    preferences = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'users"."purchase_preferences'
+        unique_together = [("user", "category")]
+        indexes = [
+            models.Index(fields=["user"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user.email} prefs for {self.category_id}"

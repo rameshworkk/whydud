@@ -190,3 +190,78 @@ class BankCard(models.Model):
 
     def __str__(self) -> str:
         return f"{self.bank_name} {self.card_variant}"
+
+
+class CompareSession(models.Model):
+    """Tracks which products a user is comparing (persisted across sessions)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, null=True, blank=True, related_name="compare_sessions"
+    )
+    session_id = models.CharField(max_length=100, null=True, blank=True)
+    product_ids = models.JSONField(default=list)  # array of 2-4 product UUIDs
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'users"."compare_sessions'
+
+    def __str__(self) -> str:
+        return f"Compare {self.id} ({len(self.product_ids)} products)"
+
+
+class RecentlyViewed(models.Model):
+    """Recently viewed products — per user or anonymous session."""
+
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, null=True, blank=True, related_name="recently_viewed"
+    )
+    session_id = models.CharField(max_length=100, null=True, blank=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="recent_views")
+    viewed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'users"."recently_viewed'
+        indexes = [
+            models.Index(fields=["user", "-viewed_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id or self.session_id} viewed {self.product_id}"
+
+
+class StockAlert(models.Model):
+    """Back-in-stock notification request."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="stock_alerts")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stock_alerts")
+    listing = models.ForeignKey(ProductListing, on_delete=models.SET_NULL, null=True, blank=True, related_name="stock_alerts")
+    is_active = models.BooleanField(default=True)
+    notified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'users"."stock_alerts'
+        unique_together = [("user", "product", "listing")]
+
+    def __str__(self) -> str:
+        return f"Stock alert: {self.user_id} → {self.product_id}"
+
+
+class CategoryPreferenceSchema(models.Model):
+    """UI schema defining the recommendation questionnaire per category."""
+
+    category = models.OneToOneField(Category, on_delete=models.CASCADE, related_name="preference_schema")
+    schema = models.JSONField()
+    version = models.IntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "category_preference_schemas"
+
+    def __str__(self) -> str:
+        return f"{self.category.name} schema v{self.version}"

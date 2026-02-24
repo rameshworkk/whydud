@@ -38,7 +38,8 @@
       "Bash(WMIC PROCESS WHERE \"Name=''python.exe''\" GET ProcessId,CommandLine)",
       "Bash(POSTGRES_PASSWORD=whydud_dev python:*)",
       "Bash(# Step 2: Test OAuth complete redirect \\(unauthenticated → should redirect to login error\\) curl -s -D- \"\"http://localhost:3000/oauth/complete/\"\")",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(done)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",

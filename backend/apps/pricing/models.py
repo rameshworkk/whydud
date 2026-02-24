@@ -94,19 +94,71 @@ class MarketplaceOffer(models.Model):
 
 
 class PriceAlert(models.Model):
-    """User price drop alert for a wishlist item."""
+    """User price drop alert — standalone or linked to a wishlist item."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="price_alerts")
     product = models.ForeignKey("products.Product", on_delete=models.CASCADE)
     target_price = models.DecimalField(max_digits=12, decimal_places=2)
+    current_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    marketplace = models.ForeignKey(
+        "products.Marketplace", on_delete=models.SET_NULL, null=True, blank=True
+    )
     is_active = models.BooleanField(default=True)
-    last_alerted_at = models.DateTimeField(null=True, blank=True)
+    is_triggered = models.BooleanField(default=False)
+    triggered_at = models.DateTimeField(null=True, blank=True)
+    triggered_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    triggered_marketplace = models.CharField(max_length=50, blank=True)
+    notification_sent = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "price_alerts"
-        unique_together = [("user", "product")]
+        db_table = 'users"."price_alerts'
+        unique_together = [("user", "product", "marketplace")]
+        indexes = [
+            models.Index(fields=["is_active", "product"], condition=models.Q(is_active=True), name="idx_alerts_active"),
+            models.Index(fields=["user", "is_active"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.user.email} alert on {self.product_id} @ ₹{self.target_price}"
+
+
+class ClickEvent(models.Model):
+    """Affiliate click tracking — one row per outbound marketplace click."""
+
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="click_events"
+    )
+    session_id = models.CharField(max_length=100, null=True, blank=True)
+    product = models.ForeignKey("products.Product", on_delete=models.CASCADE, related_name="click_events")
+    listing = models.ForeignKey(
+        "products.ProductListing", on_delete=models.SET_NULL, null=True, blank=True, related_name="click_events"
+    )
+    marketplace = models.ForeignKey("products.Marketplace", on_delete=models.CASCADE, related_name="click_events")
+    source_page = models.CharField(max_length=50)  # product_page, comparison, deal, search, homepage
+    source_section = models.CharField(max_length=50, blank=True)  # best_deal_card, marketplace_prices
+    affiliate_url = models.URLField(max_length=2000)
+    affiliate_tag = models.CharField(max_length=100, blank=True)
+    sub_tag = models.CharField(max_length=200, blank=True)
+    purchase_confirmed = models.BooleanField(default=False)
+    confirmation_source = models.CharField(max_length=30, blank=True)  # email_parsed, affiliate_report, user_reported
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    price_at_click = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    device_type = models.CharField(max_length=20, blank=True)
+    referrer = models.CharField(max_length=500, blank=True)
+    ip_hash = models.CharField(max_length=64, null=True, blank=True)
+    user_agent_hash = models.CharField(max_length=64, null=True, blank=True)
+    clicked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "click_events"
+        indexes = [
+            models.Index(fields=["user", "-clicked_at"]),
+            models.Index(fields=["product", "-clicked_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Click {self.id}: {self.product_id} via {self.marketplace_id}"

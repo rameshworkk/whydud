@@ -22,14 +22,21 @@ class InboxEmail(models.Model):
         FAILED = "failed", "Failed"
         SKIPPED = "skipped", "Skipped"
 
+    class Direction(models.TextChoices):
+        INBOUND = "inbound", "Inbound"
+        OUTBOUND = "outbound", "Outbound"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="inbox_emails")
     whydud_email = models.ForeignKey(
         "accounts.WhydudEmail", on_delete=models.SET_NULL, null=True, blank=True
     )
+    direction = models.CharField(max_length=10, choices=Direction.choices, default=Direction.INBOUND)
     message_id = models.CharField(max_length=500, unique=True)
     sender_address = models.EmailField(max_length=320)
     sender_name = models.CharField(max_length=200, blank=True)
+    recipient_address = models.CharField(max_length=320, null=True, blank=True)
+    resend_message_id = models.CharField(max_length=200, null=True, blank=True)
     subject = models.CharField(max_length=1000, blank=True)
     received_at = models.DateTimeField()
     # Body stored encrypted — decrypt only on explicit user request
@@ -57,6 +64,51 @@ class InboxEmail(models.Model):
 
     def __str__(self) -> str:
         return f"{self.sender_address}: {self.subject}"
+
+
+class EmailSource(models.Model):
+    """Tracks all email sources connected by a user (whydud, gmail, outlook, forwarding)."""
+
+    class SourceType(models.TextChoices):
+        WHYDUD = "whydud", "Whydud"
+        GMAIL = "gmail", "Gmail"
+        OUTLOOK = "outlook", "Outlook"
+        FORWARDING = "forwarding", "Forwarding"
+
+    class SyncStatus(models.TextChoices):
+        ACTIVE = "active", "Active"
+        PAUSED = "paused", "Paused"
+        ERROR = "error", "Error"
+        DISCONNECTED = "disconnected", "Disconnected"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="email_sources")
+    source_type = models.CharField(max_length=20, choices=SourceType.choices)
+    email_address = models.CharField(max_length=320)
+    oauth_connection = models.ForeignKey(
+        "accounts.OAuthConnection", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    whydud_email = models.ForeignKey(
+        "accounts.WhydudEmail", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    provider_config = models.JSONField(default=dict, blank=True)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    next_sync_at = models.DateTimeField(null=True, blank=True)
+    sync_cursor = models.CharField(max_length=500, blank=True)
+    emails_synced = models.IntegerField(default=0)
+    orders_detected = models.IntegerField(default=0)
+    is_primary = models.BooleanField(default=False)
+    sync_status = models.CharField(max_length=20, choices=SyncStatus.choices, default=SyncStatus.ACTIVE)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'email_intel"."email_sources'
+        unique_together = [("user", "email_address")]
+
+    def __str__(self) -> str:
+        return f"{self.email_address} ({self.source_type})"
 
 
 class ParsedOrder(models.Model):
