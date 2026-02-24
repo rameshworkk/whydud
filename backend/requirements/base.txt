@@ -50,4 +50,5 @@ structlog==24.4.0
 
 # Utils
 python-decouple==3.8
+python-dotenv==1.2.1
 Pillow==10.4.0

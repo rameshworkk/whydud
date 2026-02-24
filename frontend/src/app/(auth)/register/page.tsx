@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authApi } from "@/lib/api/auth";
-import { setToken } from "@/lib/api/client";
+import { useAuth } from "@/hooks/useAuth";
 
 const STEPS = ["Create Account", "Choose Email", "Get Started"];
 
@@ -60,6 +60,7 @@ function Step1CreateAccount({
 }: {
   onNext: (data: { name: string; email: string; token: string }) => void;
 }) {
+  const { login } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -84,8 +85,8 @@ function Step1CreateAccount({
     const res = await authApi.register({ email, password, name });
 
     if (res.success) {
-      const { token } = res.data;
-      setToken(token);
+      const { token, user } = res.data;
+      login(token, user);
       onNext({ name, email, token });
     } else {
       setError(res.error.message);

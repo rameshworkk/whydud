@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Mail,
@@ -11,8 +11,10 @@ import {
   RefreshCw,
   Gift,
   Settings,
+  LogOut,
   LucideIcon,
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils/index";
 
 interface NavItem {
@@ -39,6 +41,14 @@ interface SidebarProps {
 /** Dashboard sidebar navigation — client component (needs usePathname). */
 export function Sidebar({ onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuth();
+
+  async function handleLogout() {
+    onNavigate?.();
+    await logout();
+    router.push("/");
+  }
 
   return (
     <nav className="flex flex-col gap-0.5">
@@ -67,6 +77,20 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           </Link>
         );
       })}
+
+      <hr className="border-[#E2E8F0] my-2" />
+
+      <button
+        onClick={handleLogout}
+        className={cn(
+          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]",
+          "text-[#64748B] hover:bg-red-50 hover:text-red-600"
+        )}
+      >
+        <LogOut className="h-4 w-4 shrink-0 text-[#94A3B8]" />
+        Log out
+      </button>
     </nav>
   );
 }

@@ -150,6 +150,18 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes hard limit
 CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes soft limit
 
 # ---------------------------------------------------------------------------
+# Frontend URL (for email links: verification, password reset, etc.)
+# ---------------------------------------------------------------------------
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+# AllAuth OAuth redirects to this URL after login — frontend callback page
+LOGIN_REDIRECT_URL = "/auth/callback"
+
+# Password reset token validity (seconds) — 24 hours
+PASSWORD_RESET_TIMEOUT = 86400
+
+# ---------------------------------------------------------------------------
 # Auth — Django AllAuth
 # ---------------------------------------------------------------------------
 
@@ -163,12 +175,26 @@ SITE_ID = 1
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+
+# Social accounts (Google) skip email verification — provider already verified it
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "SCOPE": ["profile", "email"],
         "AUTH_PARAMS": {"access_type": "online"},
+        "APP": {
+            "client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
+            "secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""),
+        },
     }
 }
+
+# Allow OAuth login via GET (no intermediate confirmation page)
+SOCIALACCOUNT_LOGIN_ON_GET = True
+
+# Auto-connect social account if email matches existing user
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 
 AUTH_USER_MODEL = "accounts.User"
 

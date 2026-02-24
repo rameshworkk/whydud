@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Django requires trailing slashes; without this Next.js strips them (308)
+  // before the rewrite fires, causing a redirect loop with Django's APPEND_SLASH.
+  skipTrailingSlashRedirect: true,
   images: {
     remotePatterns: [
       { hostname: "m.media-amazon.com" },

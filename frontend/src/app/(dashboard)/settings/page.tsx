@@ -37,6 +37,32 @@ function TabSkeleton() {
 }
 
 function ProfileTab({ user, loading }: { user: User | null; loading: boolean }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwMessage, setPwMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwMessage(null);
+    setPwLoading(true);
+
+    const res = await authApi.changePassword({ currentPassword, newPassword });
+
+    if (res.success && "data" in res) {
+      // Update stored token since backend re-creates it
+      const { setToken } = await import("@/lib/api/client");
+      setToken(res.data.token);
+      setPwMessage({ type: "success", text: "Password updated successfully." });
+      setCurrentPassword("");
+      setNewPassword("");
+    } else if (!res.success && "error" in res) {
+      setPwMessage({ type: "error", text: res.error.message });
+    }
+
+    setPwLoading(false);
+  }
+
   if (loading) return <TabSkeleton />;
 
   return (
@@ -79,26 +105,48 @@ function ProfileTab({ user, loading }: { user: User | null; loading: boolean }) 
 
       <hr className="border-[#E2E8F0]" />
 
-      <div>
+      <form onSubmit={handleChangePassword}>
         <h3 className="text-sm font-semibold text-slate-800 mb-2">
           Change password
         </h3>
+
+        {pwMessage && (
+          <div className={`rounded-lg border px-4 py-3 text-sm mb-3 ${
+            pwMessage.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}>
+            {pwMessage.text}
+          </div>
+        )}
+
         <div className="flex flex-col gap-3">
           <input
             type="password"
             placeholder="Current password"
+            required
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
             className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
           />
           <input
             type="password"
-            placeholder="New password"
+            placeholder="New password (min 8 characters)"
+            required
+            minLength={8}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
             className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] transition-shadow"
           />
-          <button className="self-start rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]">
-            Update password
+          <button
+            type="submit"
+            disabled={pwLoading}
+            className="self-start rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {pwLoading ? "Updating…" : "Update password"}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

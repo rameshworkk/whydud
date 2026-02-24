@@ -14,6 +14,7 @@ export type SubscriptionTier = "free" | "premium";
 export interface User {
   id: string;
   email: string;
+  emailVerified: boolean;
   name: string;
   avatarUrl: string;
   role: UserRole;

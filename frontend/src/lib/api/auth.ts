@@ -17,6 +17,24 @@ export const authApi = {
   me: () => apiClient.get<User>("/api/v1/me"),
 
   deleteAccount: () => apiClient.delete("/api/v1/me"),
+
+  changePassword: (payload: { currentPassword: string; newPassword: string }) =>
+    apiClient.post<{ detail: string; token: string }>("/api/v1/auth/change-password", payload),
+
+  forgotPassword: (payload: { email: string }) =>
+    apiClient.post<{ detail: string }>("/api/v1/auth/forgot-password", payload),
+
+  resetPassword: (payload: { uid: string; token: string; newPassword: string }) =>
+    apiClient.post<{ detail: string }>("/api/v1/auth/reset-password", payload),
+
+  verifyEmail: (payload: { uid: string; token: string }) =>
+    apiClient.post<{ detail: string }>("/api/v1/auth/verify-email", payload),
+
+  resendVerification: () =>
+    apiClient.post<{ detail: string }>("/api/v1/auth/resend-verification"),
+
+  sessionToToken: () =>
+    apiClient.get<{ user: User; token: string }>("/api/v1/auth/session-to-token"),
 };
 
 export const whydudEmailApi = {

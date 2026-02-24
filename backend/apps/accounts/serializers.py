@@ -9,10 +9,10 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "email", "name", "avatar_url", "role",
+            "id", "email", "email_verified", "name", "avatar_url", "role",
             "subscription_tier", "has_whydud_email", "created_at",
         ]
-        read_only_fields = ["id", "role", "has_whydud_email", "created_at"]
+        read_only_fields = ["id", "email_verified", "role", "has_whydud_email", "created_at"]
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -53,6 +53,21 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
             "emi_eligible", "nickname", "is_preferred", "created_at",
         ]
         read_only_fields = ["id", "created_at"]
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(min_length=8, write_only=True)
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(min_length=8)
 
 
 class TCOProfileSerializer(serializers.ModelSerializer):

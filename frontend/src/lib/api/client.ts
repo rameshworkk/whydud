@@ -83,11 +83,18 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string): void {
-  if (typeof window !== "undefined") localStorage.setItem(TOKEN_KEY, token);
+  if (typeof window !== "undefined") {
+    localStorage.setItem(TOKEN_KEY, token);
+    // Set a cookie flag so Next.js middleware can detect auth (not the actual token)
+    document.cookie = "whydud_auth=1; path=/; max-age=31536000; SameSite=Lax";
+  }
 }
 
 export function clearToken(): void {
-  if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY);
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(TOKEN_KEY);
+    document.cookie = "whydud_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  }
 }
 
 async function request<T>(

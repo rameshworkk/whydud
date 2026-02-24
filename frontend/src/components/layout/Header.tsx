@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, ChevronDown, Bell, PenSquare, LogIn, Package } from "lucide-react";
+import { Search, ChevronDown, Bell, PenSquare, LogIn, Package, LogOut, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils/index";
 
@@ -25,16 +25,18 @@ const CATEGORIES = [
 const SEARCH_CATEGORIES = ["All Categories", ...CATEGORIES];
 
 export function Header() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
   const router = useRouter();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [browseOpen, setBrowseOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const categoryRef = useRef<HTMLDivElement>(null);
   const browseRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -44,10 +46,19 @@ export function Header() {
       if (browseRef.current && !browseRef.current.contains(e.target as Node)) {
         setBrowseOpen(false);
       }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  async function handleLogout() {
+    setUserMenuOpen(false);
+    await logout();
+    router.push("/");
+  }
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -239,22 +250,51 @@ export function Header() {
                 <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[#F97316]" />
               </button>
 
-              <Link
-                href="/dashboard"
-                className={cn(
-                  "flex items-center gap-2 rounded-full pl-1 pr-3 py-1",
-                  "bg-[#FFF7ED] hover:bg-[#FFE0C2]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]",
-                  "transition-colors"
+              <div ref={userMenuRef} className="relative">
+                <button
+                  onClick={() => setUserMenuOpen((o) => !o)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-full pl-1 pr-3 py-1",
+                    "bg-[#FFF7ED] hover:bg-[#FFE0C2]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]",
+                    "transition-colors"
+                  )}
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F97316] text-white text-sm font-semibold">
+                    {displayName.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="text-sm font-medium text-[#1E293B]">
+                    Welcome, {displayName}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 text-[#64748B] transition-transform duration-150",
+                      userMenuOpen && "rotate-180"
+                    )}
+                  />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-[#E2E8F0] bg-white shadow-lg py-1 z-50">
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2 text-sm text-[#1E293B] hover:bg-[#F8FAFC] transition-colors"
+                    >
+                      <LayoutDashboard className="h-4 w-4 text-[#64748B]" />
+                      Dashboard
+                    </Link>
+                    <hr className="my-1 border-[#E2E8F0]" />
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Log out
+                    </button>
+                  </div>
                 )}
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F97316] text-white text-sm font-semibold">
-                  {displayName.charAt(0).toUpperCase()}
-                </span>
-                <span className="text-sm font-medium text-[#1E293B]">
-                  Welcome, {displayName}
-                </span>
-              </Link>
+              </div>
             </>
           ) : (
             <>

@@ -5,20 +5,14 @@
 **Architecture Reference:** `docs/ARCHITECTURE.md`
 
 ## 🎯 CURRENT TASK
-Wire the login form to the backend API.
+Wire the register form and add auth context.
 
-In frontend/src/app/(auth)/login/page.tsx:
-- Remove the e.preventDefault() no-op handler
-- Call authApi.login(email, password) from src/lib/api/auth.ts
-- On success: store the auth token in an HTTP-only cookie (or call the session endpoint)
-- Redirect to /dashboard
-- On error: show error message below form
-
-In frontend/src/lib/api/client.ts:
-- Ensure credentials: 'include' is set on all fetch calls (for session cookies)
-- Add a getMe() function that calls GET /api/v1/me/
-
-Test: User can type email/password → submit → see dashboard.
+1. In register/page.tsx: Connect Step 1 (name, email, password) to POST /api/v1/auth/register/
+2. Connect Step 2 (@whyd.xyz username) to POST /api/v1/email/whydud/create
+3. Create src/contexts/auth-context.tsx with AuthProvider (user state, login, logout, isAuthenticated)
+4. Wrap root layout with AuthProvider
+5. Update header to show "Welcome, {name}" when authenticated, "Log In" when not
+6. Create frontend/src/middleware.ts to redirect /dashboard/* to /login if not authenticated
 ## Legend
 
 | Symbol | Meaning |
@@ -669,3 +663,113 @@ User types email/password → submits → `POST /api/v1/auth/login` → backend 
 - **`refunds/page.tsx`** — Same conversion to client component. Added loading skeleton.
 - **`subscriptions/page.tsx`** — Same conversion to client component. Added loading skeleton.
 - **`wishlists/page.tsx`** — Added `?? []` safety on all `wl.items` accesses (9 locations) to prevent crash when items is undefined.
+
+---
+
+## 2026-02-24 — Wire register form + AuthContext + route protection
+
+Completed the current task: "Wire the register form and add auth context."
+
+### 1. AuthContext (`src/contexts/auth-context.tsx`)
+- Created `AuthProvider` with React Context wrapping user state, `login()`, `logout()`, `refreshUser()`
+- `login(token, user)` — stores token + updates state immediately (no /me round-trip)
+- `logout()` — calls POST /auth/logout, clears token, resets state
+- `refreshUser()` — re-fetches /me (e.g. after profile update)
+- Exports `useAuth()` hook that throws if used outside provider
+
+### 2. `useAuth` hook backward compatibility (`src/hooks/useAuth.ts`)
+- Replaced standalone hook with a re-export from `@/contexts/auth-context`
+- All existing imports (`import { useAuth } from "@/hooks/useAuth"`) continue working — zero migration needed
+
+### 3. Root layout wrapped (`src/app/layout.tsx`)
+- Imported `AuthProvider` and wrapped `{children}` in `<AuthProvider>`
+- Auth state is now shared across all components via context (Header, login, register, dashboard pages)
+
+### 4. Login page updated (`src/app/(auth)/login/page.tsx`)
+- Replaced manual `setToken()` with context `login(res.data.token, res.data.user)`
+- Added `useSearchParams()` to read `?next=` param — redirects to the originally requested page after login
+- Removed `setToken` import (no longer needed)
+
+### 5. Register page updated (`src/app/(auth)/register/page.tsx`)
+- Step 1 (`Step1CreateAccount`): Now calls context `login(token, user)` after `authApi.register()` succeeds
+- Step 2 (`Step2ChooseEmail`): Unchanged — already wired to `whydudEmailApi.create()`
+- Header immediately shows "Welcome, {name}" after Step 1 completes (context updates instantly)
+
+### 6. Cookie flag for middleware (`src/lib/api/client.ts`)
+- `setToken()` now also sets `document.cookie = "whydud_auth=1"` (simple flag, not the actual token)
+- `clearToken()` now also clears the cookie
+- This allows Next.js middleware (server-side) to detect auth state without localStorage
+
+### 7. Route protection middleware (`src/middleware.ts`)
+- Checks for `whydud_auth` cookie on all dashboard routes
+- If missing → redirects to `/login?next=/dashboard/...` (preserves intended destination)
+- Matcher covers: `/dashboard/*`, `/inbox/*`, `/wishlists/*`, `/purchases/*`, `/refunds/*`, `/subscriptions/*`, `/rewards/*`, `/settings/*`
+
+### Auth flow summary
+1. User registers → `authApi.register()` → context `login(token, user)` → token in localStorage + cookie flag → Step 2
+2. User logs in → `authApi.login()` → context `login(token, user)` → redirect to `?next` or `/dashboard`
+3. User visits `/dashboard` without auth → middleware reads cookie → not found → redirect to `/login?next=/dashboard`
+4. User logs out → context `logout()` → `clearToken()` removes localStorage + cookie → state resets
+
+TypeScript: 0 errors (`npx tsc --noEmit` clean)
+
+---
+
+## 2026-02-24 — Complete auth features: logout, password flows, email verification, OAuth
+
+Added all mandatory auth features that were missing after the initial login/register wiring.
+
+### Backend changes
+
+**`apps/accounts/views.py`** — 6 new views + modified RegisterView:
+- `ChangePasswordView` — POST, validates current password via `check_password()`, sets new, re-creates DRF token (returns new token so user stays logged in)
+- `ForgotPasswordView` — POST (AllowAny), generates uid+token via `default_token_generator`, queues Celery email task. Always returns success to prevent email enumeration.
+- `ResetPasswordView` — POST (AllowAny), validates uid+token, sets new password, deletes all DRF tokens (forces re-login)
+- `VerifyEmailView` — POST (AllowAny), validates uid+token, sets `email_verified=True`
+- `ResendVerificationEmailView` — POST (IsAuthenticated), queues verification email
+- `OAuthSessionToTokenView` — GET (IsAuthenticated), converts Django session (set by AllAuth OAuth) to DRF token. Uses GET to avoid CSRF issues with SessionAuthentication.
+- `RegisterView` now calls `send_verification_email.delay()` after user creation
+
+**`apps/accounts/serializers.py`** — Updated:
+- Added `email_verified` to `UserSerializer.fields` and `read_only_fields`
+- `ChangePasswordSerializer`, `ForgotPasswordSerializer`, `ResetPasswordSerializer` already existed
+
+**`apps/accounts/urls/auth.py`** — 9 URL patterns (was 3):
+- register, login, logout, change-password, forgot-password, reset-password, verify-email, resend-verification, session-to-token
+
+**`apps/accounts/tasks.py`** — Implemented email tasks:
+- `send_verification_email(user_id)` — generates uid+token, sends email with `{FRONTEND_URL}/verify-email?uid=X&token=Y`
+- `send_password_reset_email(user_id, uid, token)` — sends email with `{FRONTEND_URL}/reset-password?uid=X&token=Y`
+
+**`whydud/settings/base.py`** — New settings:
+- `FRONTEND_URL` — for email links (default `http://localhost:3000`)
+- `LOGIN_REDIRECT_URL = "/auth/callback"` — AllAuth OAuth redirects here
+- `PASSWORD_RESET_TIMEOUT = 86400` — 24 hours
+
+### Frontend changes
+
+**`src/types/user.ts`** — Added `emailVerified: boolean` to User interface
+
+**`src/lib/api/auth.ts`** — 6 new API functions:
+- `changePassword`, `forgotPassword`, `resetPassword`, `verifyEmail`, `resendVerification`, `sessionToToken`
+
+**`src/components/layout/Header.tsx`** — User dropdown with logout:
+- Replaced "Welcome, {name}" link with clickable dropdown
+- Dropdown contains "Dashboard" link + "Log out" button
+- Click-outside handler to close dropdown
+
+**`src/components/layout/Sidebar.tsx`** — Added logout button:
+- `<hr>` separator + red hover logout button at bottom of nav
+
+**`src/app/(dashboard)/settings/page.tsx`** — Wired change password form:
+- ProfileTab now has state for password fields, calls `authApi.changePassword()`
+- Updates stored token on success (since backend re-creates it)
+- Shows success/error feedback inline
+
+**New pages (4):**
+- `src/app/(auth)/forgot-password/page.tsx` — Email input → "Check your email" success state
+- `src/app/(auth)/reset-password/page.tsx` — Reads uid+token from URL params, new password + confirm form, success → "Sign in" link
+- `src/app/(auth)/verify-email/page.tsx` — Auto-verifies on mount using uid+token from URL, shows verifying → success/error states
+- `src/app/(auth)/auth/callback/page.tsx` — OAuth callback: calls `sessionToToken()` on mount, stores token via context `login()`, redirects to dashboard
+
+TypeScript: 0 errors (`npx tsc --noEmit` clean)

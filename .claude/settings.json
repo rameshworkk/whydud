@@ -30,7 +30,11 @@
       "Bash(MEILISEARCH_MASTER_KEY=\"whydud_dev_meili_key_32chars!!\" python manage.py sync_meilisearch:*)",
       "Bash(MEILISEARCH_MASTER_KEY=\"whydud_dev_meili_key_32chars!!\" POSTGRES_PASSWORD=whydud_dev python manage.py:*)",
       "Read(//c/Users/rames/Downloads/whydud/platform/whydud/**)",
-      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.development python:*)"
+      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings.development python:*)",
+      "Bash(test:*)",
+      "Bash(npx next:*)",
+      "Read(//c/Users/rames/AppData/Local/Temp/claude/c--Users-rames-Downloads-whydud-platform-whydud/tasks/**)",
+      "Read(//c/Users/rames/Downloads/whydud/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller"
