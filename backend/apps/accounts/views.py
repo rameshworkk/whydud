@@ -51,8 +51,22 @@ class RegisterView(APIView):
         if User.objects.filter(email=email).exists():
             return error_response("email_taken", "An account with this email already exists.")
 
-        user = User.objects.create_user(email=email, password=password, name=name)
+        # Look up referrer before creating user
+        referral_code = serializer.validated_data.get("referral_code", "").strip().upper()
+        referrer = None
+        if referral_code:
+            referrer = User.objects.filter(referral_code=referral_code).first()
+
+        user = User.objects.create_user(
+            email=email, password=password, name=name,
+            referred_by=referrer,
+        )
         token, _ = Token.objects.get_or_create(user=user)
+
+        # Award referral points to the referrer
+        if referrer:
+            from apps.rewards.tasks import award_points_task
+            award_points_task.delay(str(referrer.pk), 'referral_signup', str(user.pk))
 
         # Send verification email
         from .tasks import send_verification_email
@@ -338,6 +352,10 @@ class WhydudEmailView(APIView):
         email = WhydudEmail.objects.create(user=request.user, username=username)
         request.user.has_whydud_email = True
         request.user.save(update_fields=["has_whydud_email"])
+
+        from apps.rewards.tasks import award_points_task
+        award_points_task.delay(str(request.user.pk), 'connect_email', str(email.pk))
+
         return success_response(WhydudEmailSerializer(email).data, status=201)
 
 

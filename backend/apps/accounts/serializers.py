@@ -20,6 +20,7 @@ class RegisterSerializer(serializers.Serializer):
     password = serializers.CharField(min_length=8, write_only=True)
     name = serializers.CharField(max_length=200, required=False)
     whydud_username = serializers.CharField(max_length=30, required=False)
+    referral_code = serializers.CharField(max_length=8, required=False)
 
 
 class LoginSerializer(serializers.Serializer):

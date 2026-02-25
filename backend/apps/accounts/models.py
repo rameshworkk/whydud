@@ -2,10 +2,16 @@
 
 PostgreSQL schema: users
 """
+import secrets
 import uuid
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+
+
+def _generate_referral_code() -> str:
+    """Generate a unique 8-char uppercase referral code."""
+    return secrets.token_hex(4).upper()  # 8 hex chars
 
 
 class UserManager(BaseUserManager):
@@ -56,6 +62,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
     subscription_expires_at = models.DateTimeField(null=True, blank=True)
     has_whydud_email = models.BooleanField(default=False)
+    referral_code = models.CharField(max_length=8, unique=True, default=_generate_referral_code)
+    referred_by = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="referrals"
+    )
     trust_score = models.DecimalField(max_digits=3, decimal_places=2, default="0.50")
     is_suspended = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

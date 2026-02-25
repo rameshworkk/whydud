@@ -82,7 +82,7 @@ class WriteReviewSerializer(serializers.ModelSerializer):
             or validated_data.get("purchase_seller")
             or validated_data.get("purchase_price_paid")
         )
-        return Review.objects.create(
+        review = Review.objects.create(
             **validated_data,
             user=user,
             product=product,
@@ -93,6 +93,11 @@ class WriteReviewSerializer(serializers.ModelSerializer):
             has_purchase_proof=has_proof,
             review_date=timezone.now().date(),
         )
+
+        from apps.rewards.tasks import award_points_task
+        award_points_task.delay(str(user.pk), 'write_review', str(review.pk))
+
+        return review
 
 
 class MyReviewsSerializer(serializers.ModelSerializer):
