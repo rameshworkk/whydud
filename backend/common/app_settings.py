@@ -318,3 +318,32 @@ class DealDetectionConfig:
     def batch_size(cls) -> int:
         """Products processed per batch in detect_deals."""
         return _get("DEAL_DETECTION_BATCH_SIZE", 200)
+
+
+# ---------------------------------------------------------------------------
+# Click Tracking
+# ---------------------------------------------------------------------------
+
+class ClickTrackingConfig:
+    """Tunable settings for affiliate click tracking."""
+
+    @classmethod
+    def sub_tag_marketplaces(cls) -> list[str]:
+        """Marketplace slugs that support sub-tag tracking params."""
+        return _get("CLICK_SUB_TAG_MARKETPLACES", ["amazon_in", "flipkart"])
+
+    @classmethod
+    def sub_tag_param(cls, marketplace_slug: str) -> str:
+        """URL parameter name for sub-tag per marketplace."""
+        params: dict[str, str] = _get("CLICK_SUB_TAG_PARAMS", {
+            "amazon_in": "ascsubtag",
+            "flipkart": "affExtParam1",
+        })
+        return params.get(marketplace_slug, "")
+
+    @classmethod
+    def valid_source_pages(cls) -> list[str]:
+        """Allowed values for source_page field."""
+        return _get("CLICK_VALID_SOURCE_PAGES", [
+            "product_page", "comparison", "deal", "search", "homepage",
+        ])

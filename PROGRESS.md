@@ -191,7 +191,7 @@ GET  /api/v1/email/whydud/status/    → Email status
 | Multi-domain email (whyd.in / whyd.click / whyd.shop) | ❌ NOT BUILT |
 | Email sending (Reply/Compose via Resend) | ❌ NOT BUILT |
 | Email source aggregation (multi-account) | ❌ NOT BUILT |
-| Click tracking (affiliate attribution) | ❌ NOT BUILT (model exists, no tracking logic) |
+| Click tracking (affiliate attribution) | ✅ BUILT (click_tracking.py, TrackClickView, frontend wired) |
 | Purchase search (cross-platform) | ❌ NOT BUILT |
 | Admin audit log | ❌ NOT BUILT |
 | Admin as independent system | ❌ NOT BUILT |
@@ -681,3 +681,39 @@ Not configured yet:
 - **Added `FraudDetectionConfig`** to `backend/common/app_settings.py` — 5 tuneable thresholds:
   - `FRAUD_SHORT_REVIEW_MAX_CHARS` (20), `FRAUD_BURST_COUNT_THRESHOLD` (5), `FRAUD_DUPLICATE_COUNT_THRESHOLD` (2), `FRAUD_FLAG_THRESHOLD` (2), `FRAUD_NEW_ACCOUNT_DAYS` (30)
 - **Wired `detect_fake_reviews` Celery task** in `backend/apps/reviews/tasks.py` — replaced stub with real implementation that calls `fraud_detection.detect_fake_reviews()` and returns summary dict
+
+### 2026-02-26 — Affiliate Click Tracking (Architecture §6, Feature #13)
+- **Created `backend/apps/pricing/click_tracking.py`** — affiliate URL generation + click metadata helpers
+  - `generate_affiliate_url(listing, user, referrer_page)`: builds tracked affiliate URL from listing's external_url + marketplace's affiliate_param/tag, with sub-tag for attribution
+  - `_build_sub_tag()`: encodes user hash + product ID + referrer page into URL-safe sub-tag (~50 chars)
+  - `hash_ip()`, `hash_user_agent()`: one-way SHA-256 hashes for analytics (no raw PII stored)
+  - `detect_device_type()`: simple mobile/tablet/desktop detection from User-Agent
+  - Sub-tag params configurable per marketplace (Amazon: `ascsubtag`, Flipkart: `affExtParam1`)
+- **Added `ClickTrackingConfig`** to `backend/common/app_settings.py`
+  - `sub_tag_marketplaces()`: list of marketplace slugs supporting sub-tag tracking
+  - `sub_tag_param(marketplace_slug)`: URL param name per marketplace
+  - `valid_source_pages()`: allowed values for source_page field (product_page, comparison, deal, search, homepage)
+- **Added serializers** to `backend/apps/pricing/serializers.py`
+  - `TrackClickSerializer`: validates POST body — listing_id (UUID), referrer_page (choice), source_section (optional)
+  - `ClickEventSerializer`: read-only serializer for click history (product_slug, marketplace_name, marketplace_slug, source_page, affiliate_url, price_at_click, clicked_at)
+- **Added `TrackClickView`** to `backend/apps/pricing/views.py`
+  - `POST /api/v1/clicks/track` — accepts authenticated + anonymous users
+  - Validates listing_id → fetches ProductListing with marketplace + product
+  - Generates affiliate URL via `generate_affiliate_url()`
+  - Creates `ClickEvent` record with full metadata (user, product, marketplace, source_page, source_section, affiliate_url, affiliate_tag, sub_tag, price_at_click, device_type, ip_hash, user_agent_hash)
+  - Returns `201 {success: true, data: {affiliate_url, click_id}}`
+- **Added `ClickHistoryView`** to `backend/apps/pricing/views.py`
+  - `GET /api/v1/clicks/history` — user's click history (authenticated, cursor-paginated)
+- **Updated URL routing** in `backend/apps/pricing/urls.py`
+  - `clicks/track` → TrackClickView
+  - `clicks/history` → ClickHistoryView
+- **Added `clicksApi`** to `frontend/src/lib/api/products.ts`
+  - `clicksApi.track(listingId, referrerPage, sourceSection?)` → POST /api/v1/clicks/track
+- **Updated `MarketplacePrices` component** (`frontend/src/components/product/marketplace-prices.tsx`)
+  - Converted from server component to client component (`"use client"`)
+  - "Buy" buttons now call `clicksApi.track()` on click → opens returned `affiliateUrl` in new tab
+  - Graceful fallback: if tracking API fails, falls back to direct `buyUrl` (no broken UX)
+  - Loading state: shows "..." on button while tracking request is in-flight
+  - Added `referrerPage` prop (default: "product_page") for source attribution
+  - Added `focus-visible` + `active` states on all buy buttons
+- TypeScript clean: `tsc --noEmit` passes with zero errors

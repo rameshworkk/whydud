@@ -1,7 +1,9 @@
 """Serializers for the pricing app."""
 from rest_framework import serializers
 
-from .models import MarketplaceOffer, PriceAlert
+from common.app_settings import ClickTrackingConfig
+
+from .models import ClickEvent, MarketplaceOffer, PriceAlert
 
 
 class MarketplaceOfferSerializer(serializers.ModelSerializer):
@@ -20,6 +22,33 @@ class MarketplaceOfferSerializer(serializers.ModelSerializer):
             "valid_from", "valid_until", "stackable", "is_active",
             "last_verified_at", "terms_conditions",
         ]
+
+
+class TrackClickSerializer(serializers.Serializer):
+    """Validates the POST /api/v1/clicks/track request body."""
+
+    listing_id = serializers.UUIDField()
+    referrer_page = serializers.ChoiceField(
+        choices=[(p, p) for p in ClickTrackingConfig.valid_source_pages()],
+        default="product_page",
+    )
+    source_section = serializers.CharField(max_length=50, required=False, default="")
+
+
+class ClickEventSerializer(serializers.ModelSerializer):
+    """Read-only serializer for click history."""
+
+    product_slug = serializers.CharField(source="product.slug", read_only=True)
+    marketplace_name = serializers.CharField(source="marketplace.name", read_only=True)
+    marketplace_slug = serializers.CharField(source="marketplace.slug", read_only=True)
+
+    class Meta:
+        model = ClickEvent
+        fields = [
+            "id", "product_slug", "marketplace_name", "marketplace_slug",
+            "source_page", "affiliate_url", "price_at_click", "clicked_at",
+        ]
+        read_only_fields = fields
 
 
 class PriceAlertSerializer(serializers.ModelSerializer):

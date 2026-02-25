@@ -1,9 +1,14 @@
+"use client";
+
+import { useState } from "react";
 import { formatPrice } from "@/lib/utils";
+import { clicksApi } from "@/lib/api/products";
 import type { ProductListing } from "@/types";
 
 interface MarketplacePricesProps {
   listings: ProductListing[];
   bestPrice: number | null;
+  referrerPage?: string;
 }
 
 const MARKETPLACE_LOGOS: Record<string, string> = {
@@ -24,7 +29,35 @@ const MARKETPLACE_COLORS: Record<string, string> = {
   reliance_digital: "bg-[#3366CC] text-white",
 };
 
-export function MarketplacePrices({ listings, bestPrice }: MarketplacePricesProps) {
+export function MarketplacePrices({
+  listings,
+  bestPrice,
+  referrerPage = "product_page",
+}: MarketplacePricesProps) {
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  async function handleBuyClick(listing: ProductListing) {
+    setLoadingId(listing.id);
+    try {
+      const res = await clicksApi.track(
+        listing.id,
+        referrerPage,
+        "marketplace_prices",
+      );
+      if (res.success && res.data) {
+        window.open(res.data.affiliateUrl, "_blank", "noopener,noreferrer");
+      } else {
+        // Fallback to direct buy URL if tracking fails
+        window.open(listing.buyUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      // Fallback to direct buy URL on network error
+      window.open(listing.buyUrl, "_blank", "noopener,noreferrer");
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2">
       {listings.map((listing) => {
@@ -37,6 +70,7 @@ export function MarketplacePrices({ listings, bestPrice }: MarketplacePricesProp
           MARKETPLACE_COLORS[listing.marketplace.slug] ?? "bg-slate-500 text-white";
         const logoLetter =
           MARKETPLACE_LOGOS[listing.marketplace.slug] ?? listing.marketplace.name[0];
+        const isLoading = loadingId === listing.id;
 
         return (
           <div
@@ -79,18 +113,18 @@ export function MarketplacePrices({ listings, bestPrice }: MarketplacePricesProp
                 {formatPrice(listing.currentPrice)}
               </span>
               {listing.inStock ? (
-                <a
-                  href={listing.buyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
+                <button
+                  type="button"
+                  onClick={() => handleBuyClick(listing)}
+                  disabled={isLoading}
+                  className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-1 ${
                     isBest
-                      ? "bg-[#F97316] text-white hover:bg-[#EA580C]"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
+                      ? "bg-[#F97316] text-white hover:bg-[#EA580C] active:bg-[#C2410C]"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300"
+                  } ${isLoading ? "opacity-60 cursor-wait" : ""}`}
                 >
-                  Buy
-                </a>
+                  {isLoading ? "..." : "Buy"}
+                </button>
               ) : (
                 <span className="text-xs text-slate-400">Out of stock</span>
               )}

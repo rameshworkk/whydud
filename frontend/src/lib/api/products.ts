@@ -44,6 +44,15 @@ export const productsApi = {
     }),
 };
 
+export const clicksApi = {
+  /** POST /api/v1/clicks/track — log click, return affiliate redirect URL */
+  track: (listingId: string, referrerPage: string, sourceSection?: string) =>
+    apiClient.post<{ affiliateUrl: string; clickId: number }>(
+      "/api/v1/clicks/track",
+      { listingId, referrerPage, sourceSection },
+    ),
+};
+
 export const dealsApi = {
   /** Returns Deal[] in .data (paginated) */
   list: (params?: { dealType?: string; cursor?: string }) =>
