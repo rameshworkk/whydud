@@ -347,3 +347,26 @@ class ClickTrackingConfig:
         return _get("CLICK_VALID_SOURCE_PAGES", [
             "product_page", "comparison", "deal", "search", "homepage",
         ])
+
+
+# ---------------------------------------------------------------------------
+# Subscription
+# ---------------------------------------------------------------------------
+
+class SubscriptionConfig:
+    """Tunable settings for Razorpay subscription plans."""
+
+    @classmethod
+    def pro_amount_paisa(cls) -> int:
+        """Pro plan price in paisa (₹99 = 9900 paisa)."""
+        return _get("SUBSCRIPTION_PRO_AMOUNT_PAISA", 9900)
+
+    @classmethod
+    def pro_duration_days(cls) -> int:
+        """Number of days a single Pro payment covers."""
+        return _get("SUBSCRIPTION_PRO_DURATION_DAYS", 30)
+
+    @classmethod
+    def order_cache_ttl(cls) -> int:
+        """Seconds to keep a pending Razorpay order in cache (default 30 min)."""
+        return _get("SUBSCRIPTION_ORDER_CACHE_TTL", 1800)
