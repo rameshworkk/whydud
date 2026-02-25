@@ -31,5 +31,9 @@ export const config = {
     "/subscriptions/:path*",
     "/rewards/:path*",
     "/settings/:path*",
+    "/notifications/:path*",
+    "/my-reviews/:path*",
+    "/alerts/:path*",
+    "/product/:slug/review",
   ],
 };

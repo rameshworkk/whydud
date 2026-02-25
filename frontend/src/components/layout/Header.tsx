@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, ChevronDown, Bell, PenSquare, LogIn, Package, LogOut, LayoutDashboard } from "lucide-react";
+import { Search, ChevronDown, PenSquare, LogIn, Package, LogOut, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils/index";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 const CATEGORIES = [
   "Mobiles & Tablets",
@@ -237,18 +238,7 @@ export function Header() {
             <div className="h-9 w-32 rounded-full bg-[#F1F5F9] animate-pulse" />
           ) : isAuthenticated && user ? (
             <>
-              <button
-                aria-label="Notifications"
-                className={cn(
-                  "relative flex h-9 w-9 items-center justify-center rounded-md",
-                  "text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#1E293B]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]",
-                  "transition-colors"
-                )}
-              >
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[#F97316]" />
-              </button>
+              <NotificationBell />
 
               <div ref={userMenuRef} className="relative">
                 <button

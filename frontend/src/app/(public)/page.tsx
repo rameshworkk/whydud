@@ -12,6 +12,7 @@ import {
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/product/product-card";
+import { TrendingSection } from "@/components/product/trending-section";
 import { productsApi, dealsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils/format";
 import type { ProductSummary, Deal } from "@/types";
@@ -630,6 +631,22 @@ export default async function HomePage() {
             </div>
           </section>
         )}
+
+        {/* ── Trending Products (from real trending API) ────────────────── */}
+        <TrendingSection
+          title="Trending Products"
+          endpoint="trending"
+          limit={8}
+          viewAllHref="/search?sort=trending"
+        />
+
+        {/* ── Price Dropping ─────────────────────────────────────────────── */}
+        <TrendingSection
+          title="Price Dropping"
+          endpoint="price-dropping"
+          limit={8}
+          viewAllHref="/search?sort=price_drop"
+        />
 
       </main>
 

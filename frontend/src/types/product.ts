@@ -303,7 +303,11 @@ export interface PriceAlert {
   id: string;
   product: string;
   targetPrice: number;
+  currentPrice?: number;
+  marketplace?: string;
   isActive: boolean;
+  isTriggered: boolean;
+  triggeredAt?: string | null;
   lastAlertedAt: string | null;
   createdAt: string;
 }

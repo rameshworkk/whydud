@@ -25,15 +25,20 @@ class MarketplaceOfferSerializer(serializers.ModelSerializer):
 class PriceAlertSerializer(serializers.ModelSerializer):
     product_slug = serializers.CharField(source="product.slug", read_only=True)
     product_title = serializers.CharField(source="product.title", read_only=True)
-    current_best_price = serializers.DecimalField(
-        source="product.current_best_price", max_digits=12, decimal_places=2, read_only=True
+    marketplace_slug = serializers.CharField(
+        source="marketplace.slug", read_only=True, default=None
     )
 
     class Meta:
         model = PriceAlert
         fields = [
             "id", "product_slug", "product_title",
-            "target_price", "current_best_price",
-            "is_active", "last_alerted_at", "created_at",
+            "marketplace_slug", "target_price",
+            "is_active", "is_triggered",
+            "triggered_at", "triggered_price", "triggered_marketplace",
+            "created_at",
         ]
-        read_only_fields = ["id", "last_alerted_at", "created_at"]
+        read_only_fields = [
+            "id", "is_triggered", "triggered_at",
+            "triggered_price", "triggered_marketplace", "created_at",
+        ]

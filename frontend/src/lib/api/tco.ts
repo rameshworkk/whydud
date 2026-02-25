@@ -1,24 +1,30 @@
 import { apiClient } from "./client";
 import type { City, UserTCOProfile } from "@/types";
+import type { TCOModelSchema, TCOResult } from "./types";
 
-export interface TCOResult {
-  purchasePrice: number;
-  electricityCost: number;
-  maintenanceCost: number;
-  consumablesCost: number;
-  totalCost: number;
-  costPerYear: number;
-  ownershipYears: number;
-  breakdown: Array<{ label: string; amount: number }>;
+export interface TCOCalculatePayload {
+  productSlug: string;
+  ownershipYears?: number;
+  cityId?: number;
+  electricityTariff?: number;
+  inputs?: Record<string, number>;
+}
+
+export interface TCOCompareResult {
+  product: { slug: string; title: string; brand: string | null; currentBestPrice: number | null; image: string | null };
+  tco: TCOResult;
 }
 
 export const tcoApi = {
-  calculate: (productSlug: string, params: { cityId?: number; hoursPerDay?: number; years?: number }) =>
-    apiClient.get<TCOResult>(`/api/v1/products/${productSlug}/tco`, { params }),
+  getModel: (categorySlug: string) =>
+    apiClient.get<TCOModelSchema>(`/api/v1/tco/models/${categorySlug}`),
 
-  compare: (slugs: string[], params: { cityId?: number; hoursPerDay?: number; years?: number }) =>
-    apiClient.get<TCOResult[]>(`/api/v1/tco/compare`, {
-      params: { slugs: slugs.join(","), ...params },
+  calculateTCO: (payload: TCOCalculatePayload) =>
+    apiClient.post<TCOResult>("/api/v1/tco/calculate", payload),
+
+  compareTCO: (productSlugs: string[], params?: { ownershipYears?: number; cityId?: number; electricityTariff?: number }) =>
+    apiClient.get<{ comparisons: TCOCompareResult[] }>("/api/v1/tco/compare", {
+      params: { products: productSlugs.join(","), ...params },
     }),
 
   getCities: () => apiClient.get<City[]>("/api/v1/tco/cities"),

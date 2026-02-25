@@ -3,6 +3,10 @@ from . import views
 
 urlpatterns = [
     path("offers/active", views.OffersActiveView.as_view(), name="offers-active"),
-    path("me/price-alerts", views.PriceAlertListCreateView.as_view(), name="price-alerts-list"),
-    path("me/price-alerts/<str:pk>", views.PriceAlertDetailView.as_view(), name="price-alerts-detail"),
+
+    # Price alerts
+    path("alerts/price", views.CreatePriceAlertView.as_view(), name="alert-create"),
+    path("alerts/triggered", views.TriggeredAlertsView.as_view(), name="alerts-triggered"),
+    path("alerts", views.ListAlertsView.as_view(), name="alerts-list"),
+    path("alerts/<str:pk>", views.AlertDetailView.as_view(), name="alert-detail"),
 ]

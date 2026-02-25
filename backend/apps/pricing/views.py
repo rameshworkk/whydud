@@ -49,21 +49,44 @@ class EffectivePriceView(APIView):
         return error_response("not_implemented", "Card optimizer available in Sprint 3.", status=501)
 
 
-class PriceAlertListCreateView(APIView):
+class ListAlertsView(APIView):
+    """GET /api/v1/alerts — user's active alerts."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        alerts = PriceAlert.objects.filter(user=request.user).select_related("product")
-        return success_response(PriceAlertSerializer(alerts, many=True).data)
+        qs = (
+            PriceAlert.objects.filter(user=request.user)
+            .select_related("product", "marketplace")
+            .order_by("-created_at")
+        )
+        paginator = CursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        if page is not None:
+            return paginator.get_paginated_response(
+                PriceAlertSerializer(page, many=True).data
+            )
+        return success_response(PriceAlertSerializer(qs, many=True).data)
+
+
+class CreatePriceAlertView(APIView):
+    """POST /api/v1/alerts/price — set a price alert."""
+
+    permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
-        from apps.products.models import Product
+        from apps.products.models import Marketplace, Product
 
         product_slug = request.data.get("product_slug")
         if not product_slug:
             return error_response("validation_error", "product_slug is required.")
 
         product = get_object_or_404(Product, slug=product_slug)
+
+        marketplace = None
+        marketplace_slug = request.data.get("marketplace")
+        if marketplace_slug:
+            marketplace = get_object_or_404(Marketplace, slug=marketplace_slug)
 
         serializer = PriceAlertSerializer(data=request.data)
         if not serializer.is_valid():
@@ -72,6 +95,7 @@ class PriceAlertListCreateView(APIView):
         alert, created = PriceAlert.objects.update_or_create(
             user=request.user,
             product=product,
+            marketplace=marketplace,
             defaults={
                 "target_price": serializer.validated_data["target_price"],
                 "is_active": True,
@@ -81,11 +105,17 @@ class PriceAlertListCreateView(APIView):
         return success_response(PriceAlertSerializer(alert).data, status=code)
 
 
-class PriceAlertDetailView(APIView):
+class AlertDetailView(APIView):
+    """PATCH / DELETE /api/v1/alerts/:id."""
+
     permission_classes = [IsAuthenticated]
 
     def patch(self, request: Request, pk: str) -> Response:
-        alert = PriceAlert.objects.filter(user=request.user, pk=pk).first()
+        alert = (
+            PriceAlert.objects.filter(user=request.user, pk=pk)
+            .select_related("product", "marketplace")
+            .first()
+        )
         if not alert:
             return error_response("not_found", "Price alert not found.", status=404)
         serializer = PriceAlertSerializer(alert, data=request.data, partial=True)
@@ -100,3 +130,24 @@ class PriceAlertDetailView(APIView):
             return error_response("not_found", "Price alert not found.", status=404)
         alert.delete()
         return success_response({"detail": "Alert deleted."})
+
+
+class TriggeredAlertsView(APIView):
+    """GET /api/v1/alerts/triggered — recently triggered price drops."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        qs = (
+            PriceAlert.objects.filter(user=request.user, is_triggered=True)
+            .select_related("product", "marketplace")
+            .order_by("-triggered_at")
+        )
+        paginator = CursorPagination()
+        paginator.ordering = "-triggered_at"
+        page = paginator.paginate_queryset(qs, request)
+        if page is not None:
+            return paginator.get_paginated_response(
+                PriceAlertSerializer(page, many=True).data
+            )
+        return success_response(PriceAlertSerializer(qs, many=True).data)

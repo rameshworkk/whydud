@@ -39,12 +39,21 @@
       "Bash(POSTGRES_PASSWORD=whydud_dev python:*)",
       "Bash(# Step 2: Test OAuth complete redirect \\(unauthenticated → should redirect to login error\\) curl -s -D- \"\"http://localhost:3000/oauth/complete/\"\")",
       "Bash(git status:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Read(//c/Users/rames/Downloads/whydud/platform/whydud/backend/apps/**)",
+      "Bash(xargs:*)",
+      "Read(//c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/**)",
+      "Read(//c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/components/**)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings python -c \":*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",
       "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\accounts",
-      "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\oauth"
+      "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\oauth",
+      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\components",
+      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(review)\\product\\[slug]",
+      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps\\tco\\management"
     ]
   }
 }

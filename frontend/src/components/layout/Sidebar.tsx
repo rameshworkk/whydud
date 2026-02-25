@@ -10,6 +10,8 @@ import {
   RotateCcw,
   RefreshCw,
   Gift,
+  Star,
+  Bell,
   Settings,
   LogOut,
   LucideIcon,
@@ -31,6 +33,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/refunds", label: "Refunds", Icon: RotateCcw },
   { href: "/subscriptions", label: "Subscriptions", Icon: RefreshCw },
   { href: "/rewards", label: "Rewards", Icon: Gift },
+  { href: "/my-reviews", label: "My Reviews", Icon: Star },
+  { href: "/alerts", label: "Alerts", Icon: Bell },
   { href: "/settings", label: "Settings", Icon: Settings },
 ];
 
