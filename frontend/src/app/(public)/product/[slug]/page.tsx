@@ -3,14 +3,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { DudScoreGauge } from "@/components/product/dud-score-gauge";
-import { MarketplacePrices } from "@/components/product/marketplace-prices";
+import { CrossPlatformPricePanel } from "@/components/product/cross-platform-price-panel";
 import { CategoryScoreBars } from "@/components/product/category-score-bars";
 import { PriceChart } from "@/components/product/price-chart";
 import { RatingDistribution } from "@/components/reviews/rating-distribution";
 import { ReviewCard } from "@/components/reviews/review-card";
+import { ProductCard } from "@/components/product/product-card";
 import { productsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils";
-import type { ProductDetail, PricePoint, Review, DudScoreLabel } from "@/types";
+import type { ProductDetail, ProductSummary, PricePoint, Review, DudScoreLabel } from "@/types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -80,17 +81,21 @@ function normalizeRatingDistribution(
 // ── Data fetching ────────────────────────────────────────────────────────────
 
 async function fetchProductData(slug: string) {
-  const [detailRes, priceRes, reviewsRes] = await Promise.all([
+  const [detailRes, priceRes, reviewsRes, similarRes, alternativesRes] = await Promise.all([
     productsApi.getDetail(slug),
     productsApi.getPriceHistory(slug),
     productsApi.getReviews(slug),
+    productsApi.getSimilar(slug),
+    productsApi.getAlternatives(slug),
   ]);
 
   const product: ProductDetail | null = detailRes.success ? detailRes.data : null;
   const priceHistory: PricePoint[] = priceRes.success ? priceRes.data : [];
   const reviews: Review[] = reviewsRes.success ? reviewsRes.data : [];
+  const similarProducts: ProductSummary[] = similarRes.success ? similarRes.data : [];
+  const alternatives: ProductSummary[] = alternativesRes.success ? alternativesRes.data : [];
 
-  return { product, priceHistory, reviews };
+  return { product, priceHistory, reviews, similarProducts, alternatives };
 }
 
 // ── Metadata ─────────────────────────────────────────────────────────────────
@@ -118,7 +123,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const { product: p, priceHistory, reviews } = await fetchProductData(slug);
+  const { product: p, priceHistory, reviews, similarProducts, alternatives } = await fetchProductData(slug);
 
   if (!p) {
     notFound();
@@ -333,7 +338,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <h2 className="text-sm font-semibold text-slate-700 mb-3">
                 Compare all available options
               </h2>
-              <MarketplacePrices listings={p.listings} bestPrice={p.currentBestPrice} />
+              <CrossPlatformPricePanel
+                listings={p.listings}
+                lowestPriceEver={p.lowestPriceEver}
+              />
             </div>
           )}
 
@@ -342,6 +350,34 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <h2 className="text-sm font-semibold text-slate-700 mb-1">Price History</h2>
             <PriceChart data={priceHistory} marketplaces={marketplaceChartMap} />
           </div>
+
+          {/* -- Similar Products -- */}
+          {similarProducts.length > 0 && (
+            <div className="mt-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">Similar Products</h2>
+              <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory no-scrollbar">
+                {similarProducts.map((product) => (
+                  <div key={product.id} className="snap-start shrink-0 w-[180px] md:w-[200px]">
+                    <ProductCard product={product} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* -- Alternatives -- */}
+          {alternatives.length > 0 && (
+            <div className="mt-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">Alternatives</h2>
+              <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory no-scrollbar">
+                {alternatives.map((product) => (
+                  <div key={product.id} className="snap-start shrink-0 w-[180px] md:w-[200px]">
+                    <ProductCard product={product} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </main>
 
         {/* -- Right Sidebar: Reviews -- */}

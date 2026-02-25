@@ -38,6 +38,12 @@ export const productsApi = {
       params: { cursor },
     }),
 
+  getSimilar: (slug: string) =>
+    apiClient.get<ProductSummary[]>(`/api/v1/products/${slug}/similar`),
+
+  getAlternatives: (slug: string) =>
+    apiClient.get<ProductSummary[]>(`/api/v1/products/${slug}/alternatives`),
+
   compare: (slugs: string[]) =>
     apiClient.get<ProductDetail[]>(`/api/v1/compare`, {
       params: { slugs: slugs.join(",") },
