@@ -9,8 +9,10 @@ import { PriceChart } from "@/components/product/price-chart";
 import { RatingDistribution } from "@/components/reviews/rating-distribution";
 import { ReviewCard } from "@/components/reviews/review-card";
 import { ProductCard } from "@/components/product/product-card";
+import { ShareButton } from "@/components/product/share-button";
 import { productsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils";
+import { config } from "@/config";
 import type { ProductDetail, ProductSummary, PricePoint, Review, DudScoreLabel } from "@/types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,16 +108,40 @@ interface ProductPageProps {
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const res = await productsApi.getDetail(slug);
+  const [detailRes, shareRes] = await Promise.all([
+    productsApi.getDetail(slug),
+    productsApi.getShareData(slug),
+  ]);
 
-  if (!res.success) {
+  if (!detailRes.success) {
     return { title: "Product Not Found — Whydud" };
   }
 
-  const p = res.data;
+  const p = detailRes.data;
+  const share = shareRes.success ? shareRes.data : null;
+  const fallbackDesc = `DudScore ${p.dudScore ?? "N/A"} · Best price ${formatPrice(p.currentBestPrice)} on ${p.currentBestMarketplace}`;
+  const ogTitle = share?.ogTitle ?? p.title;
+  const ogDescription = share?.ogDescription ?? fallbackDesc;
+  const ogImage = share?.ogImage ?? p.images?.[0];
+  const productUrl = share?.url ?? `${config.siteUrl}/product/${slug}`;
+
   return {
     title: `${p.title} — Whydud`,
-    description: `DudScore ${p.dudScore ?? "N/A"} · Best price ${formatPrice(p.currentBestPrice)} on ${p.currentBestMarketplace}`,
+    description: fallbackDesc,
+    openGraph: {
+      title: ogTitle,
+      description: ogDescription,
+      url: productUrl,
+      siteName: "Whydud",
+      type: "website",
+      ...(ogImage && { images: [{ url: ogImage, alt: p.title }] }),
+    },
+    twitter: {
+      card: ogImage ? "summary_large_image" : "summary",
+      title: ogTitle,
+      description: ogDescription,
+      ...(ogImage && { images: [ogImage] }),
+    },
   };
 }
 
@@ -245,10 +271,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
             ))}
           </nav>
 
-          {/* Brand + category */}
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-            {p.brand.name} · {p.category.name}
-          </p>
+          {/* Brand + category + share */}
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              {p.brand.name} · {p.category.name}
+            </p>
+            <ShareButton
+              url={`${config.siteUrl}/product/${p.slug}`}
+              title={p.title}
+              description={`DudScore ${p.dudScore ?? "N/A"} · Best price ${formatPrice(p.currentBestPrice)} on ${p.currentBestMarketplace}`}
+            />
+          </div>
 
           {/* Title */}
           <h1 className="text-xl font-bold text-slate-900 leading-snug mb-2">{p.title}</h1>

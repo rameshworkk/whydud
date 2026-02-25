@@ -7,6 +7,7 @@ import type {
   ProductSummary,
   PricePoint,
   Review,
+  ShareData,
 } from "@/types";
 
 export const productsApi = {
@@ -43,6 +44,9 @@ export const productsApi = {
 
   getAlternatives: (slug: string) =>
     apiClient.get<ProductSummary[]>(`/api/v1/products/${slug}/alternatives`),
+
+  getShareData: (slug: string) =>
+    apiClient.get<ShareData>(`/api/v1/products/${slug}/share`),
 
   compare: (slugs: string[]) =>
     apiClient.get<ProductDetail[]>(`/api/v1/compare`, {

@@ -311,3 +311,10 @@ export interface PriceAlert {
   lastAlertedAt: string | null;
   createdAt: string;
 }
+
+export interface ShareData {
+  url: string;
+  ogTitle: string;
+  ogDescription: string;
+  ogImage: string;
+}
