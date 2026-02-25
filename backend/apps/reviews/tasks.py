@@ -32,10 +32,28 @@ def run_sentiment_analysis(review_id: str) -> None:
 
 
 @shared_task(queue="scoring")
-def detect_fake_reviews(product_id: str) -> None:
-    """Rule-based fake review detection (copy-paste, burst, distribution)."""
-    # TODO Sprint 3 Week 7
-    pass
+def detect_fake_reviews(product_id: str) -> dict:
+    """Rule-based fake review detection (copy-paste, burst, distribution).
+
+    Runs 5 heuristic checks per review:
+      1. Copy-paste / duplicate content (content_hash)
+      2. Rating burst (many same-rating reviews in one day)
+      3. Suspiciously short 5-star reviews
+      4. Reviewer account patterns (new account, only 5-star, single brand)
+      5. Unverified purchase with 5-star rating
+
+    Updates ``fraud_flags``, ``credibility_score``, and ``is_flagged`` on
+    each review. Returns summary dict: ``{total, flagged, updated}``.
+    """
+    from .fraud_detection import detect_fake_reviews as _run_detection
+
+    result = _run_detection(product_id)
+    logger.info(
+        "detect_fake_reviews task product=%s result=%s",
+        product_id,
+        result,
+    )
+    return result
 
 
 @shared_task(queue="scoring")

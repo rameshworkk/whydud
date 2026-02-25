@@ -209,3 +209,112 @@ class EmailSendConfig:
                 "reliancedigital.in",
             ],
         )
+
+
+# ---------------------------------------------------------------------------
+# DudScore Computation
+# ---------------------------------------------------------------------------
+
+class ScoringConfig:
+    """Tunable thresholds for the DudScore calculation engine."""
+
+    @classmethod
+    def sentiment_half_life_days(cls) -> int:
+        """Exponential decay half-life for review recency weighting."""
+        return _get("SCORING_SENTIMENT_HALF_LIFE_DAYS", 90)
+
+    @classmethod
+    def verified_purchase_weight(cls) -> float:
+        """Weight multiplier for verified-purchase reviews in sentiment calc."""
+        return _get("SCORING_VERIFIED_PURCHASE_WEIGHT", 2.0)
+
+    @classmethod
+    def price_stability_window_days(cls) -> int:
+        """Window for price CoV and stability calculations."""
+        return _get("SCORING_PRICE_STABILITY_WINDOW_DAYS", 90)
+
+    @classmethod
+    def return_signal_min_datapoints(cls) -> int:
+        """Minimum data points before return signal uses real data."""
+        return _get("SCORING_RETURN_SIGNAL_MIN_DATAPOINTS", 10)
+
+    @classmethod
+    def review_burst_window_days(cls) -> int:
+        """Sliding window (days) for review burst detection."""
+        return _get("SCORING_REVIEW_BURST_WINDOW_DAYS", 2)
+
+    @classmethod
+    def review_burst_fraction(cls) -> float:
+        """Fraction of total reviews in burst window to trigger flag."""
+        return _get("SCORING_REVIEW_BURST_FRACTION", 0.30)
+
+    @classmethod
+    def flash_sale_penalty_threshold(cls) -> int:
+        """Number of discount events in window that triggers instability penalty."""
+        return _get("SCORING_FLASH_SALE_PENALTY_THRESHOLD", 10)
+
+
+# ---------------------------------------------------------------------------
+# Fraud Detection
+# ---------------------------------------------------------------------------
+
+class FraudDetectionConfig:
+    """Tunable thresholds for rule-based fake review detection."""
+
+    @classmethod
+    def short_review_max_chars(cls) -> int:
+        """Reviews shorter than this (with 5-star) are flagged as suspiciously short."""
+        return _get("FRAUD_SHORT_REVIEW_MAX_CHARS", 20)
+
+    @classmethod
+    def burst_count_threshold(cls) -> int:
+        """Number of same-rating reviews in a single day to trigger burst flag."""
+        return _get("FRAUD_BURST_COUNT_THRESHOLD", 5)
+
+    @classmethod
+    def duplicate_count_threshold(cls) -> int:
+        """Minimum duplicate content_hash occurrences to trigger copy-paste flag."""
+        return _get("FRAUD_DUPLICATE_COUNT_THRESHOLD", 2)
+
+    @classmethod
+    def flag_threshold(cls) -> int:
+        """Number of fraud signals required to auto-flag a review."""
+        return _get("FRAUD_FLAG_THRESHOLD", 2)
+
+    @classmethod
+    def new_account_days(cls) -> int:
+        """Accounts younger than this (days) are considered 'new' for pattern checks."""
+        return _get("FRAUD_NEW_ACCOUNT_DAYS", 30)
+
+
+# ---------------------------------------------------------------------------
+# Deal Detection
+# ---------------------------------------------------------------------------
+
+class DealDetectionConfig:
+    """Tunable thresholds for the deal detection engine."""
+
+    @classmethod
+    def error_price_ratio(cls) -> float:
+        """Current price must be below this fraction of 30-day avg to flag error pricing."""
+        return _get("DEAL_ERROR_PRICE_RATIO", 0.50)
+
+    @classmethod
+    def genuine_discount_ratio(cls) -> float:
+        """Current price must be below this fraction of MRP for genuine discount."""
+        return _get("DEAL_GENUINE_DISCOUNT_RATIO", 0.85)
+
+    @classmethod
+    def avg_price_window_days(cls) -> int:
+        """Number of days to compute the rolling average price."""
+        return _get("DEAL_AVG_PRICE_WINDOW_DAYS", 30)
+
+    @classmethod
+    def min_snapshots_for_avg(cls) -> int:
+        """Minimum price snapshots required before trusting the average."""
+        return _get("DEAL_MIN_SNAPSHOTS_FOR_AVG", 3)
+
+    @classmethod
+    def batch_size(cls) -> int:
+        """Products processed per batch in detect_deals."""
+        return _get("DEAL_DETECTION_BATCH_SIZE", 200)

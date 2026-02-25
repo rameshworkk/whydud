@@ -54,5 +54,13 @@ app.conf.beat_schedule = {
         "task": "apps.search.tasks.full_reindex",
         "schedule": crontab(minute=0, hour=1),  # daily at 01:00 UTC
     },
-    # TODO Sprint 4: "deal-detection-30m": { ... }
+    "dudscore-full-recalc-monthly": {
+        "task": "apps.scoring.tasks.full_dudscore_recalculation",
+        "schedule": crontab(minute=0, hour=3, day_of_month=1),  # 1st of month, 03:00 UTC
+    },
+    "detect-deals-2h": {
+        "task": "apps.deals.tasks.detect_blockbuster_deals",
+        "schedule": crontab(minute=0, hour="*/2"),  # every 2 hours at :00
+        "options": {"queue": "scoring"},
+    },
 }

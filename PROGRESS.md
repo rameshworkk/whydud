@@ -173,10 +173,10 @@ GET  /api/v1/email/whydud/status/    → Email status
 |---|---|---|
 | Scraping spiders | Spider classes for Amazon.in, Flipkart — all methods `pass` | Sprint 2 |
 | Email webhook | Endpoint accepts POST, does nothing | Sprint 3 |
-| DudScore calculation | Celery task is a stub, no sentiment/rating/fraud scoring | Sprint 3 |
+| ~~DudScore calculation~~ | ~~Celery task is a stub, no sentiment/rating/fraud scoring~~ | ✅ Done |
 | Price history collection | No actual price snapshots being taken | Sprint 2 |
 | Razorpay payments | Returns 501 | Sprint 4 |
-| Fake review detection | Model exists, no detection rules | Sprint 3 |
+| ~~Fake review detection~~ | ~~Model exists, no detection rules~~ | ✅ Done |
 | Deal detection | No actual price anomaly detection | Sprint 3 |
 | Email parsing | No order extraction from emails | Sprint 3 |
 | Price alerts | Check task is stub | Sprint 2 |
@@ -254,7 +254,7 @@ GET  /api/v1/email/whydud/status/    → Email status
 | `default` | — | moderate_discussion, flag_spam_reply |
 | `scraping` | run_marketplace_spider, fetch_new_listings | — |
 | `email` | send_verification_email, send_password_reset_email | process_inbound_email, check_return_window_alerts, detect_refund_delays |
-| `scoring` | — | compute_dudscore, full_dudscore_recalculation, index_product, full_reindex |
+| `scoring` | compute_dudscore, full_dudscore_recalculation, sync_products_to_meilisearch, full_reindex | — |
 | `alerts` | — | check_price_alerts, send_price_drop_notification |
 
 ---
@@ -639,3 +639,45 @@ Not configured yet:
 - **Updated URL routing** in `backend/apps/email_intel/urls/__init__.py`
   - `inbox/send` placed before `inbox/<uuid:pk>` to avoid UUID path capture conflict
   - `inbox/<uuid:pk>/reply` added after detail route
+
+### 2026-02-26 — DudScore Algorithm Implementation (Sprint 3 Week 7)
+- **Created `backend/apps/scoring/components.py`** — all 6 DudScore component calculators + 2 multiplier helpers
+  - `calculate_sentiment_score(product_id)` → 0-1: weighted avg sentiment via pre-computed `Review.sentiment_score` with TextBlob fallback, exponential decay (half-life 90d), verified purchase 2x weight, backfills Review.sentiment_score on first run
+  - `calculate_rating_quality_score(product_id)` → 0-1: std dev base score + bimodal distribution penalty (40%) + skewness bonus for healthy left-skewed distributions
+  - `calculate_price_value_score(product_id)` → 0-1: rating/price value ratio percentile-ranked within product's category
+  - `calculate_review_credibility_score(product_id)` → 0-1: 4-signal composite — verified purchase % (0.35), review length quality (0.25), copy-paste uniqueness via content_hash (0.25), review burst detection (0.15)
+  - `calculate_price_stability_score(product_id)` → 0-1: price Coefficient of Variation over 90d + inflation spike penalty (>15% jump then drop) + flash sale frequency penalty
+  - `calculate_return_signal_score(product_id)` → 0-1: return/refund rate from ParsedOrder + RefundTracking, cold start 0.5 when <10 data points
+  - `calculate_fraud_penalty_multiplier(product_id)` → 0.5-1.0: based on `Review.is_flagged` percentage (>30% → 0.7x)
+  - `calculate_confidence_multiplier(product_id)` → (0.6-1.0, label): 5-tier system per ARCHITECTURE.md (<5→0.6, 5-19→0.7, 20-49→0.8, 50-199→0.9, 200+→1.0) + price history depth (-0.1) + marketplace breadth (-0.05) adjustments
+  - `compute_all_components(product_id)` → `ComponentResult` NamedTuple orchestrator
+- **Replaced `backend/apps/scoring/tasks.py`** — full DudScore Celery tasks
+  - `compute_dudscore(product_id)` (`queue="scoring"`, `bind=True`, `max_retries=2`):
+    - Loads active `DudScoreConfig` weights, runs all component calculators
+    - Weighted sum × fraud multiplier × confidence multiplier → 0-100 scale
+    - Spike detection: logs warning if score delta > `anomaly_spike_threshold` (saves anyway for v1)
+    - Inserts `DudScoreHistory` via raw SQL (TimescaleDB hypertable, no auto PK) with full `component_scores` JSON
+    - Updates `Product.dud_score`, `dud_score_confidence`, `dud_score_updated_at`
+    - Returns summary dict with all component scores
+  - `full_dudscore_recalculation()` (`queue="scoring"`):
+    - Fans out individual `compute_dudscore.delay()` per active product for Celery concurrency + fault isolation
+- **Added `ScoringConfig`** to `backend/common/app_settings.py`
+  - 7 tunable thresholds: sentiment_half_life_days (90), verified_purchase_weight (2.0), price_stability_window_days (90), return_signal_min_datapoints (10), review_burst_window_days (2), review_burst_fraction (0.30), flash_sale_penalty_threshold (10)
+- **Added Celery Beat schedule** to `backend/whydud/celery.py`
+  - `dudscore-full-recalc-monthly`: `crontab(minute=0, hour=3, day_of_month=1)` — 1st of month, 03:00 UTC
+
+### 2026-02-26 — Fake Review Detection Module (Sprint 3 Week 7)
+- **Created `backend/apps/reviews/fraud_detection.py`** — rule-based fake review detection v1
+  - `detect_fake_reviews(product_id)` — main orchestrator, returns `{total, flagged, updated}`
+  - **Rule 1 — Copy-paste detection:** checks `content_hash` duplicates across product reviews (threshold: 2+ identical hashes)
+  - **Rule 2 — Rating burst:** detects N+ same-rating reviews posted on the same calendar day (threshold: 5)
+  - **Rule 3 — Suspiciously short 5-star:** body < 20 chars with 5-star rating
+  - **Rule 4 — Reviewer account patterns:** new account (<30 days) + all reviews are 5-star + single brand + at least 2 reviews
+  - **Rule 5 — Unverified 5-star:** `is_verified_purchase=False` with 5-star rating
+  - **Credibility scoring (0.00–1.00):** starts at 1.00, deducts per-flag penalties (copy_paste: -0.30, rating_burst: -0.20, suspicious_reviewer: -0.25, suspiciously_short: -0.15, unverified_5star: -0.10), bonuses for verified purchase (+0.10), media (+0.05), detailed body 200+ chars (+0.05)
+  - Auto-flags reviews with 2+ fraud signals (`is_flagged=True`)
+  - Pre-computes content_hash counts and burst windows once per product (efficient — avoids N+1 queries)
+  - Processes reviews via `.iterator(chunk_size=500)` for memory efficiency
+- **Added `FraudDetectionConfig`** to `backend/common/app_settings.py` — 5 tuneable thresholds:
+  - `FRAUD_SHORT_REVIEW_MAX_CHARS` (20), `FRAUD_BURST_COUNT_THRESHOLD` (5), `FRAUD_DUPLICATE_COUNT_THRESHOLD` (2), `FRAUD_FLAG_THRESHOLD` (2), `FRAUD_NEW_ACCOUNT_DAYS` (30)
+- **Wired `detect_fake_reviews` Celery task** in `backend/apps/reviews/tasks.py` — replaced stub with real implementation that calls `fraud_detection.detect_fake_reviews()` and returns summary dict
