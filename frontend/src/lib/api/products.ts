@@ -63,6 +63,18 @@ export const clicksApi = {
     ),
 };
 
+export const recentlyViewedApi = {
+  /** POST /api/v1/me/recently-viewed — log a product view (auth required) */
+  log: (productSlug: string) =>
+    apiClient.post<void>("/api/v1/me/recently-viewed", { productSlug }),
+
+  /** GET /api/v1/me/recently-viewed — list recently viewed products (auth required) */
+  list: (limit = 8) =>
+    apiClient.get<ProductSummary[]>("/api/v1/me/recently-viewed", {
+      params: { limit },
+    }),
+};
+
 export const dealsApi = {
   /** Returns Deal[] in .data (paginated) */
   list: (params?: { dealType?: string; cursor?: string }) =>

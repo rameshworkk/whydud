@@ -10,6 +10,7 @@ import { RatingDistribution } from "@/components/reviews/rating-distribution";
 import { ReviewCard } from "@/components/reviews/review-card";
 import { ProductCard } from "@/components/product/product-card";
 import { ShareButton } from "@/components/product/share-button";
+import { RecentlyViewedTracker } from "@/components/product/recently-viewed-tracker";
 import { productsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils";
 import { config } from "@/config";
@@ -187,6 +188,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   return (
     <>
       <Header />
+      <RecentlyViewedTracker slug={slug} />
 
       {/* Three-column dashboard — each column scrolls independently */}
       <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#F8FAFC]">

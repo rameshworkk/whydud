@@ -13,6 +13,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/product/product-card";
 import { TrendingSection } from "@/components/product/trending-section";
+import { RecentlyViewedSection } from "@/components/product/recently-viewed-section";
 import { productsApi, dealsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils/format";
 import type { ProductSummary, Deal } from "@/types";
@@ -419,6 +420,9 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
+
+        {/* ── Recently Viewed (logged-in users only) ─────────────────────────── */}
+        <RecentlyViewedSection />
 
         {/* ── Buyer's Zone / Reviewer's Zone ───────────────────────────────── */}
         <section className="bg-[#F8FAFC] py-5">
