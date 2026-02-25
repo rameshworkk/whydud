@@ -1,10 +1,14 @@
 from celery import shared_task
 
-@shared_task(queue="email")
-def process_inbound_email(email_id: str) -> None:
+@shared_task(queue="email", bind=True, max_retries=3, default_retry_delay=60)
+def process_inbound_email(self, email_id: str) -> None:
     """Parse inbound email: categorize, extract order/refund data."""
-    # TODO Sprint 3 Week 8
-    pass
+    from .parsers import parse_email
+
+    try:
+        parse_email(email_id)
+    except Exception as exc:
+        self.retry(exc=exc)
 
 @shared_task(queue="email")
 def check_return_window_alerts() -> None:

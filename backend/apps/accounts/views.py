@@ -36,6 +36,7 @@ _USERNAME_RE = re.compile(r'^[a-z0-9][a-z0-9._-]{1,28}[a-z0-9]$')
 
 
 class RegisterView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
@@ -64,6 +65,7 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
@@ -124,6 +126,7 @@ class ChangePasswordView(APIView):
 
 class ForgotPasswordView(APIView):
     """Send password reset email with a one-time link."""
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
@@ -149,6 +152,7 @@ class ForgotPasswordView(APIView):
 
 class ResetPasswordView(APIView):
     """Reset password using uid + token from email link."""
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
@@ -180,6 +184,7 @@ class ResetPasswordView(APIView):
 
 class VerifyEmailView(APIView):
     """Verify email address using uid + token from verification email."""
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
@@ -337,6 +342,7 @@ class WhydudEmailView(APIView):
 
 
 class WhydudEmailAvailabilityView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request: Request) -> Response:

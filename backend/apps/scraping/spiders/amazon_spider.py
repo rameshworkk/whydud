@@ -1,16 +1,63 @@
-"""Amazon.in spider — products, prices, reviews, offers.
+"""Amazon.in spider — scrapes product listings, detail pages, prices, and offers.
+
+Uses Playwright for JS-rendered product detail pages (prices and availability
+are sometimes loaded via JavaScript on Amazon.in).
 
 Sprint 2, Week 4.
 """
+import hashlib
+import os
+import re
+import time
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+
+import scrapy
+
+from apps.scraping.items import ProductItem
 from .base_spider import BaseWhydudSpider
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-class AmazonINSpider(BaseWhydudSpider):
-    """Scrapes Amazon.in product pages using Playwright for JS rendering."""
-    
+ASIN_RE = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})")
+PRICE_RE = re.compile(r"[\d,.]+")
+RATING_RE = re.compile(r"([\d.]+)\s*out of\s*5")
+REVIEW_COUNT_RE = re.compile(r"([\d,]+)\s*(?:rating|review|customer)")
+
+MARKETPLACE_SLUG = "amazon-in"
+
+# Seed category search URLs — used when no ScraperJob provides URLs.
+SEED_CATEGORY_URLS = [
+    "https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031",
+    "https://www.amazon.in/s?k=laptops&rh=n%3A1375424031",
+    "https://www.amazon.in/s?k=headphones&rh=n%3A1388921031",
+    "https://www.amazon.in/s?k=air+purifiers&rh=n%3A5131299031",
+    "https://www.amazon.in/s?k=washing+machines&rh=n%3A1380365031",
+    "https://www.amazon.in/s?k=refrigerators&rh=n%3A1380369031",
+    "https://www.amazon.in/s?k=televisions&rh=n%3A1389396031",
+    "https://www.amazon.in/s?k=cameras&rh=n%3A1389175031",
+]
+
+# Maximum number of listing pages to follow per category.
+MAX_LISTING_PAGES = 5
+
+
+class AmazonIndiaSpider(BaseWhydudSpider):
+    """Scrapes Amazon.in product pages using Playwright for JS rendering.
+
+    Spider arguments (passed via ``-a``):
+      job_id       — UUID of a ScraperJob row to pull config from.
+      category_urls — comma-separated override URLs (testing convenience).
+      max_pages    — override MAX_LISTING_PAGES (default 5).
+      save_html    — "1" to save raw HTML for debugging (default "0").
+    """
+
     name = "amazon_in"
     allowed_domains = ["amazon.in", "www.amazon.in"]
-    
+
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
         "DOWNLOAD_HANDLERS": {
@@ -18,18 +65,492 @@ class AmazonINSpider(BaseWhydudSpider):
         },
     }
 
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def __init__(
+        self,
+        job_id: str | None = None,
+        category_urls: str | None = None,
+        max_pages: str | None = None,
+        save_html: str = "0",
+        *args,
+        **kwargs,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.job_id = job_id
+        self._category_urls: list[str] = (
+            [u.strip() for u in category_urls.split(",") if u.strip()]
+            if category_urls
+            else []
+        )
+        self._max_pages = int(max_pages) if max_pages else MAX_LISTING_PAGES
+        self._save_html = save_html == "1"
+        self._pages_followed: dict[str, int] = {}  # base_url → pages followed
+
+    # ------------------------------------------------------------------
+    # start_requests
+    # ------------------------------------------------------------------
+
     def start_requests(self):
-        # TODO Sprint 2 Week 4: load product URLs from DB and start crawling
-        pass
+        """Emit initial requests from ScraperJob config or seed categories."""
+        urls = self._load_urls()
+        for url in urls:
+            self.logger.info(f"Starting category: {url}")
+            yield scrapy.Request(
+                url,
+                callback=self.parse_listing_page,
+                errback=self.handle_error,
+                headers=self._make_headers(),
+                meta={"playwright": True},
+                dont_filter=True,
+            )
 
-    def parse(self, response):
-        # TODO Sprint 2 Week 4: extract product data
-        pass
+    def _load_urls(self) -> list[str]:
+        """Resolve the list of category/search URLs to crawl."""
+        # 1. Explicit CLI override
+        if self._category_urls:
+            return self._category_urls
 
-    def parse_product_detail(self, response):
-        # TODO Sprint 2 Week 4
-        pass
+        # 2. ScraperJob (from DB)
+        if self.job_id:
+            try:
+                from apps.scraping.models import ScraperJob
 
-    def parse_reviews(self, response):
-        # TODO Sprint 2 Week 6
-        pass
+                job = ScraperJob.objects.get(id=self.job_id)
+                # The ScraperJob.marketplace gives us the marketplace,
+                # but category URLs would need to come from config or job metadata.
+                # For now, use marketplace base_url + seed patterns.
+                self.logger.info(f"Running for job {self.job_id}, marketplace: {job.marketplace.slug}")
+            except Exception as exc:
+                self.logger.warning(f"Could not load ScraperJob {self.job_id}: {exc}")
+
+        # 3. Fallback to seed categories
+        return list(SEED_CATEGORY_URLS)
+
+    # ------------------------------------------------------------------
+    # Listing page (search results / category pages)
+    # ------------------------------------------------------------------
+
+    def parse_listing_page(self, response):
+        """Extract product links from a search results page."""
+        results = response.css('div[data-component-type="s-search-result"]')
+
+        if not results:
+            self.logger.warning(f"No search results found on {response.url}")
+            return
+
+        self.logger.info(f"Found {len(results)} results on {response.url}")
+
+        for result in results:
+            link = result.css("h2 a.a-link-normal::attr(href)").get()
+            if not link:
+                link = result.css("h2 a::attr(href)").get()
+            if not link:
+                continue
+
+            # Only follow actual product links (contain /dp/)
+            full_url = response.urljoin(link)
+            if "/dp/" not in full_url and "/gp/product/" not in full_url:
+                continue
+
+            yield scrapy.Request(
+                full_url,
+                callback=self.parse_product_page,
+                errback=self.handle_error,
+                headers=self._make_headers(),
+                meta={
+                    "playwright": True,
+                    "playwright_page_methods": [
+                        # Wait for price element to render (JS-loaded)
+                        {"method": "wait_for_selector", "selector": "#productTitle", "timeout": 10000},
+                    ],
+                },
+            )
+
+        # Pagination — follow "Next" link up to max_pages
+        base_url = response.url.split("&page=")[0].split("?page=")[0]
+        pages_so_far = self._pages_followed.get(base_url, 1)
+        if pages_so_far < self._max_pages:
+            next_link = response.css("a.s-pagination-next::attr(href)").get()
+            if next_link:
+                self._pages_followed[base_url] = pages_so_far + 1
+                yield scrapy.Request(
+                    response.urljoin(next_link),
+                    callback=self.parse_listing_page,
+                    errback=self.handle_error,
+                    headers=self._make_headers(),
+                    meta={"playwright": True},
+                )
+
+    # ------------------------------------------------------------------
+    # Product detail page
+    # ------------------------------------------------------------------
+
+    def parse_product_page(self, response):
+        """Extract all product data from an Amazon.in product detail page."""
+        asin = self._extract_asin(response)
+        if not asin:
+            self.logger.warning(f"Could not extract ASIN from {response.url}")
+            self.items_failed += 1
+            return
+
+        title = self._extract_title(response)
+        if not title:
+            self.logger.warning(f"No title found for ASIN {asin}")
+            self.items_failed += 1
+            return
+
+        # Save raw HTML for debugging (optional)
+        raw_html_path = None
+        if self._save_html:
+            raw_html_path = self._save_raw_html(response, asin)
+
+        item = ProductItem()
+        item["marketplace_slug"] = MARKETPLACE_SLUG
+        item["external_id"] = asin
+        item["url"] = self._canonical_url(asin)
+        item["title"] = title
+        item["brand"] = self._extract_brand(response)
+        item["price"] = self._extract_price(response)
+        item["mrp"] = self._extract_mrp(response)
+        item["images"] = self._extract_images(response)
+        item["rating"] = self._extract_rating(response)
+        item["review_count"] = self._extract_review_count(response)
+        item["specs"] = self._extract_specs(response)
+        item["seller_name"] = self._extract_seller(response)
+        item["seller_rating"] = None  # Amazon doesn't always expose seller rating on product page
+        item["in_stock"] = self._extract_availability(response)
+        item["fulfilled_by"] = self._extract_fulfilled_by(response)
+        item["about_bullets"] = self._extract_about_bullets(response)
+        item["offer_details"] = self._extract_offers(response)
+        item["raw_html_path"] = raw_html_path
+
+        self.items_scraped += 1
+        yield item
+
+    # ------------------------------------------------------------------
+    # Field extraction helpers
+    # ------------------------------------------------------------------
+
+    def _extract_asin(self, response) -> str | None:
+        """Extract ASIN from URL or page data attributes."""
+        # Try URL first
+        match = ASIN_RE.search(response.url)
+        if match:
+            return match.group(1)
+        # Try hidden input
+        asin = response.css('input[name="ASIN"]::attr(value)').get()
+        if asin:
+            return asin.strip()
+        # Try data attribute on body or product div
+        asin = response.css("#ASIN::attr(value)").get()
+        return asin.strip() if asin else None
+
+    def _extract_title(self, response) -> str | None:
+        """Extract product title."""
+        title = response.css("#productTitle::text").get()
+        if title:
+            return title.strip()
+        # Fallback: try the Apple-style title
+        title = response.css("#title span::text").get()
+        return title.strip() if title else None
+
+    def _extract_brand(self, response) -> str | None:
+        """Extract brand name from byline or tech specs."""
+        # Primary: byline link
+        byline = response.css("a#bylineInfo::text").get()
+        if byline:
+            # "Visit the Samsung Store" → "Samsung"
+            byline = byline.strip()
+            byline = re.sub(r"^Visit the\s+", "", byline, flags=re.IGNORECASE)
+            byline = re.sub(r"\s+Store$", "", byline, flags=re.IGNORECASE)
+            byline = re.sub(r"^Brand:\s*", "", byline, flags=re.IGNORECASE)
+            if byline:
+                return byline
+
+        # Fallback: tech specs table
+        for row in response.css("#productDetails_techSpec_section_1 tr"):
+            label = row.css("th::text").get("").strip().lower()
+            if label in ("brand", "manufacturer"):
+                return row.css("td::text").get("").strip()
+
+        return None
+
+    def _extract_price(self, response) -> Decimal | None:
+        """Extract current sale price in paisa."""
+        selectors = [
+            # Core price display (desktop)
+            '#corePriceDisplay_desktop_feature_div .a-price .a-offscreen::text',
+            # Deal price
+            '#dealprice_feature_div .a-price .a-offscreen::text',
+            # Apex price
+            '#apex_desktop .a-price .a-offscreen::text',
+            # Generic first .a-price on page
+            'span.a-price span.a-offscreen::text',
+            # Legacy selectors
+            '#priceblock_dealprice::text',
+            '#priceblock_ourprice::text',
+        ]
+        for sel in selectors:
+            text = response.css(sel).get()
+            price = self._parse_price_text(text)
+            if price is not None:
+                return price
+        return None
+
+    def _extract_mrp(self, response) -> Decimal | None:
+        """Extract MRP (maximum retail price) in paisa."""
+        selectors = [
+            '.basisPrice .a-text-price span.a-offscreen::text',
+            '#corePriceDisplay_desktop_feature_div .a-text-price span.a-offscreen::text',
+            'span.a-text-price span.a-offscreen::text',
+            '#listPrice::text',
+            '#priceblock_listprice::text',
+        ]
+        for sel in selectors:
+            text = response.css(sel).get()
+            price = self._parse_price_text(text)
+            if price is not None:
+                return price
+        return None
+
+    def _extract_images(self, response) -> list[str]:
+        """Extract all product image URLs (full resolution)."""
+        images: list[str] = []
+
+        # Primary: landing/main image
+        main_img = response.css("#landingImage::attr(data-old-hires)").get()
+        if not main_img:
+            main_img = response.css("#landingImage::attr(src)").get()
+        if not main_img:
+            main_img = response.css("#imgBlkFront::attr(src)").get()
+        if main_img and "placeholder" not in main_img:
+            images.append(self._full_res_image(main_img))
+
+        # Alt images (thumbnail strip)
+        for img in response.css("#altImages .a-button-text img::attr(src)").getall():
+            if "placeholder" in img or "icon" in img:
+                continue
+            full = self._full_res_image(img)
+            if full not in images:
+                images.append(full)
+
+        # Fallback: try data-a-dynamic-image JSON on landing image
+        if not images:
+            dynamic = response.css("#landingImage::attr(data-a-dynamic-image)").get()
+            if dynamic:
+                try:
+                    import json
+                    url_map = json.loads(dynamic)
+                    # Keys are URLs, values are [width, height] — pick largest
+                    sorted_urls = sorted(url_map.items(), key=lambda x: x[1][0], reverse=True)
+                    for url, _ in sorted_urls[:6]:
+                        images.append(url)
+                except (ValueError, KeyError):
+                    pass
+
+        return images[:10]  # cap at 10 images
+
+    def _extract_rating(self, response) -> Decimal | None:
+        """Extract average star rating (0-5)."""
+        selectors = [
+            '#acrPopover span.a-icon-alt::text',
+            'span[data-hook="rating-out-of-text"]::text',
+            '#averageCustomerReviews .a-icon-alt::text',
+        ]
+        for sel in selectors:
+            text = response.css(sel).get()
+            if text:
+                match = RATING_RE.search(text)
+                if match:
+                    try:
+                        return Decimal(match.group(1))
+                    except InvalidOperation:
+                        pass
+        return None
+
+    def _extract_review_count(self, response) -> int | None:
+        """Extract total number of ratings/reviews."""
+        selectors = [
+            '#acrCustomerReviewText::text',
+            'span[data-hook="total-review-count"] span::text',
+            '#acrCustomerReviewLink span::text',
+        ]
+        for sel in selectors:
+            text = response.css(sel).get()
+            if text:
+                match = REVIEW_COUNT_RE.search(text)
+                if match:
+                    return int(match.group(1).replace(",", ""))
+        return None
+
+    def _extract_seller(self, response) -> str | None:
+        """Extract seller name."""
+        selectors = [
+            '#sellerProfileTriggerId::text',
+            '#merchant-info a::text',
+            '#tabular-buybox .tabular-buybox-text[tabular-attribute-name="Sold by"] span::text',
+        ]
+        for sel in selectors:
+            text = response.css(sel).get()
+            if text and text.strip():
+                return text.strip()
+        return None
+
+    def _extract_availability(self, response) -> bool:
+        """Determine if product is in stock."""
+        avail_text = response.css("#availability span.a-size-medium::text").get()
+        if not avail_text:
+            avail_text = response.css("#availability span::text").get()
+        if avail_text:
+            avail_lower = avail_text.strip().lower()
+            if "in stock" in avail_lower:
+                return True
+            if "currently unavailable" in avail_lower or "out of stock" in avail_lower:
+                return False
+        # If we found a price, assume in stock
+        return self._extract_price(response) is not None
+
+    def _extract_fulfilled_by(self, response) -> str | None:
+        """Extract fulfilment info (Amazon or third-party)."""
+        selectors = [
+            '#tabular-buybox .tabular-buybox-text[tabular-attribute-name="Ships from"] span::text',
+            '#SSOFp498_feature_div span::text',
+        ]
+        for sel in selectors:
+            text = response.css(sel).get()
+            if text and text.strip():
+                return text.strip()
+        # Check for "Fulfilled by Amazon" badge
+        fba = response.css("#deliveryBlockMessage .a-text-bold::text").get()
+        if fba and "amazon" in fba.lower():
+            return "Amazon"
+        return None
+
+    def _extract_specs(self, response) -> dict[str, str]:
+        """Extract technical specifications as key-value pairs."""
+        specs: dict[str, str] = {}
+
+        # Primary: tech spec table
+        for row in response.css("#productDetails_techSpec_section_1 tr"):
+            key = row.css("th::text").get("").strip()
+            val = row.css("td::text").get("").strip()
+            if key and val:
+                specs[key] = val
+
+        # Fallback: additional info table
+        for row in response.css("#productDetails_detailBullets_sections1 tr"):
+            key = row.css("th::text").get("").strip()
+            val = row.css("td::text").get("").strip()
+            if key and val:
+                specs[key] = val
+
+        # Fallback: detail bullets (flat list)
+        if not specs:
+            for li in response.css("#detailBullets_feature_div li"):
+                text = li.css("span.a-list-item::text").getall()
+                # Format: ["Key\n", "Value\n"]
+                parts = [t.strip() for t in text if t.strip()]
+                if len(parts) >= 2:
+                    key = parts[0].rstrip(" :\u200f\u200e")
+                    val = parts[1].lstrip(" :\u200f\u200e")
+                    if key and val:
+                        specs[key] = val
+
+        return specs
+
+    def _extract_about_bullets(self, response) -> list[str]:
+        """Extract 'About this item' bullet points."""
+        bullets: list[str] = []
+        for span in response.css("#feature-bullets ul li span.a-list-item::text").getall():
+            text = span.strip()
+            if text and not text.startswith("›"):
+                bullets.append(text)
+        return bullets
+
+    def _extract_offers(self, response) -> list[dict]:
+        """Extract bank offers, coupons, and EMI details."""
+        offers: list[dict] = []
+
+        # Bank offers section
+        for offer_div in response.css("#sopp_feature_div .a-row, #itembox-InstallmentCalculator .a-row"):
+            text = offer_div.css("::text").getall()
+            offer_text = " ".join(t.strip() for t in text if t.strip())
+            if not offer_text or len(offer_text) < 10:
+                continue
+            offer = {"text": offer_text[:500]}
+
+            # Try to identify offer type
+            lower = offer_text.lower()
+            if "cashback" in lower:
+                offer["type"] = "cashback"
+            elif "emi" in lower or "no cost emi" in lower:
+                offer["type"] = "emi"
+            elif "coupon" in lower:
+                offer["type"] = "coupon"
+            elif "bank" in lower or "card" in lower:
+                offer["type"] = "bank_offer"
+            else:
+                offer["type"] = "other"
+
+            offers.append(offer)
+
+        return offers[:10]  # cap at 10
+
+    # ------------------------------------------------------------------
+    # Parsing utilities
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_price_text(text: str | None) -> Decimal | None:
+        """Parse price text like '₹24,999' or '₹1,24,999.00' to paisa Decimal.
+
+        Returns None if text is empty or unparseable.
+        """
+        if not text:
+            return None
+        text = text.strip()
+        # Extract numeric portion (digits, commas, dots)
+        match = PRICE_RE.search(text)
+        if not match:
+            return None
+        cleaned = match.group(0).replace(",", "")
+        if not cleaned:
+            return None
+        try:
+            rupees = Decimal(cleaned)
+            if rupees <= 0:
+                return None
+            return rupees * 100  # convert to paisa
+        except InvalidOperation:
+            return None
+
+    @staticmethod
+    def _full_res_image(url: str) -> str:
+        """Convert Amazon thumbnail URL to full-resolution version.
+
+        Amazon image URLs contain size tokens like '_SS40_', '_SX300_', '_SL1500_'.
+        Replace with a high-res token.
+        """
+        return re.sub(r"\._[A-Z]{2}\d+_\.", "._SL1500_.", url)
+
+    @staticmethod
+    def _canonical_url(asin: str) -> str:
+        """Build a clean canonical URL for an ASIN."""
+        return f"https://www.amazon.in/dp/{asin}"
+
+    def _save_raw_html(self, response, asin: str) -> str | None:
+        """Save response HTML to local filesystem for debugging."""
+        try:
+            raw_dir = Path(os.environ.get("SCRAPING_RAW_HTML_DIR", "data/raw_html"))
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            filename = f"amazon_{asin}_{timestamp}.html"
+            filepath = raw_dir / filename
+            filepath.write_bytes(response.body)
+            return str(filepath)
+        except OSError as exc:
+            self.logger.warning(f"Could not save raw HTML for {asin}: {exc}")
+            return None

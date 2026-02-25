@@ -1,6 +1,8 @@
 """Email intelligence views — inbox, purchases, webhooks."""
 import hashlib
 import hmac
+import logging
+import uuid
 
 from django.conf import settings
 from django.db.models import Sum, Count, F
@@ -12,6 +14,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import WhydudEmail
+from common.encryption import encrypt
 from common.pagination import CursorPagination
 from common.permissions import IsConnectedUser
 from common.utils import error_response, success_response
@@ -28,8 +32,14 @@ from .serializers import (
     InboxEmailSerializer,
     ParsedOrderSerializer,
     RefundTrackingSerializer,
+    ReplyEmailSerializer,
     ReturnWindowSerializer,
+    SendEmailSerializer,
 )
+from .send_service import SendEmailError, send_email
+from .tasks import process_inbound_email
+
+logger = logging.getLogger(__name__)
 
 
 class InboxListView(APIView):
@@ -210,12 +220,103 @@ class SubscriptionsView(APIView):
         return success_response(DetectedSubscriptionSerializer(qs, many=True).data)
 
 
+class SendEmailView(APIView):
+    """POST /api/v1/inbox/send — compose and send a new email from @whyd.* address."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = SendEmailSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response("validation_error", str(serializer.errors))
+
+        try:
+            result = send_email(
+                from_user_id=str(request.user.id),
+                to_address=serializer.validated_data["to"],
+                subject=serializer.validated_data["subject"],
+                body_html=serializer.validated_data["body_html"],
+                body_text=serializer.validated_data.get("body_text") or None,
+            )
+        except SendEmailError as exc:
+            status_map = {
+                "no_whydud_email": 400,
+                "rate_limit_exceeded": 429,
+                "invalid_recipient": 400,
+                "config_error": 503,
+                "send_failed": 502,
+            }
+            return error_response(exc.code, exc.message, status=status_map.get(exc.code, 400))
+
+        return success_response({
+            "email_id": result.inbox_email_id,
+            "resend_message_id": result.resend_message_id,
+        }, status=201)
+
+
+class ReplyEmailView(APIView):
+    """POST /api/v1/inbox/:id/reply — reply to an existing inbound email."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, pk: str) -> Response:
+        # Fetch the original email being replied to
+        original = get_object_or_404(
+            InboxEmail, pk=pk, user=request.user, is_deleted=False
+        )
+
+        serializer = ReplyEmailSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response("validation_error", str(serializer.errors))
+
+        # Reply goes back to the original sender
+        reply_to_address = original.sender_address
+        reply_subject = original.subject
+        if not reply_subject.lower().startswith("re:"):
+            reply_subject = f"Re: {reply_subject}"
+
+        try:
+            result = send_email(
+                from_user_id=str(request.user.id),
+                to_address=reply_to_address,
+                subject=reply_subject,
+                body_html=serializer.validated_data["body_html"],
+                body_text=serializer.validated_data.get("body_text") or None,
+                reply_to_message_id=original.message_id,
+            )
+        except SendEmailError as exc:
+            status_map = {
+                "no_whydud_email": 400,
+                "rate_limit_exceeded": 429,
+                "invalid_recipient": 400,
+                "config_error": 503,
+                "send_failed": 502,
+            }
+            return error_response(exc.code, exc.message, status=status_map.get(exc.code, 400))
+
+        return success_response({
+            "email_id": result.inbox_email_id,
+            "resend_message_id": result.resend_message_id,
+        }, status=201)
+
+
 class InboundEmailWebhookView(APIView):
-    """Cloudflare Email Worker → Django. Validates HMAC-SHA256 signature."""
+    """Cloudflare Email Worker → Django. Validates HMAC-SHA256 signature.
+
+    Expected payload from CF Email Worker:
+        to          — full recipient address (e.g. "ramesh@whyd.in")
+        from        — sender email address
+        from_name   — sender display name (optional)
+        subject     — email subject
+        message_id  — RFC 5322 Message-ID header
+        text        — plain-text body
+        html        — HTML body
+        size        — raw message size in bytes (optional)
+        has_attachments — boolean (optional)
+    """
     authentication_classes = []
     permission_classes = []
 
     def post(self, request: Request) -> Response:
+        # --- HMAC signature verification ---
         secret = getattr(settings, "CLOUDFLARE_EMAIL_WEBHOOK_SECRET", "")
         if secret:
             sig = request.headers.get("X-Webhook-Signature", "")
@@ -226,9 +327,56 @@ class InboundEmailWebhookView(APIView):
             if not hmac.compare_digest(sig, expected):
                 return error_response("unauthorized", "Invalid webhook signature.", status=401)
 
-        # TODO Sprint 3 Week 8: enqueue email.process_inbound_email Celery task
-        # payload = request.data
-        return Response({"ok": True}, status=202)
+        # --- Parse recipient → username + domain ---
+        recipient = request.data.get("to", "")
+        if "@" not in recipient:
+            return error_response("bad_request", "Missing or invalid 'to' field.", status=400)
+
+        username, domain = recipient.rsplit("@", 1)
+
+        # --- Look up WhydudEmail by (username, domain) ---
+        whydud_email = (
+            WhydudEmail.objects
+            .filter(username=username, domain=domain, is_active=True)
+            .select_related("user")
+            .first()
+        )
+        if not whydud_email:
+            logger.warning("inbound_email_unknown_recipient", extra={"recipient": recipient})
+            return error_response("not_found", "Unknown recipient.", status=404)
+
+        # --- Encrypt body (AES-256-GCM) ---
+        body_text_enc = encrypt(request.data.get("text", ""))
+        body_html_enc = encrypt(request.data.get("html", ""))
+
+        # --- Create InboxEmail record ---
+        message_id = request.data.get("message_id", "") or str(uuid.uuid4())
+        inbox_email = InboxEmail.objects.create(
+            user_id=whydud_email.user_id,
+            whydud_email=whydud_email,
+            direction=InboxEmail.Direction.INBOUND,
+            message_id=message_id,
+            sender_address=request.data.get("from", ""),
+            sender_name=request.data.get("from_name", ""),
+            recipient_address=recipient,
+            subject=request.data.get("subject", ""),
+            body_text_encrypted=body_text_enc,
+            body_html_encrypted=body_html_enc,
+            raw_size_bytes=request.data.get("size"),
+            has_attachments=bool(request.data.get("has_attachments", False)),
+            received_at=timezone.now(),
+        )
+
+        # --- Update WhydudEmail stats ---
+        WhydudEmail.objects.filter(pk=whydud_email.pk).update(
+            total_emails_received=F("total_emails_received") + 1,
+            last_email_received_at=timezone.now(),
+        )
+
+        # --- Dispatch Celery parsing task ---
+        process_inbound_email.delay(str(inbox_email.id))
+
+        return Response({"ok": True, "email_id": str(inbox_email.id)}, status=202)
 
 
 class RazorpayWebhookView(APIView):

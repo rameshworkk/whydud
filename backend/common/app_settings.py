@@ -109,3 +109,103 @@ class SearchConfig:
                 "top_rated": ["avg_rating:desc"],
             },
         )
+
+
+# ---------------------------------------------------------------------------
+# Scraping
+# ---------------------------------------------------------------------------
+
+class ScrapingConfig:
+    """Configurable values for marketplace scraping."""
+
+    @classmethod
+    def spider_timeout(cls) -> int:
+        """Max runtime per spider in seconds."""
+        return _get("SCRAPING_SPIDER_TIMEOUT", 3600)
+
+    @classmethod
+    def max_listing_pages(cls) -> int:
+        """Max pagination pages to follow per category."""
+        return _get("SCRAPING_MAX_LISTING_PAGES", 5)
+
+    @classmethod
+    def raw_html_dir(cls) -> str:
+        """Directory to save raw HTML for debugging."""
+        return _get("SCRAPING_RAW_HTML_DIR", "data/raw_html")
+
+    @classmethod
+    def spider_map(cls) -> dict[str, str]:
+        """Marketplace slug → spider name mapping."""
+        return _get(
+            "SCRAPING_SPIDER_MAP",
+            {
+                "amazon-in": "amazon_in",
+                "flipkart": "flipkart",
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Product Matching
+# ---------------------------------------------------------------------------
+
+class MatchingConfig:
+    """Thresholds for the product matching engine (products/matching.py)."""
+
+    @classmethod
+    def auto_merge_threshold(cls) -> float:
+        """Minimum confidence to auto-merge a listing into an existing product."""
+        return _get("MATCHING_AUTO_MERGE_THRESHOLD", 0.85)
+
+    @classmethod
+    def review_threshold(cls) -> float:
+        """Minimum confidence for manual-review queue.  Below this → new product."""
+        return _get("MATCHING_REVIEW_THRESHOLD", 0.60)
+
+    @classmethod
+    def fuzzy_title_threshold(cls) -> float:
+        """Minimum SequenceMatcher ratio for fuzzy title matching."""
+        return _get("MATCHING_FUZZY_TITLE_THRESHOLD", 0.80)
+
+    @classmethod
+    def max_candidates(cls) -> int:
+        """Max candidate products to evaluate per match attempt."""
+        return _get("MATCHING_MAX_CANDIDATES", 500)
+
+
+# ---------------------------------------------------------------------------
+# Email Sending
+# ---------------------------------------------------------------------------
+
+class EmailSendConfig:
+    """Rate limits and allowed domains for outbound email via Resend."""
+
+    @classmethod
+    def daily_send_limit(cls) -> int:
+        """Max emails a user can send per day."""
+        return _get("EMAIL_SEND_DAILY_LIMIT", 10)
+
+    @classmethod
+    def monthly_send_limit(cls) -> int:
+        """Max emails a user can send per month."""
+        return _get("EMAIL_SEND_MONTHLY_LIMIT", 50)
+
+    @classmethod
+    def allowed_marketplace_domains(cls) -> list[str]:
+        """Known marketplace domains users can send to (+ subdomains)."""
+        return _get(
+            "EMAIL_ALLOWED_MARKETPLACE_DOMAINS",
+            [
+                "amazon.in",
+                "flipkart.com",
+                "myntra.com",
+                "nykaa.com",
+                "snapdeal.com",
+                "meesho.com",
+                "croma.com",
+                "ajio.com",
+                "tatacliq.com",
+                "jiomart.com",
+                "reliancedigital.in",
+            ],
+        )

@@ -214,7 +214,6 @@ AUTH_PASSWORD_VALIDATORS = [
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.TokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -298,6 +297,12 @@ OAUTH_ENCRYPTION_KEY = os.environ.get("OAUTH_ENCRYPTION_KEY", "")
 # ---------------------------------------------------------------------------
 
 CLOUDFLARE_EMAIL_WEBHOOK_SECRET = os.environ.get("CLOUDFLARE_EMAIL_WEBHOOK_SECRET", "")
+
+# ---------------------------------------------------------------------------
+# Resend (transactional email sending from @whyd.* addresses)
+# ---------------------------------------------------------------------------
+
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
 # ---------------------------------------------------------------------------
 # Razorpay

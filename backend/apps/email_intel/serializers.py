@@ -77,3 +77,17 @@ class DetectedSubscriptionSerializer(serializers.ModelSerializer):
         cycle_map = {"monthly": 12, "quarterly": 4, "half_yearly": 2, "yearly": 1}
         multiplier = cycle_map.get(obj.billing_cycle, 1)
         return float(obj.amount) * multiplier
+
+
+class SendEmailSerializer(serializers.Serializer):
+    """Validates POST /api/v1/inbox/send (compose new email)."""
+    to = serializers.EmailField()
+    subject = serializers.CharField(max_length=1000)
+    body_html = serializers.CharField()
+    body_text = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class ReplyEmailSerializer(serializers.Serializer):
+    """Validates POST /api/v1/inbox/:id/reply."""
+    body_html = serializers.CharField()
+    body_text = serializers.CharField(required=False, allow_blank=True, default="")

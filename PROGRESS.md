@@ -200,7 +200,7 @@ GET  /api/v1/email/whydud/status/    → Email status
 | Back-in-stock alerts | ❌ NOT BUILT (model exists, no alert logic) |
 | Share product/comparison | ❌ NOT BUILT |
 | Similar/alternative products | ❌ NOT BUILT |
-| Product matching engine | ❌ NOT BUILT |
+| Product matching engine | ✅ BUILT (4-step: EAN → brand+model+variant → brand+model → fuzzy title) |
 | Username suggestions | ❌ NOT BUILT |
 | Write a Review page | ❌ NOT BUILT |
 | Purchase proof upload | ❌ NOT BUILT |
@@ -373,3 +373,269 @@ Not configured yet:
 - Creates missing categories (air-purifiers, water-purifiers, vehicles) via get_or_create
 - Idempotent: uses update_or_create, supports `--flush` flag
 - Run: `python manage.py seed_preference_schemas`
+
+### 2026-02-25 — Notification Celery Tasks
+- Added `create_notification` task (`queue="default"`) to `backend/apps/accounts/tasks.py`
+  - Accepts: `user_id`, `type`, `title`, `body`, `action_url`, `action_label`, `entity_type`, `entity_id`, `metadata`
+  - Checks `NotificationPreference` for the notification type — respects `in_app` toggle (suppresses creation if disabled)
+  - Creates `Notification` record in DB
+  - Checks `email` preference channel — queues `send_notification_email` if email is enabled
+  - Falls back to model field defaults when no `NotificationPreference` row exists
+  - Returns `notification.pk` on success, `None` if suppressed
+- Added `send_notification_email` task (`queue="email"`, `max_retries=3`, `default_retry_delay=60`)
+  - Fetches `Notification` with `select_related("user")`
+  - Recipient priority: @whyd.* email (if active) → personal email
+  - Renders plain-text + inline-styled HTML (brand colors, CTA button, unsubscribe link)
+  - Sends via Django `send_mail` (Resend SMTP backend)
+  - Marks `email_sent=True` + `email_sent_at` on success
+  - Retries up to 3 times on failure (60s delay)
+- Added `NOTIFICATION_TYPE_TO_PREF_FIELD` mapping (10 types → preference field names)
+- No extra Celery registration needed — `app.autodiscover_tasks()` picks up `accounts/tasks.py` automatically
+
+### 2026-02-25 — Review Celery Tasks + Beat Schedule
+- Replaced `backend/apps/reviews/tasks.py` — kept existing stubs, added two real tasks:
+  - `publish_pending_reviews` (`queue="default"`) — bulk-publishes reviews where `is_published=False` and `publish_at <= now()`, returns count
+  - `update_reviewer_profiles` (`queue="scoring"`) — aggregates per-user stats from published Whydud reviews:
+    - Counts total_reviews, sums upvotes + helpful_votes, averages credibility_score
+    - Assigns level: bronze (1-4), silver (5-14), gold (15-29), platinum (30+)
+    - Ranks all profiles by total_upvotes_received → sets leaderboard_rank
+    - Top 10 → is_top_reviewer = True
+    - Uses get_or_create + bulk_update (batch_size=500)
+- Registered both in Celery Beat schedule (`backend/whydud/celery.py`):
+  - `publish-pending-reviews-hourly`: `crontab(minute=0)` — every hour at :00
+  - `update-reviewer-profiles-weekly`: `crontab(minute=0, hour=0, day_of_week="monday")` — Monday 00:00 UTC
+- Added `crontab` import to celery.py
+
+### 2026-02-25 — Price Alert Celery Task
+- Replaced `backend/apps/pricing/tasks.py` — implemented real `check_price_alerts` task:
+  - `queue="alerts"`, runs every 4 hours via Celery Beat (`check-price-alerts-4h`)
+  - Queries all active, un-triggered `PriceAlert` records with `select_related` + `iterator(chunk_size=500)`
+  - For each alert: finds cheapest in-stock `ProductListing.current_price` (marketplace-specific if alert.marketplace is set, otherwise global)
+  - Updates `alert.current_price` on every check (price tracking)
+  - If `current_price <= target_price`: triggers alert — sets `is_triggered`, `triggered_at`, `triggered_price`, `triggered_marketplace`, `notification_sent`, deactivates alert
+  - Fires `create_notification.delay()` with type `price_alert`, formatted price (Indian numbering ₹X,XX,XXX), marketplace name, product slug, and metadata
+  - Returns summary dict: `{checked, triggered, errors}`
+  - Helper `_format_price()` converts paisa to ₹ with Indian comma grouping
+- Registered in Celery Beat: `crontab(minute=0, hour="*/4")` — every 4 hours at :00
+- Removed resolved `# TODO Sprint 3: "price-alerts-4h"` comment from celery.py
+
+### 2026-02-25 — Amazon.in Spider + Scraping Pipeline (Sprint 2)
+- **Created `backend/apps/scraping/items.py`** — `ProductItem` Scrapy Item class
+  - Fields: marketplace_slug, external_id, url, title, brand, price (paisa), mrp (paisa), images, rating, review_count, specs, seller_name, seller_rating, in_stock, fulfilled_by, about_bullets, offer_details, raw_html_path
+- **Replaced `backend/apps/scraping/spiders/base_spider.py`** — enhanced BaseWhydudSpider
+  - 10 realistic browser User-Agent strings (Chrome/Firefox/Edge/Safari on Win/Mac/Linux)
+  - `_random_ua()`, `_make_headers()`, `_extra_delay()` helper methods
+  - Disables Scrapy's built-in UA middleware; rotates UA per request via headers
+  - ROBOTSTXT_OBEY=True, DOWNLOAD_DELAY=2 with jitter, 2 concurrent/domain
+- **Replaced `backend/apps/scraping/spiders/amazon_spider.py`** — full AmazonIndiaSpider
+  - `start_requests()`: loads URLs from ScraperJob (job_id), CLI override (category_urls), or 8 seed category URLs (smartphones, laptops, headphones, air purifiers, washing machines, refrigerators, TVs, cameras)
+  - `parse_listing_page()`: extracts product links from `div[data-component-type="s-search-result"]`, follows pagination up to max_pages (default 5), only follows /dp/ links
+  - `parse_product_page()`: extracts ALL fields with multiple fallback CSS selectors per field:
+    - ASIN: from URL regex + `input[name="ASIN"]` + `#ASIN`
+    - Title: `#productTitle` + `#title span`
+    - Brand: `a#bylineInfo` (strips "Visit the X Store" / "Brand: X") + tech specs fallback
+    - Price: 6 selector fallbacks (corePriceDisplay, dealprice, apex, a-price, legacy)
+    - MRP: 5 selector fallbacks (basisPrice, a-text-price, listPrice)
+    - Images: landingImage (data-old-hires + src) + altImages strip + data-a-dynamic-image JSON
+    - Rating: acrPopover + data-hook + averageCustomerReviews
+    - Review count: acrCustomerReviewText + total-review-count
+    - Seller: sellerProfileTriggerId + merchant-info + tabular-buybox
+    - Availability: #availability span (pattern matching "in stock" / "currently unavailable")
+    - Fulfilled by: tabular-buybox + deliveryBlockMessage
+    - Specs: productDetails_techSpec_section_1 + detailBullets_sections1 + detailBullets_feature_div
+    - About bullets: #feature-bullets ul li
+    - Offers: sopp_feature_div + InstallmentCalculator (classified as cashback/emi/coupon/bank_offer)
+  - Price parsing: strips ₹/commas, converts rupees → paisa (×100)
+  - Image resolution upgrade: `_SX300_` → `_SL1500_`
+  - Optional raw HTML saving to configurable directory
+  - Playwright integration for JS-rendered product pages (wait_for_selector on #productTitle)
+- **Replaced `backend/apps/scraping/pipelines.py`** — 4 real pipelines
+  - `ValidationPipeline` (100): drops items missing marketplace_slug/external_id/url/title
+  - `NormalizationPipeline` (200): collapses whitespace in titles, normalises brand casing (title-case / uppercase for ≤4 chars), strips spec whitespace, deduplicates images
+  - `ProductPipeline` (400): full Django ORM persistence pipeline:
+    - Resolves Marketplace by slug
+    - get_or_create Seller by (marketplace, name)
+    - get_or_create Brand by slug
+    - Finds existing ProductListing by (marketplace, external_id) → updates if found
+    - Product matching: brand + SequenceMatcher title similarity ≥0.85 → matches to existing canonical Product
+    - If no match → creates new Product with unique slugified slug
+    - Creates ProductListing with match_confidence=1.0, match_method="external_id"
+    - PriceSnapshot via raw SQL (avoids ORM/hypertable managed=False issues)
+    - Recomputes Product.current_best_price (MIN of in-stock listings)
+    - Tracks lowest_price_ever + lowest_price_date
+  - `MeilisearchIndexPipeline` (500): stub for Sprint 3
+- **Updated `backend/apps/scraping/scrapy_settings.py`**
+  - Removed DeduplicationPipeline + PersistencePipeline references (merged into ProductPipeline)
+  - Added TWISTED_REACTOR for asyncio compatibility
+  - Added DOWNLOAD_HANDLERS for Playwright (http + https)
+  - Added PLAYWRIGHT_BROWSER_TYPE + PLAYWRIGHT_LAUNCH_OPTIONS
+  - Added `get_scrapy_settings()` helper for programmatic access
+- **Created `backend/apps/scraping/runner.py`** — standalone spider runner script
+  - Invoked via `python -m apps.scraping.runner <spider_name> [--job-id] [--urls] [--max-pages] [--save-html]`
+  - Initialises Django + Scrapy CrawlerProcess in a clean process (avoids Twisted reactor issues)
+  - Used by Celery tasks via subprocess
+- **Replaced `backend/apps/scraping/tasks.py`** — 3 real Celery tasks
+  - `run_spider(marketplace_slug, spider_name, job_id)` — queue="scraping", bind=True, max_retries=1
+    - Creates/updates ScraperJob (queued → running → completed/failed)
+    - Runs spider via subprocess with 1-hour timeout
+    - Captures stdout/stderr, updates job.error_message on failure
+  - `scrape_product_adhoc(url, marketplace_slug)` — queue="scraping"
+    - Single URL scrape, 2-min timeout, maps marketplace to spider
+  - `scrape_daily_prices()` — queue="scraping"
+    - Iterates active Marketplaces, launches parallel run_spider.delay() per marketplace
+- **Added `ScrapingConfig` to `backend/common/app_settings.py`**
+  - spider_timeout, max_listing_pages, raw_html_dir, product_match_threshold, spider_map
+- **Registered daily scrape in Celery Beat** (`backend/whydud/celery.py`)
+  - `scrape-daily-prices`: `crontab(minute=0, hour=2)` — daily at 02:00 UTC (07:30 IST)
+
+### 2026-02-25 — Flipkart Spider
+- **Replaced `backend/apps/scraping/spiders/flipkart_spider.py`** — full FlipkartSpider (505 lines)
+  - Same `ProductItem` output format as AmazonIndiaSpider — shared pipelines
+  - **JSON-LD primary extraction**: parses `<script type="application/ld+json">` for title, price, brand, rating, review_count, images, availability, seller — most reliable on Flipkart
+  - CSS/XPath fallbacks for every field when JSON-LD is absent
+  - `start_requests()`: loads from ScraperJob, CLI override, or 8 seed search URLs
+  - `parse_listing_page()`: finds product links via `a[href*="/p/itm"]`, deduplicates, follows pagination via "Next" link up to max_pages
+  - `parse_product_page()` extracts ALL fields:
+    - FPID (Flipkart Product ID): from URL regex `/p/(itm[a-zA-Z0-9]+)`
+    - Title: JSON-LD → `span.VU-ZEz` → `h1` variants → XPath
+    - Brand: JSON-LD brand object → breadcrumb (3rd item) → specs table
+    - Price: JSON-LD offers → `div._30jeq3` / `div.Nx9bqj` → XPath
+    - MRP: `div._3I9_wc` / `div.yRaY8j` (strike-through) → XPath
+    - Images: JSON-LD → gallery thumbnails (flixcart.com) → any `rukminim` images
+    - Rating: JSON-LD aggregateRating → `div._3LWZlK` / `div.XQDdHH`
+    - Review count: JSON-LD ratingCount/reviewCount → rating text pattern
+    - Seller: JSON-LD offers.seller → `#sellerName span span`
+    - Seller rating: separate CSS extraction from seller info section
+    - Availability: JSON-LD schema.org/InStock → "Sold Out"/"Coming Soon" text → "Buy Now" button presence
+    - Fulfilled by: Flipkart Assured badge detection (icon URL patterns + alt text + "F-Assured" text)
+    - Specs: `div._14cfVK tr` tables (grouped by General/Display/Performance) → `div._3k-BhJ tr` → XPath "Specifications" section
+    - Highlights: `div._2418kt li` / `div.xFVion li` → XPath "Highlights" section
+    - Offers: offer list items → "Available offers" XPath section (classified: cashback/emi/exchange/coupon/bank_offer/partner_offer)
+  - Image resolution upgrade: `/image/312/312/` → `/image/832/832/`
+  - Canonical URL builder strips tracking params
+  - Playwright for listing pages only (lazy-loaded cards); product pages via plain HTTP
+  - Optional raw HTML saving
+
+### 2026-02-25 — Product Matching Engine (Architecture §6 Stage 3)
+- **Created `backend/apps/products/matching.py`** — 4-step cross-marketplace product deduplication engine
+  - **Step 1 — Extract canonical identifiers:**
+    - `_resolve_brand()`: brand normalization via `Brand.aliases` JSONField (e.g. "MI" → Xiaomi, "SAMSUNG" → Samsung)
+    - `_extract_ean()`: barcode extraction from specs (EAN/GTIN/UPC/barcode keys, validates 8-14 digit format)
+    - `_extract_model_info()`: regex-based extraction of model name, storage (GB/TB), RAM, color from marketplace titles
+    - Handles Indian marketplace title formats: Amazon.in "(Mint, 8GB, 256GB)" vs Flipkart "(Mint, 256 GB)(8 GB RAM)"
+  - **Step 2 — Match scoring (4 strategies in priority order):**
+    - EAN exact match → confidence 1.0 → auto-merge (JSONB key-value lookup + stripped-digits fallback)
+    - Brand + model + variant exact → confidence 0.95 → auto-merge (SequenceMatcher ≥0.90 on normalized model strings + storage/RAM equality)
+    - Brand + model (variant differs) → confidence 0.85 → auto-merge (model similarity only)
+    - Fuzzy title match (SequenceMatcher ≥ configurable threshold) → confidence 0.70 → manual review queue
+    - Below threshold → create new canonical product
+  - **Step 3 — Create or merge:**
+    - `match_product(item, brand=None) → MatchResult` — main API, returns `(product, confidence, method, is_new)`
+    - `_create_canonical_product()` — slug generation with collision avoidance, full field population
+    - `resolve_or_create_brand()` — alias-aware brand resolution, replaces pipeline's bare `get_or_create`
+  - **Step 4 — Update canonical product:**
+    - `update_canonical_product(product)` — recalculates aggregates from ALL listings:
+      - `avg_rating`: weighted average by review_count across listings
+      - `total_reviews`: sum of all listing review_counts
+      - `current_best_price` + `current_best_marketplace`: MIN of in-stock listing prices
+      - `lowest_price_ever` + `lowest_price_date`: historical tracking
+- **Added `MatchingConfig` to `backend/common/app_settings.py`**
+  - `auto_merge_threshold` (0.85), `review_threshold` (0.60), `fuzzy_title_threshold` (0.80), `max_candidates` (500)
+  - Removed old `product_match_threshold` from `ScrapingConfig` (superseded)
+- **Updated `backend/apps/scraping/pipelines.py`** — integrated matching engine
+  - Replaced `_find_matching_product()` + `_create_product()` + `_recompute_best_price()` with `match_product()` + `update_canonical_product()`
+  - Brand resolution now uses `resolve_or_create_brand()` (alias-aware)
+  - `_create_listing()` accepts `match_confidence` + `match_method` params (no longer hardcoded)
+  - Removed `SequenceMatcher` import (moved to matching module)
+
+### 2026-02-25 — Meilisearch Sync Tasks + Pipeline
+- **Replaced `backend/apps/search/tasks.py`** — real Meilisearch sync tasks (was stubs)
+  - `sync_products_to_meilisearch(product_ids=None)` (`queue="scoring"`):
+    - If `product_ids` given: syncs only those products (selective sync after spider runs)
+    - If None: syncs all active products (full sync)
+    - Document format includes all searchable/filterable/sortable fields: title, brand_name, brand_slug, category_name, category_slug, current_best_price, avg_rating, total_reviews, dud_score, images, image_url, status, in_stock, created_at
+    - Batched in groups of 500, waits for each batch task to complete
+    - Returns summary dict: `{success, synced, errors, total}`
+    - Graceful fallback if meilisearch package not installed or URL not configured
+  - `full_reindex()` (`queue="scoring"`):
+    - Configures index settings (searchableAttributes, filterableAttributes, sortableAttributes) to match `sync_meilisearch` management command
+    - Then calls `sync_products_to_meilisearch()` for all active products
+  - Helper `_product_to_document(product)` builds Meilisearch doc from Product model
+  - Helper `_configure_index(index)` sets all index attributes
+- **Updated `backend/apps/scraping/tasks.py`** — sync after each spider run
+  - `run_spider()` now calls `sync_products_to_meilisearch.delay()` after successful spider completion
+- **Updated `backend/apps/scraping/pipelines.py`** — real MeilisearchIndexPipeline
+  - `ProductPipeline` now tracks product IDs via `_track_product()` (stashes on spider instance)
+  - `MeilisearchIndexPipeline.close_spider()` collects all product IDs from the spider run, queues selective `sync_products_to_meilisearch.delay(product_ids=...)` for batch sync
+  - Pipeline docstring updated: no longer marked as stub
+- **Registered in Celery Beat** (`backend/whydud/celery.py`):
+  - `meilisearch-full-reindex-daily`: `crontab(minute=0, hour=1)` — daily at 01:00 UTC
+
+### 2026-02-25 — Scraping Orchestration: run_marketplace_spider + Per-Marketplace Beat
+- **Added `run_marketplace_spider` task** to `backend/apps/scraping/tasks.py` — primary Beat entry point
+  - `queue="scraping"`, `bind=True`, `max_retries=1`, `default_retry_delay=600`
+  - Accepts `marketplace_slug` + optional `category_slugs` (list of category URLs)
+  - Resolves spider name from `ScrapingConfig.spider_map()` (no hardcoded mapping)
+  - Creates `ScraperJob` record → marks running → launches spider via subprocess
+  - Reads timeout from `ScrapingConfig.spider_timeout()` (configurable, default 3600s)
+  - On success triggers **two downstream tasks**:
+    - `sync_products_to_meilisearch.delay()` — refreshes search index
+    - `check_price_alerts.delay()` — notifies users whose target price was hit
+  - Returns summary dict: `{success, job_id, status, marketplace, spider}`
+- **Updated Celery Beat schedule** (`backend/whydud/celery.py`):
+  - Replaced single `scrape-daily-prices` (daily 02:00 UTC) with per-marketplace schedules:
+    - `scrape-amazon-in-6h`: `crontab(minute=0, hour="0,6,12,18")` — every 6h
+    - `scrape-flipkart-6h`: `crontab(minute=0, hour="3,9,15,21")` — every 6h, offset +3h from Amazon
+  - Both pass `args: ["<marketplace-slug>"]` with `options: {"queue": "scraping"}`
+  - Moved Meilisearch reindex to 01:00 UTC (no longer coupled to single daily scrape)
+- **Refactored `scrape_product_adhoc` + `scrape_daily_prices`** to use `ScrapingConfig.spider_map()` instead of hardcoded dicts
+- Existing `run_spider` task kept as lower-level runner for direct invocations
+
+### 2026-02-25 — Inbound Email Webhook Handler (Sprint 3 Email Pipeline)
+- **Created `backend/common/encryption.py`** — AES-256-GCM encrypt/decrypt helpers
+  - `encrypt(plaintext, key_setting)` → returns `nonce (12B) || ciphertext+tag`
+  - `decrypt(data, key_setting)` → returns plaintext string
+  - Uses `cryptography.hazmat.primitives.ciphers.aead.AESGCM` (already in requirements)
+  - Key loaded from hex-encoded Django settings (`EMAIL_ENCRYPTION_KEY` / `OAUTH_ENCRYPTION_KEY`)
+- **Updated `InboundEmailWebhookView`** in `backend/apps/email_intel/views.py` — full implementation per Architecture §6
+  - Validates HMAC-SHA256 signature (unchanged)
+  - Parses recipient → `username + domain` via `rsplit("@", 1)`
+  - Looks up `WhydudEmail` by `(username, domain, is_active=True)` with `select_related("user")`
+  - Returns 404 for unknown recipients (logged)
+  - Encrypts `text` and `html` bodies via `common.encryption.encrypt()` (AES-256-GCM)
+  - Creates `InboxEmail` record (direction=inbound, all fields populated)
+  - Updates `WhydudEmail.total_emails_received` + `last_email_received_at` via atomic `F()` expression
+  - Dispatches `process_inbound_email.delay(email_id)` Celery task (email queue)
+  - Returns `202 {ok: true, email_id: "..."}` on success
+
+### 2026-02-25 — Email Sending Service + Send/Reply API (Sprint 3 Email Pipeline)
+- **Added `resend==2.0.0`** to `backend/requirements/base.txt`
+- **Added `RESEND_API_KEY`** to `backend/whydud/settings/base.py` (env var, `.env.example` already had it)
+- **Added `EmailSendConfig`** to `backend/common/app_settings.py`
+  - `daily_send_limit()` (default 10), `monthly_send_limit()` (default 50)
+  - `allowed_marketplace_domains()` — 11 Indian marketplace domains (per Architecture §6)
+- **Created `backend/apps/email_intel/send_service.py`** — full sending pipeline per Architecture §6
+  - `send_email(from_user_id, to_address, subject, body_html, body_text?, reply_to_message_id?)` → `SendResult`
+  - Step 1: Validates user owns active `WhydudEmail` (raises `SendEmailError`)
+  - Step 2: Rate limiting via Redis sliding-window counters (daily + monthly, fail-open)
+  - Step 3: Recipient validation (MVP: any address; post-MVP: replied-to senders + marketplace domains)
+  - Step 4: Sanitizes HTML body with `nh3.clean()`, strips tags for plain-text fallback
+  - Step 5: Calls `resend.Emails.send()` with From, To, Subject, HTML, Text, Reply-To, In-Reply-To + References headers (for threading)
+  - Step 6: Stores outbound `InboxEmail` record (direction='outbound', body encrypted AES-256-GCM, resend_message_id saved, parse_status='skipped')
+  - Step 7: Increments Redis rate counters
+  - Custom `SendEmailError(code, message)` exception for structured error responses
+- **Added serializers** to `backend/apps/email_intel/serializers.py`
+  - `SendEmailSerializer`: validates `to` (EmailField), `subject`, `body_html`, optional `body_text`
+  - `ReplyEmailSerializer`: validates `body_html`, optional `body_text`
+- **Added `SendEmailView`** to `backend/apps/email_intel/views.py`
+  - `POST /api/v1/inbox/send` — compose new email
+  - Validates via `SendEmailSerializer`, calls `send_email()`, maps error codes to HTTP status (429/502/503)
+  - Returns `201 {success: true, data: {email_id, resend_message_id}}`
+- **Added `ReplyEmailView`** to `backend/apps/email_intel/views.py`
+  - `POST /api/v1/inbox/:id/reply` — reply to an existing inbound email
+  - Fetches original email, replies to `sender_address`, auto-prefixes "Re:" to subject
+  - Passes `message_id` as `reply_to_message_id` for email threading (In-Reply-To + References headers)
+  - Returns `201 {success: true, data: {email_id, resend_message_id}}`
+- **Updated URL routing** in `backend/apps/email_intel/urls/__init__.py`
+  - `inbox/send` placed before `inbox/<uuid:pk>` to avoid UUID path capture conflict
+  - `inbox/<uuid:pk>/reply` added after detail route

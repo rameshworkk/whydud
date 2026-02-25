@@ -45,7 +45,9 @@
       "Read(//c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/**)",
       "Read(//c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/components/**)",
       "Bash(echo \"EXIT:$?\")",
-      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings python -c \":*)"
+      "Bash(DJANGO_SETTINGS_MODULE=whydud.settings python -c \":*)",
+      "Bash(git commit:*)",
+      "Bash(ss -tlnp)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",
@@ -53,7 +55,8 @@
       "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\oauth",
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\components",
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(review)\\product\\[slug]",
-      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps\\tco\\management"
+      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps\\tco\\management",
+      "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps\\accounts\\management"
     ]
   }
 }
