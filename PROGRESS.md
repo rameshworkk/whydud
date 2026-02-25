@@ -717,3 +717,20 @@ Not configured yet:
   - Added `referrerPage` prop (default: "product_page") for source attribution
   - Added `focus-visible` + `active` states on all buy buttons
 - TypeScript clean: `tsc --noEmit` passes with zero errors
+
+---
+
+### Admin Tooling — `backend/apps/admin_tools/` (14th Django app)
+- **Created `admin_tools` app** under `backend/apps/admin_tools/`
+- **Models** (all in PostgreSQL `admin` schema):
+  - `AuditLog`: immutable record of every admin action — admin_user FK, action (create/update/delete/approve/reject/suspend/restore/config_change), target_type, target_id, old_value JSONB, new_value JSONB, ip_address, created_at. Fully read-only in Django Admin.
+  - `ModerationQueue`: review/discussion/user moderation queue — item_type, item_id, reason, status (pending/approved/rejected), assigned_to FK, resolved_at. Bulk approve/reject actions in admin.
+  - `ScraperRun`: aggregated scraper execution stats — marketplace FK, spider_name, status with emoji badges, items_scraped/created/updated, errors JSONB, started_at, completed_at, computed duration_seconds and error_count properties.
+  - `SiteConfig`: runtime key-value store (JSONB) for tuneable config — key (unique), value, updated_by FK, auto-sets updated_by on save.
+- **Django Admin registrations**:
+  - `AuditLogAdmin`: list_display, list_filter by action/target_type, date_hierarchy on created_at, fully read-only (no add/change/delete)
+  - `ModerationQueueAdmin`: list_filter by status/item_type, bulk approve/reject actions, truncated reason display
+  - `ScraperRunAdmin`: status badges with emoji indicators, all stats in list_display
+  - `SiteConfigAdmin`: auto-sets updated_by to current admin user on save
+- **Migration** `0001_initial.py`: creates `admin` schema + all 4 tables
+- **Registered** in `INSTALLED_APPS` as `apps.admin_tools`
