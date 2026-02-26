@@ -14,9 +14,63 @@ import { RecentlyViewedTracker } from "@/components/product/recently-viewed-trac
 import { productsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils";
 import { config } from "@/config";
+import {
+  Cpu,
+  HardDrive,
+  Camera,
+  Battery,
+  Smartphone,
+  Monitor,
+  Wifi,
+  Weight,
+  MemoryStick,
+  Info,
+} from "lucide-react";
 import type { ProductDetail, ProductSummary, PricePoint, Review, DudScoreLabel } from "@/types";
+import type { LucideIcon } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Map spec labels to Lucide icons for the Key Specs sidebar. */
+const SPEC_ICON_MAP: Record<string, LucideIcon> = {
+  model: Cpu,
+  processor: Cpu,
+  chipset: Cpu,
+  soc: Cpu,
+  ram: MemoryStick,
+  memory: MemoryStick,
+  storage: HardDrive,
+  "internal storage": HardDrive,
+  rom: HardDrive,
+  camera: Camera,
+  "rear camera": Camera,
+  "front camera": Camera,
+  battery: Battery,
+  "battery capacity": Battery,
+  os: Smartphone,
+  "operating system": Smartphone,
+  android: Smartphone,
+  software: Smartphone,
+  display: Monitor,
+  screen: Monitor,
+  "screen size": Monitor,
+  resolution: Monitor,
+  weight: Weight,
+  connectivity: Wifi,
+  network: Wifi,
+  "5g": Wifi,
+  sim: Smartphone,
+  "sim type": Smartphone,
+};
+
+function getSpecIcon(label: string): LucideIcon {
+  const key = label.toLowerCase().trim();
+  if (SPEC_ICON_MAP[key]) return SPEC_ICON_MAP[key];
+  for (const [mapKey, icon] of Object.entries(SPEC_ICON_MAP)) {
+    if (key.includes(mapKey)) return icon;
+  }
+  return Info;
+}
 
 /** Derive a human-readable DudScore label from the numeric score. */
 function getDudScoreLabel(score: number | null): DudScoreLabel {
@@ -233,17 +287,21 @@ export default async function ProductPage({ params }: ProductPageProps) {
               Key Specs
             </h3>
             {specs.length > 0 ? (
-              specs.map((spec) => (
-                <div
-                  key={spec.label}
-                  className="flex items-start justify-between gap-2 py-2 border-b border-slate-50 last:border-b-0"
-                >
-                  <span className="text-xs text-slate-500 shrink-0 w-[95px]">{spec.label}</span>
-                  <span className="text-xs font-medium text-slate-800 text-right leading-snug">
-                    {spec.value}
-                  </span>
-                </div>
-              ))
+              specs.map((spec) => {
+                const IconComp = getSpecIcon(spec.label);
+                return (
+                  <div
+                    key={spec.label}
+                    className="flex items-center gap-2.5 py-2 border-b border-slate-50 last:border-b-0"
+                  >
+                    <IconComp className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="text-xs text-slate-500 shrink-0 w-[80px]">{spec.label}</span>
+                    <span className="text-xs font-medium text-slate-800 text-right leading-snug flex-1">
+                      {spec.value}
+                    </span>
+                  </div>
+                );
+              })
             ) : (
               <p className="text-xs text-slate-400">No specifications available.</p>
             )}
@@ -311,12 +369,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
 
           {/* Price block */}
-          <div className="flex items-baseline gap-3 mb-2">
-            <span className="text-3xl font-black text-slate-900">
+          <div className="flex items-baseline gap-3 mb-1">
+            <span className="text-2xl font-black text-slate-900">
               {formatPrice(p.currentBestPrice)}
             </span>
             {mrp && mrp !== p.currentBestPrice && (
-              <span className="text-base text-slate-400 line-through">
+              <span className="text-sm text-slate-400 line-through">
                 {formatPrice(mrp)}
               </span>
             )}
@@ -328,7 +386,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
 
           {/* Best price source + lowest ever */}
-          <p className="text-xs text-slate-500 mb-5">
+          <p className="text-xs text-slate-500 mb-4">
             Best price on{" "}
             <span className="font-semibold text-slate-700">{p.currentBestMarketplace}</span>
             {p.lowestPriceEver != null && (
@@ -342,25 +400,25 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </p>
 
           {/* -- DudScore section -- */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 mb-5">
-            <div className="flex items-start gap-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+            <div className="flex items-start gap-3">
               {/* Gauge */}
-              <div className="w-[160px] shrink-0">
+              <div className="w-[140px] shrink-0">
                 <DudScoreGauge score={p.dudScore} label={dudScoreLabel} />
               </div>
 
               {/* Score breakdown */}
-              <div className="flex-1 min-w-0 pt-1">
-                <div className="flex items-center gap-2 mb-3">
-                  <h2 className="text-sm font-semibold text-slate-700">DudScore Breakdown</h2>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <h2 className="text-xs font-semibold text-slate-700">DudScore Breakdown</h2>
                   {p.dudScoreConfidence && (
-                    <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full capitalize">
+                    <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full capitalize">
                       {p.dudScoreConfidence}
                     </span>
                   )}
                 </div>
                 <CategoryScoreBars components={dudScoreComponents} />
-                <button className="mt-3 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
+                <button className="mt-2 text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
                   View all reviews →
                 </button>
               </div>
@@ -370,9 +428,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
           {/* -- Compare all available options -- */}
           {p.listings.length > 0 && (
             <div className="mb-5">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">
-                Compare all available options
-              </h2>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-sm font-semibold text-slate-700">
+                  Compare all available options
+                </h2>
+                {p.lowestPriceEver != null && p.currentBestPrice != null && p.currentBestPrice <= p.lowestPriceEver && (
+                  <span className="text-[10px] font-bold text-[#F97316] bg-[#FFF7ED] px-2 py-0.5 rounded-full">
+                    Price drop
+                  </span>
+                )}
+              </div>
               <CrossPlatformPricePanel
                 listings={p.listings}
                 lowestPriceEver={p.lowestPriceEver}
@@ -434,6 +499,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
           {/* Rating distribution */}
           <div className="p-4 border-b border-slate-100">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Community rating</h3>
             <RatingDistribution
               distribution={ratingDistribution}
               avgRating={p.avgRating ?? 0}

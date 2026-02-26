@@ -186,7 +186,7 @@ export default async function HomePage() {
         {/* ── Category image strip ──────────────────────────────────────────── */}
         <section className="bg-white border-b border-[#E2E8F0]">
           <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
-            <div className="flex gap-1 overflow-x-auto py-3 no-scrollbar">
+            <div className="flex gap-2 overflow-x-auto py-3 no-scrollbar justify-center">
               {CATEGORY_IMAGES.map((cat) => (
                 <Link
                   key={cat.label}
@@ -205,7 +205,7 @@ export default async function HomePage() {
                       unoptimized
                     />
                   </div>
-                  <span className="text-[11px] font-medium text-[#4e4d4d] group-hover:text-[#F97316] transition-colors whitespace-nowrap">
+                  <span className="text-[11px] font-medium text-[#64748B] group-hover:text-[#F97316] transition-colors whitespace-nowrap">
                     {cat.label}
                   </span>
                 </Link>
@@ -221,11 +221,11 @@ export default async function HomePage() {
 
               {/* Left: title + description + search */}
               <div className="max-w-[630px]">
-                <h1 className="text-[36px] md:text-[44px] font-bold text-[#363636] leading-[1.15] tracking-tight">
+                <h1 className="text-[36px] md:text-[44px] font-bold text-[#1E293B] leading-[1.15] tracking-tight">
                   Discover product truth.{" "}
                   <span className="block">Shop smarter.</span>
                 </h1>
-                <p className="mt-3 text-[18px] text-[#585858] leading-relaxed">
+                <p className="mt-3 text-[18px] text-[#64748B] leading-relaxed">
                   Read real reviews. Share your honest experience.
                 </p>
 
@@ -238,7 +238,7 @@ export default async function HomePage() {
                   {/* Category selector */}
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 pl-5 pr-3 shrink-0 h-full text-[#4e4d4d] text-[14px] font-normal whitespace-nowrap hover:text-[#1E293B] transition-colors"
+                    className="flex items-center gap-1.5 pl-5 pr-3 shrink-0 h-full text-[#64748B] text-[14px] font-normal whitespace-nowrap hover:text-[#1E293B] transition-colors"
                   >
                     All Categories
                     <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -252,7 +252,7 @@ export default async function HomePage() {
                     type="search"
                     name="q"
                     placeholder="Search for products, brands, services, category..."
-                    className="flex-1 min-w-0 bg-transparent px-3 text-[14px] text-[#1E293B] placeholder:text-[#9ca3af] outline-none"
+                    className="flex-1 min-w-0 bg-transparent px-3 text-[14px] text-[#1E293B] placeholder:text-[#94A3B8] outline-none"
                   />
 
                   {/* Search button */}
@@ -387,13 +387,13 @@ export default async function HomePage() {
                   className={`shrink-0 rounded-full border px-4 py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] ${
                     i === 0
                       ? "bg-[#F97316] border-[#F97316] text-white"
-                      : "border-[#E2E8F0] bg-white text-[#4e4d4d] hover:border-[#F97316] hover:text-[#F97316]"
+                      : "border-[#E2E8F0] bg-white text-[#64748B] hover:border-[#F97316] hover:text-[#F97316]"
                   }`}
                 >
                   {chip.label}
                 </Link>
               ))}
-              <button className="shrink-0 ml-1 flex items-center gap-1.5 rounded-full border border-[#E2E8F0] bg-white px-4 py-1.5 text-[13px] font-medium text-[#4e4d4d] hover:border-[#F97316] hover:text-[#F97316] transition-colors">
+              <button className="shrink-0 ml-1 flex items-center gap-1.5 rounded-full border border-[#E2E8F0] bg-white px-4 py-1.5 text-[13px] font-medium text-[#64748B] hover:border-[#F97316] hover:text-[#F97316] transition-colors">
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 Filters
               </button>

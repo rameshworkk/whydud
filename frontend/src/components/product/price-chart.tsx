@@ -111,13 +111,14 @@ export function PriceChart({ data, marketplaces }: PriceChartProps) {
   return (
     <div className="w-full">
       {/* Range selector */}
-      <div className="flex items-center gap-1 mb-4">
-        <span className="text-xs text-slate-500 mr-2">All Platforms</span>
+      <div className="flex items-center gap-1 mb-3">
+        <span className="text-xs text-slate-500 mr-1">All Platforms</span>
+        <span className="text-slate-300 mr-1">|</span>
         {ranges.map((r) => (
           <button
             key={r}
             onClick={() => setRange(r)}
-            className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+            className={`px-2.5 py-0.5 text-xs font-semibold rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] ${
               range === r
                 ? "bg-[#F97316] text-white"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"

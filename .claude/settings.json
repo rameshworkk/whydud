@@ -48,7 +48,9 @@
       "Bash(DJANGO_SETTINGS_MODULE=whydud.settings python -c \":*)",
       "Bash(git commit:*)",
       "Bash(ss -tlnp)",
-      "Read(//c/Users/rames/.claude/projects/c--Users-rames-Downloads-whydud-platform-whydud/1d3932a9-c658-44d2-b8f4-22b5fe36fc33/tool-results/**)"
+      "Read(//c/Users/rames/.claude/projects/c--Users-rames-Downloads-whydud-platform-whydud/1d3932a9-c658-44d2-b8f4-22b5fe36fc33/tool-results/**)",
+      "Bash(node screenshot.mjs http://localhost:3000 homepage-current)",
+      "Bash(npm list puppeteer --prefix /c/Users/rames/Downloads/whydud/platform/whydud/frontend)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",
@@ -58,7 +60,8 @@
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(review)\\product\\[slug]",
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps\\tco\\management",
       "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps\\accounts\\management",
-      "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps"
+      "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps",
+      "c:\\Users\\rames\\Downloads\\whydud\\platform"
     ]
   }
 }

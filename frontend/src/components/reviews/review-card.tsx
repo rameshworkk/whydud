@@ -79,7 +79,7 @@ export function ReviewCard({ review }: ReviewCardProps) {
       <p className="text-sm font-semibold text-slate-800 leading-snug">{review.title}</p>
 
       {/* Body */}
-      <p className="text-sm text-slate-600 leading-relaxed line-clamp-4">{review.body}</p>
+      <p className="text-sm text-slate-600 leading-relaxed line-clamp-3">{review.body}</p>
 
       {/* Helpful */}
       <div className="flex items-center gap-3 pt-1">
