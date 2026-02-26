@@ -5,25 +5,24 @@ const FOOTER_LINKS = {
     { label: "Search Products", href: "/search" },
     { label: "Hot Deals", href: "/deals" },
     { label: "Compare Products", href: "/compare" },
-    { label: "Write a Review", href: "/reviews/new" },
+    { label: "Leaderboard", href: "/leaderboard" },
   ],
   Account: [
     { label: "Dashboard", href: "/dashboard" },
     { label: "My Inbox", href: "/inbox" },
     { label: "Wishlists", href: "/wishlists" },
-    { label: "Rewards", href: "/rewards" },
+    { label: "Write a Review", href: "/reviews/new" },
   ],
   Company: [
     { label: "About Whydud", href: "/about" },
-    { label: "Blog", href: "/blog" },
     { label: "Contact Us", href: "/contact" },
-    { label: "Advertise with Us", href: "/advertise" },
+    { label: "Rewards", href: "/rewards" },
+    { label: "Affiliate Disclosure", href: "/affiliate-disclosure" },
   ],
   Legal: [
     { label: "Privacy Policy", href: "/privacy" },
     { label: "Terms of Service", href: "/terms" },
     { label: "Cookie Policy", href: "/cookies" },
-    { label: "Affiliate Disclosure", href: "/affiliate-disclosure" },
   ],
 };
 

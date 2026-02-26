@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, ChevronDown, PenSquare, LogIn, Package, LogOut, LayoutDashboard } from "lucide-react";
+import { Search, ChevronDown, PenSquare, LogIn, Package, LogOut, LayoutDashboard, Flame, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils/index";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -221,6 +221,32 @@ export function Header() {
 
         {/* ── Right nav ─────────────────────────────────────────────── */}
         <div className="flex items-center gap-1 shrink-0">
+          <Link
+            href="/deals"
+            className={cn(
+              "hidden lg:flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium",
+              "text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#1E293B]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]",
+              "transition-colors"
+            )}
+          >
+            <Flame className="h-4 w-4" />
+            Deals
+          </Link>
+
+          <Link
+            href="/leaderboard"
+            className={cn(
+              "hidden xl:flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium",
+              "text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#1E293B]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]",
+              "transition-colors"
+            )}
+          >
+            <Trophy className="h-4 w-4" />
+            Leaderboard
+          </Link>
+
           <Link
             href="/reviews/new"
             className={cn(

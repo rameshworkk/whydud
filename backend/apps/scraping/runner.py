@@ -25,8 +25,15 @@ def main() -> None:
     parser.add_argument("--save-html", action="store_true", help="Save raw HTML for debugging")
     args = parser.parse_args()
 
+    # Load .env so DB credentials etc. are available in subprocess context.
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+
     # Initialise Django before importing anything that touches models.
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
+    # Allow synchronous ORM calls from Scrapy's async Playwright reactor.
+    # Safe here because the runner is a standalone subprocess, not a web server.
+    os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
     import django
     django.setup()
 

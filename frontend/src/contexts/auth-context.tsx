@@ -56,6 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchUser();
   }, [fetchUser]);
 
+  // Listen for 401 responses from the API client and clear auth state
+  useEffect(() => {
+    const handleAuthExpired = () => setUser(null);
+    window.addEventListener("whydud:auth-expired", handleAuthExpired);
+    return () => window.removeEventListener("whydud:auth-expired", handleAuthExpired);
+  }, []);
+
   const login = useCallback((token: string, userData: User) => {
     setToken(token);
     setUser(userData);

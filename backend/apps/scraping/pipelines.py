@@ -145,10 +145,17 @@ class ProductPipeline:
         # ------- 2. Seller ------------------------------------------------
         seller = None
         if item.get("seller_name"):
+            from django.utils.text import slugify
+
+            # Use external_seller_id for uniqueness (the DB constraint is
+            # on marketplace + external_seller_id). Fall back to a slug
+            # derived from the seller name when no explicit ID is available.
+            ext_id = item.get("external_seller_id") or slugify(item["seller_name"])
             seller, _ = Seller.objects.get_or_create(
                 marketplace=marketplace,
-                name=item["seller_name"],
+                external_seller_id=ext_id,
                 defaults={
+                    "name": item["seller_name"],
                     "fulfilled_by": item.get("fulfilled_by") or "",
                 },
             )
@@ -179,16 +186,29 @@ class ProductPipeline:
             )
 
         # ------- 5. PriceSnapshot — ALWAYS record after every scrape --------
-        PriceSnapshot.objects.create(
-            time=now,
-            listing_id=listing.id,
-            product_id=product.id,
-            marketplace_id=marketplace.id,
-            price=listing.current_price,
-            mrp=listing.mrp,
-            in_stock=listing.in_stock,
-            seller_name=item.get("seller_name") or "",
-        )
+        # Raw SQL because price_snapshots is a TimescaleDB hypertable with no
+        # auto-increment id column (managed=False). ORM .create() fails with
+        # "column price_snapshots.id does not exist".
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO price_snapshots
+                    (time, listing_id, product_id, marketplace_id, price, mrp, in_stock, seller_name)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                [
+                    now,
+                    listing.id,
+                    product.id,
+                    marketplace.id,
+                    listing.current_price,
+                    listing.mrp,
+                    listing.in_stock,
+                    item.get("seller_name") or "",
+                ],
+            )
 
         # ------- 6. Recalculate canonical product aggregates (Step 4) -----
         update_canonical_product(product)

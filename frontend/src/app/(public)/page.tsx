@@ -593,7 +593,7 @@ export default async function HomePage() {
                 {/* View all tile */}
                 <div className="shrink-0 w-[80px] flex items-center justify-center">
                   <Link
-                    href="/reviews"
+                    href="/reviews/new"
                     className="flex flex-col items-center gap-1.5 text-[#F97316] hover:text-[#EA580C] transition-colors"
                   >
                     <div className="h-10 w-10 rounded-full border-2 border-[#F97316] flex items-center justify-center">

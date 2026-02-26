@@ -50,7 +50,22 @@
       "Bash(ss -tlnp)",
       "Read(//c/Users/rames/.claude/projects/c--Users-rames-Downloads-whydud-platform-whydud/1d3932a9-c658-44d2-b8f4-22b5fe36fc33/tool-results/**)",
       "Bash(node screenshot.mjs http://localhost:3000 homepage-current)",
-      "Bash(npm list puppeteer --prefix /c/Users/rames/Downloads/whydud/platform/whydud/frontend)"
+      "Bash(npm list puppeteer --prefix /c/Users/rames/Downloads/whydud/platform/whydud/frontend)",
+      "Bash(grep -r \"href=\\\\`\" /c/Users/rames/Downloads/whydud/platform/whydud/frontend/src --include=\"*.tsx\" --include=\"*.ts\")",
+      "Bash(while read file)",
+      "Bash(do)",
+      "Bash(path=\"$file%/page.tsx\")",
+      "Bash(path=\"$path#/c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/app\")",
+      "Bash(path=\"$path#/\\\\\\(auth\\\\\\)\")",
+      "Bash(path=\"$path#/\\\\\\(dashboard\\\\\\)\")",
+      "Bash(path=\"$path#/\\\\\\(public\\\\\\)\")",
+      "Bash(echo \"$path\")",
+      "Bash(grep -r 'href={`/[^`]*`}' /c/Users/rames/Downloads/whydud/platform/whydud/frontend/src --include=\"*.tsx\" -o)",
+      "Bash(where python)",
+      "Bash(PGPASSWORD=whydud_dev psql -h localhost -U whydud -d whydud -c \":*)",
+      "Bash(DJANGO_SUPERUSER_PASSWORD=admin123 python manage.py createsuperuser --noinput --username admin --email admin@whydud.com)",
+      "Bash(DJANGO_SUPERUSER_PASSWORD=admin123 python manage.py createsuperuser --noinput --email admin@whydud.com)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",
@@ -61,7 +76,9 @@
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps\\tco\\management",
       "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps\\accounts\\management",
       "C:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\backend\\apps",
-      "c:\\Users\\rames\\Downloads\\whydud\\platform"
+      "c:\\Users\\rames\\Downloads\\whydud\\platform",
+      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\product\\[slug]",
+      "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(review)\\product\\[slug]\\review"
     ]
   }
 }

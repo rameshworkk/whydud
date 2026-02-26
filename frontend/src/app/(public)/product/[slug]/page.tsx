@@ -491,9 +491,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   ({p.totalReviews.toLocaleString("en-IN")})
                 </span>
               </h2>
-              <button className="text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
+              <Link
+                href={`/product/${slug}/review`}
+                className="text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded"
+              >
                 Post a review
-              </button>
+              </Link>
             </div>
           </div>
 

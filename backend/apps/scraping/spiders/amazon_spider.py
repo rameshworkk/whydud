@@ -14,6 +14,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import scrapy
+from scrapy_playwright.page import PageMethod
 
 from apps.scraping.items import ProductItem
 from .base_spider import BaseWhydudSpider
@@ -27,7 +28,7 @@ PRICE_RE = re.compile(r"[\d,.]+")
 RATING_RE = re.compile(r"([\d.]+)\s*out of\s*5")
 REVIEW_COUNT_RE = re.compile(r"([\d,]+)\s*(?:rating|review|customer)")
 
-MARKETPLACE_SLUG = "amazon-in"
+MARKETPLACE_SLUG = "amazon_in"
 
 # Seed category search URLs — used when no ScraperJob provides URLs.
 SEED_CATEGORY_URLS = [
@@ -144,7 +145,13 @@ class AmazonIndiaSpider(BaseWhydudSpider):
         self.logger.info(f"Found {len(results)} results on {response.url}")
 
         for result in results:
-            link = result.css("h2 a.a-link-normal::attr(href)").get()
+            # Amazon 2025+: product link lives in div[data-cy="title-recipe"]
+            # or as a.a-link-normal sibling to h2, no longer inside h2.
+            link = result.css('div[data-cy="title-recipe"] a::attr(href)').get()
+            if not link:
+                link = result.css('a.a-link-normal[href*="/dp/"]::attr(href)').get()
+            if not link:
+                link = result.css("h2 a.a-link-normal::attr(href)").get()
             if not link:
                 link = result.css("h2 a::attr(href)").get()
             if not link:
@@ -163,8 +170,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                 meta={
                     "playwright": True,
                     "playwright_page_methods": [
-                        # Wait for price element to render (JS-loaded)
-                        {"method": "wait_for_selector", "selector": "#productTitle", "timeout": 10000},
+                        PageMethod("wait_for_selector", "#productTitle", timeout=10000),
                     ],
                 },
             )

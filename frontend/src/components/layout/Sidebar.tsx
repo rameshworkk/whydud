@@ -12,6 +12,7 @@ import {
   Gift,
   Star,
   Bell,
+  BellDot,
   Settings,
   LogOut,
   LucideIcon,
@@ -28,6 +29,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/inbox", label: "Inbox", Icon: Mail },
+  { href: "/notifications", label: "Notifications", Icon: BellDot },
   { href: "/wishlists", label: "Wishlists", Icon: Heart },
   { href: "/purchases", label: "Purchases", Icon: ShoppingBag },
   { href: "/refunds", label: "Refunds", Icon: RotateCcw },

@@ -131,6 +131,14 @@ async function request<T>(
     const raw = await response.json();
     const json = snakeToCamel(raw) as Record<string, unknown>;
 
+    // On 401, clear stale token and notify AuthProvider
+    if (response.status === 401) {
+      clearToken();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("whydud:auth-expired"));
+      }
+    }
+
     // Handle DRF's standard error responses that don't use our { success, data } envelope
     // e.g. { detail: "Authentication credentials were not provided." }
     if (!response.ok && !("success" in raw)) {
