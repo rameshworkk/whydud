@@ -2,7 +2,7 @@ version: "3.9"
 
 # ============================================================
 # Whydud — Production Docker Compose
-# 9 services, ~8-9GB RAM total (fits 16GB VPS)
+# 10 services, ~8.5-9.5GB RAM total (fits 16GB VPS)
 # ============================================================
 
 services:
@@ -24,6 +24,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - flower
     networks:
       - whydud
 
@@ -193,6 +194,31 @@ services:
       - whydud
 
   # ----------------------------------------------------------
+  # Flower — Celery monitoring dashboard
+  # RAM: ~128MB
+  # Accessible at /flower/ via Caddy (basic-auth protected)
+  # ----------------------------------------------------------
+  flower:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    restart: unless-stopped
+    command: celery -A whydud flower --port=5555 --conf=whydud/flowerconfig.py --url-prefix=flower
+    environment:
+      <<: *celery_env
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:?required}
+      FLOWER_URL_PREFIX: flower
+      FLOWER_PURGE_OFFLINE_WORKERS: "24"
+      FLOWER_DB: /data/flower.db
+    depends_on:
+      - redis
+    volumes:
+      - flower_data:/data
+    networks:
+      - whydud
+
+  # ----------------------------------------------------------
   # Next.js Frontend — SSR
   # RAM: ~1GB
   # ----------------------------------------------------------
@@ -220,6 +246,7 @@ volumes:
   caddy_config:
   static_files:
   media_files:
+  flower_data:
 
 networks:
   whydud:

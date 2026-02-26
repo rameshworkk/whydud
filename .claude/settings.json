@@ -66,7 +66,10 @@
       "Bash(DJANGO_SUPERUSER_PASSWORD=admin123 python manage.py createsuperuser --noinput --username admin --email admin@whydud.com)",
       "Bash(DJANGO_SUPERUSER_PASSWORD=admin123 python manage.py createsuperuser --noinput --email admin@whydud.com)",
       "Bash(PYTHONIOENCODING=utf-8 python -c \":*)",
-      "Bash(PYTHONIOENCODING=utf-8 python manage.py shell -c \":*)"
+      "Bash(PYTHONIOENCODING=utf-8 python manage.py shell -c \":*)",
+      "Bash(timeout 10 celery -A whydud flower --port=5555 --basic-auth=admin:admin)",
+      "Read(//c/Users/rames/AppData/Local/ms-playwright/chromium-1208/**)",
+      "Read(//c/Users/rames/.claude/projects/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",

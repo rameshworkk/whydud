@@ -840,3 +840,35 @@ Ran Amazon.in spider against a single category URL. Found and fixed 6 bugs:
     - LG 8kg Washing Machine: Amazon ₹38,990 vs Flipkart ₹37,990 vs Croma ₹39,990
   - Price comparison working as intended — same product shows different prices per marketplace
 - **Final DB state**: 259 products, 377 listings (Amazon.in: 35, Flipkart: 326, Other: 16)
+
+### 2026-02-27 — Celery Flower Monitoring Setup
+- **Added Flower 2.0.1** to `backend/requirements/base.txt` for Celery task monitoring and observability
+- **Created `backend/whydud/flowerconfig.py`** — Flower configuration with:
+  - Basic auth (env-configurable, defaults to `admin:admin` in dev)
+  - Persistent task storage via SQLite (survives Flower restarts)
+  - Max 50,000 tasks in memory (prevents OOM on high-volume queues)
+  - Auto-refresh enabled, offline worker purge after 24h
+  - URL prefix support for reverse proxy (production: `/flower/`)
+- **Docker Compose — Dev** (`docker/docker-compose.dev.yml`):
+  - Added `flower` service using `mher/flower:2.0.1` image
+  - Connects to Redis broker, exposed on port 5555
+  - Persistent volume `flower_dev_data` for task history
+  - Access: `http://localhost:5555` (admin/admin)
+- **Docker Compose — Prod** (`docker/docker-compose.yml`):
+  - Added `flower` service (10th service, ~128MB RAM)
+  - Uses same backend Dockerfile, runs `celery -A whydud flower` with flowerconfig.py
+  - `FLOWER_BASIC_AUTH` env var required in production (no default)
+  - Persistent volume `flower_data`, URL prefix `/flower` for Caddy proxy
+  - Caddy dependency added so reverse proxy starts after Flower
+- **Caddy** (`docker/Caddyfile`):
+  - Added `/flower/*` route → reverse proxy to `flower:5555`
+  - Production access: `https://whydud.com/flower/` (basic-auth protected)
+- **Verified locally**: Flower starts, connects to Redis, discovers all 30 registered Celery tasks across 13 apps
+- **What Flower provides for admin monitoring**:
+  - Real-time worker status (active/offline, concurrency, queues)
+  - Task history with filtering by state, name, worker, queue
+  - Task details: args, kwargs, result, exception, runtime, retries
+  - Queue depths and message rates per queue (default, scraping, email, scoring, alerts)
+  - Beat schedule visibility (all 8 periodic tasks)
+  - Worker pool control (shutdown, restart, autoscale)
+  - Broker connection status and stats

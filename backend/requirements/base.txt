@@ -13,6 +13,7 @@ psycopg[binary]==3.2.1
 celery[redis]==5.4.0
 django-celery-beat==2.6.0
 django-celery-results==2.5.1
+flower==2.0.1
 redis==5.0.8
 
 # Search
