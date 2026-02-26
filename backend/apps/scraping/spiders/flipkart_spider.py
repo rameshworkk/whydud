@@ -21,6 +21,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import scrapy
+from scrapy_playwright.page import PageMethod
 
 from apps.scraping.items import ProductItem
 from .base_spider import BaseWhydudSpider
@@ -67,11 +68,12 @@ class FlipkartSpider(BaseWhydudSpider):
     name = "flipkart"
     allowed_domains = ["flipkart.com", "www.flipkart.com"]
 
-    # Playwright only for listing pages; product pages are plain HTTP.
+    # Playwright for both listing and product pages (Flipkart 403s plain HTTP).
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
         "DOWNLOAD_HANDLERS": {
             "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
         },
     }
 
@@ -167,8 +169,13 @@ class FlipkartSpider(BaseWhydudSpider):
                 callback=self.parse_product_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
-                # Product pages render server-side — no Playwright needed.
-                meta={"playwright": False},
+                # Flipkart returns 403 on plain HTTP — Playwright needed.
+                meta={
+                    "playwright": True,
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_load_state", "domcontentloaded"),
+                    ],
+                },
             )
 
         # Pagination

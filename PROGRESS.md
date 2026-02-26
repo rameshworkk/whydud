@@ -815,3 +815,28 @@ Ran Amazon.in spider against a single category URL. Found and fixed 6 bugs:
 - **12 product pages timed out** (Playwright timeout on `#productTitle`) — expected for Amazon CAPTCHA/anti-bot on some pages
 - **Pipeline verified end-to-end**: Scrapy → Playwright → ValidationPipeline → NormalizationPipeline → ProductPipeline → MeilisearchIndexPipeline
 - **Final DB state**: 37 products, 79 listings (31 seeded + 4 scraped + 4 new listings)
+
+### 2026-02-26 — Flipkart Spider End-to-End Test + Bug Fix
+- **Bug: Flipkart 403 on plain HTTP product pages** (`flipkart_spider.py`):
+  - All product detail page requests returned HTTP 403 when using plain HTTP (no Playwright)
+  - Root cause: Flipkart's anti-bot blocks non-browser HTTP requests to product URLs
+  - Fix 1: Changed product page requests from `meta={"playwright": False}` to `meta={"playwright": True}` with `PageMethod("wait_for_load_state", "domcontentloaded")`
+  - Fix 2: Added `PageMethod` import from `scrapy_playwright.page`
+  - Fix 3: Added `http` handler to `DOWNLOAD_HANDLERS` alongside `https`
+  - Note: Original spider assumed "product pages render server-side" — true for content, but Flipkart blocks non-browser User-Agents entirely
+- **Ran full Flipkart spider** (`python -m apps.scraping.runner flipkart --max-pages 2`):
+  - 8 seed categories × 2 pages each = 16 listing pages crawled
+  - ~460 product URLs discovered across smartphones, laptops, headphones, air purifiers, washing machines, refrigerators, televisions, cameras
+  - **288 new Flipkart listings** created (some duplicates deduplicated by external_id)
+  - Pipeline verified: Playwright → ValidationPipeline → NormalizationPipeline → ProductPipeline → MeilisearchIndexPipeline → Meilisearch sync
+- **Cross-marketplace product matching results**:
+  - **26 products matched across Amazon.in + Flipkart** (matching engine successfully linked listings)
+  - **29 products total on 2+ marketplaces** (includes Amazon+Croma from seed data)
+  - Match method distribution for Flipkart: `new: 222`, `brand_model_variant: 44`, `exact_sku: 28`, `fuzzy_title: 28`, `brand_model: 4`
+  - Examples of successful cross-marketplace matches:
+    - Daikin 1.5T AC: Amazon ₹44,990 vs Flipkart ₹43,990 vs Croma ₹47,990
+    - HP Pavilion 15: Amazon ₹52,990 vs Flipkart ₹53,490 vs Croma ₹55,990
+    - Sony WH-1000XM5: Amazon ₹22,990 vs Flipkart ₹23,490 vs Croma ₹24,990
+    - LG 8kg Washing Machine: Amazon ₹38,990 vs Flipkart ₹37,990 vs Croma ₹39,990
+  - Price comparison working as intended — same product shows different prices per marketplace
+- **Final DB state**: 259 products, 377 listings (Amazon.in: 35, Flipkart: 326, Other: 16)

@@ -2776,6 +2776,105 @@ Admin panel:   admin.whydud.com    → Separate deployment, separate auth, separ
 The admin system is an internal operations tool. It must NEVER be linked from the consumer
 frontend, NEVER share session/auth with consumer users, and NEVER expose admin endpoints
 on the consumer API. Admin routes are behind a separate Caddy config with IP whitelist.
+Admin Tooling
+Overview
+The admin lives at /admin/ (Django Admin) with enhanced model admin classes, custom views, and actions. The admin_tools app (14th Django app) provides cross-cutting models: AuditLog, ModerationQueue, ScraperRun, SiteConfig. All admin tables use the PostgreSQL admin schema.
+10 Admin Consoles
+The admin provides 10 monitoring/management consoles (see docs/ADMIN-TOOLING-COMPLETE.md for full specs):
+
+🕷️ Scraping Console — ScraperJob history, success/failure rates, run-now buttons, single-URL scrape
+📦 Data Quality Console — missing images/brands/categories, matching review queue, merge/split products
+📊 DudScore Console — score distribution, component breakdown, weight config, recalculation triggers
+🛡️ Review Moderation — pending/flagged reviews, fraud signals, approve/reject, suspend reviewers
+👥 User Management — user list, @whyd.* email status, review counts, suspend/restore
+💰 Revenue & Affiliate — click tracking stats, marketplace CTR, affiliate tag management
+📧 Email Console — inbound/outbound logs, parse success rates, rate limits, webhook health
+🔔 Notification Console — delivery stats, failed emails, broadcast, retry failures
+🔍 Search Console — Meilisearch health, top/zero-result queries, reindex triggers
+⚙️ System Health — service status, Celery queue depths, DB stats, error rates
+
+Admin Coding Rules
+
+Every admin class must extend AuditLogMixin (from admin_tools/mixins.py) — this auto-logs all create/update/delete actions to the immutable AuditLog.
+Status badges use format_html() with colored spans — never raw HTML strings.
+Custom admin actions must create AuditLog entries for traceability.
+Read-only models (AuditLog, DudScoreHistory, PriceSnapshot, ClickEvent): set has_add_permission, has_change_permission, has_delete_permission to return False.
+Sensitive data (email bodies, OAuth tokens): NEVER display decrypted values in admin. Show "[encrypted]" placeholder.
+Custom admin views extend admin/base_site.html template for consistent styling.
+SiteConfig is the runtime config store — all tuneable thresholds go here, NOT in Django settings or hardcoded values. Read via SiteConfig.objects.get(key='...') in app code.
+
+Admin Models (admin schema)
+python# AuditLog — immutable, auto-created by AuditLogMixin
+# Fields: admin_user FK, action, target_type, target_id, old_value JSONB, new_value JSONB, ip_address, created_at
+# NEVER manually create, edit, or delete. Fully read-only in admin.
+
+# ModerationQueue — review/discussion/user moderation
+# Fields: item_type, item_id, reason, status (pending/approved/rejected), assigned_to FK, resolved_at
+
+# ScraperRun — aggregated scraper execution stats
+# Fields: marketplace FK, spider_name, status, items_scraped/created/updated, errors JSONB, started_at, completed_at
+
+# SiteConfig — runtime key-value config
+# Fields: key (unique), value JSONB, updated_by FK, updated_at
+Quick Monitoring (Without Admin UI)
+bash# Celery task monitor (install once: pip install flower)
+celery -A whydud flower --port=5555
+# → http://localhost:5555
+
+# Platform health check
+python manage.py health_check
+
+# Scraper job status
+python manage.py shell -c "
+from apps.scraping.models import ScraperJob
+for j in ScraperJob.objects.order_by('-started_at')[:5]:
+    print(f'{j.started_at:%m/%d %H:%M} | {j.marketplace_slug:15} | {j.status:10} | items={j.items_scraped}')
+"
+
+# Trigger spider manually
+python manage.py shell -c "
+from apps.scraping.tasks import run_marketplace_spider
+run_marketplace_spider.delay('amazon_in')
+"
+
+Automated Pipeline (Celery Beat Schedules)
+The platform runs automatically via Celery Beat. These are the registered periodic tasks:
+SCRAPING:
+  scrape-amazon-in-6h:            every 6h (00:00, 06:00, 12:00, 18:00 UTC)
+  scrape-flipkart-6h:             every 6h (03:00, 09:00, 15:00, 21:00 UTC) — offset from Amazon
+
+SEARCH:
+  meilisearch-full-reindex-daily: daily at 01:00 UTC
+
+ALERTS:
+  check-price-alerts-4h:          every 4h
+
+REVIEWS:
+  publish-pending-reviews-hourly: every hour at :00
+  update-reviewer-profiles-weekly: Monday 00:00 UTC
+
+SCORING:
+  dudscore-full-recalc-monthly:   1st of month, 03:00 UTC
+Pipeline Flow (What Happens Every 6 Hours)
+Spider runs → ProductItems yielded
+  → ValidationPipeline (drop invalid)
+  → NormalizationPipeline (clean titles, brands)
+  → ProductPipeline:
+      match_product() → find/create canonical Product
+      create/update ProductListing
+      insert PriceSnapshot (TimescaleDB)
+      update Product.current_best_price
+  → MeilisearchIndexPipeline (queue selective sync)
+  → Post-scrape triggers:
+      sync_products_to_meilisearch.delay()
+      check_price_alerts.delay()
+Celery Queues
+default   — notifications, review publishing, discussions
+scraping  — spider runs, adhoc scrapes
+email     — email sending (notifications, verification, password reset)
+scoring   — DudScore calculation, Meilisearch sync, reviewer profiles
+alerts    — price alert checks
+Rule: ALL background work goes through Celery. NEVER run long tasks synchronously in views.
 
 ### Django Admin (Free, Immediate)
 

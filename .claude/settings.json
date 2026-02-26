@@ -65,7 +65,8 @@
       "Bash(PGPASSWORD=whydud_dev psql -h localhost -U whydud -d whydud -c \":*)",
       "Bash(DJANGO_SUPERUSER_PASSWORD=admin123 python manage.py createsuperuser --noinput --username admin --email admin@whydud.com)",
       "Bash(DJANGO_SUPERUSER_PASSWORD=admin123 python manage.py createsuperuser --noinput --email admin@whydud.com)",
-      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)"
+      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)",
+      "Bash(PYTHONIOENCODING=utf-8 python manage.py shell -c \":*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",
