@@ -31,18 +31,126 @@ REVIEW_COUNT_RE = re.compile(r"([\d,]+)\s*(?:rating|review|customer)")
 MARKETPLACE_SLUG = "amazon_in"
 
 # Seed category search URLs — used when no ScraperJob provides URLs.
-SEED_CATEGORY_URLS = [
-    "https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031",
-    "https://www.amazon.in/s?k=laptops&rh=n%3A1375424031",
-    "https://www.amazon.in/s?k=headphones&rh=n%3A1388921031",
-    "https://www.amazon.in/s?k=air+purifiers&rh=n%3A5131299031",
-    "https://www.amazon.in/s?k=washing+machines&rh=n%3A1380365031",
-    "https://www.amazon.in/s?k=refrigerators&rh=n%3A1380369031",
-    "https://www.amazon.in/s?k=televisions&rh=n%3A1389396031",
-    "https://www.amazon.in/s?k=cameras&rh=n%3A1389175031",
+# Format: (url, max_pages)  — max_pages controls pagination depth per category.
+# The rh=n%3A<id> parameter restricts results to a specific Amazon browse node.
+# Top 30 high-value categories get 10 pages (~200 products each).
+# Remaining 60 categories get 5 pages (~100 products each).
+
+_TOP = 10   # pages for top categories
+_STD = 5    # pages for standard categories
+
+SEED_CATEGORY_URLS: list[tuple[str, int]] = [
+    # ── Smartphones & Accessories (TOP) ──────────────────────────────────
+    ("https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031", _TOP),
+    ("https://www.amazon.in/s?k=phone+cases+covers&rh=n%3A4363159031", _STD),
+    ("https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031", _STD),
+    ("https://www.amazon.in/s?k=power+banks&rh=n%3A6612025031", _TOP),
+    ("https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031", _STD),
+    # ── Computers & Peripherals (TOP) ────────────────────────────────────
+    ("https://www.amazon.in/s?k=laptops&rh=n%3A1375424031", _TOP),
+    ("https://www.amazon.in/s?k=tablets&rh=n%3A1375458031", _TOP),
+    ("https://www.amazon.in/s?k=monitors&rh=n%3A1375425031", _TOP),
+    ("https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375433031", _STD),
+    ("https://www.amazon.in/s?k=computer+mouse&rh=n%3A1375433031", _STD),
+    ("https://www.amazon.in/s?k=printers&rh=n%3A1375434031", _STD),
+    ("https://www.amazon.in/s?k=routers&rh=n%3A1389401031", _STD),
+    ("https://www.amazon.in/s?k=external+hard+drives&rh=n%3A1375430031", _STD),
+    ("https://www.amazon.in/s?k=pen+drives&rh=n%3A1375430031", _STD),
+    ("https://www.amazon.in/s?k=graphics+cards&rh=n%3A1375424031", _STD),
+    ("https://www.amazon.in/s?k=webcams&rh=n%3A1389175031", _STD),
+    # ── Audio (TOP) ──────────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=headphones&rh=n%3A1388921031", _TOP),
+    ("https://www.amazon.in/s?k=earbuds+tws&rh=n%3A1388921031", _TOP),
+    ("https://www.amazon.in/s?k=bluetooth+speakers&rh=n%3A1388888031", _TOP),
+    ("https://www.amazon.in/s?k=soundbars&rh=n%3A3401801031", _STD),
+    ("https://www.amazon.in/s?k=microphones&rh=n%3A3677700031", _STD),
+    # ── Wearables (TOP) ──────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=smartwatches&rh=n%3A6284375031", _TOP),
+    ("https://www.amazon.in/s?k=fitness+bands&rh=n%3A6284375031", _STD),
+    # ── Cameras & Photography ────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=cameras&rh=n%3A1389175031", _TOP),
+    ("https://www.amazon.in/s?k=camera+lenses&rh=n%3A1389177031", _STD),
+    ("https://www.amazon.in/s?k=camera+tripods&rh=n%3A1389181031", _STD),
+    ("https://www.amazon.in/s?k=action+cameras&rh=n%3A1389175031", _STD),
+    # ── TVs & Entertainment (TOP) ────────────────────────────────────────
+    ("https://www.amazon.in/s?k=televisions&rh=n%3A1389396031", _TOP),
+    ("https://www.amazon.in/s?k=projectors&rh=n%3A1389396031", _STD),
+    ("https://www.amazon.in/s?k=streaming+devices&rh=n%3A1389396031", _STD),
+    ("https://www.amazon.in/s?k=tv+wall+mounts&rh=n%3A1389396031", _STD),
+    # ── Large Appliances (TOP) ───────────────────────────────────────────
+    ("https://www.amazon.in/s?k=refrigerators&rh=n%3A1380369031", _TOP),
+    ("https://www.amazon.in/s?k=washing+machines&rh=n%3A1380365031", _TOP),
+    ("https://www.amazon.in/s?k=air+conditioners&rh=n%3A1380369031", _TOP),
+    ("https://www.amazon.in/s?k=microwave+ovens&rh=n%3A1380367031", _STD),
+    ("https://www.amazon.in/s?k=dishwashers&rh=n%3A1380271031", _STD),
+    ("https://www.amazon.in/s?k=water+heaters+geysers&rh=n%3A4369221031", _STD),
+    ("https://www.amazon.in/s?k=chimneys&rh=n%3A4369280031", _STD),
+    # ── Small Appliances ─────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=air+purifiers&rh=n%3A5131299031", _TOP),
+    ("https://www.amazon.in/s?k=water+purifiers&rh=n%3A5131300031", _TOP),
+    ("https://www.amazon.in/s?k=vacuum+cleaners&rh=n%3A1380263031", _STD),
+    ("https://www.amazon.in/s?k=robot+vacuum+cleaners&rh=n%3A1380263031", _STD),
+    ("https://www.amazon.in/s?k=mixer+grinders&rh=n%3A1380263031", _STD),
+    ("https://www.amazon.in/s?k=induction+cooktops&rh=n%3A1380536031", _STD),
+    ("https://www.amazon.in/s?k=electric+kettles&rh=n%3A1380536031", _STD),
+    ("https://www.amazon.in/s?k=air+fryers&rh=n%3A1380536031", _STD),
+    ("https://www.amazon.in/s?k=coffee+machines&rh=n%3A1380536031", _STD),
+    ("https://www.amazon.in/s?k=irons+steamers&rh=n%3A1380267031", _STD),
+    ("https://www.amazon.in/s?k=fans&rh=n%3A1380365031", _STD),
+    ("https://www.amazon.in/s?k=room+heaters&rh=n%3A1380365031", _STD),
+    # ── Personal Care & Grooming (TOP) ───────────────────────────────────
+    ("https://www.amazon.in/s?k=trimmers&rh=n%3A1374407031", _TOP),
+    ("https://www.amazon.in/s?k=electric+shavers&rh=n%3A1374407031", _STD),
+    ("https://www.amazon.in/s?k=hair+dryers&rh=n%3A1374410031", _STD),
+    ("https://www.amazon.in/s?k=hair+straighteners&rh=n%3A1374410031", _STD),
+    ("https://www.amazon.in/s?k=electric+toothbrushes&rh=n%3A1374413031", _STD),
+    # ── Fitness & Sports ─────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=treadmills&rh=n%3A1961623031", _STD),
+    ("https://www.amazon.in/s?k=exercise+bikes&rh=n%3A1961623031", _STD),
+    ("https://www.amazon.in/s?k=dumbbells+weights&rh=n%3A1961624031", _STD),
+    ("https://www.amazon.in/s?k=yoga+mats&rh=n%3A1961624031", _STD),
+    # ── Home & Furniture (TOP) ───────────────────────────────────────────
+    ("https://www.amazon.in/s?k=mattresses&rh=n%3A1380279031", _TOP),
+    ("https://www.amazon.in/s?k=office+chairs&rh=n%3A3553048031", _TOP),
+    ("https://www.amazon.in/s?k=study+tables&rh=n%3A3553048031", _STD),
+    ("https://www.amazon.in/s?k=beds&rh=n%3A3553048031", _STD),
+    ("https://www.amazon.in/s?k=sofas&rh=n%3A3553048031", _STD),
+    ("https://www.amazon.in/s?k=shoe+racks&rh=n%3A3553048031", _STD),
+    # ── Smart Home & Security (TOP) ──────────────────────────────────────
+    ("https://www.amazon.in/s?k=smart+plugs&rh=n%3A1389401031", _STD),
+    ("https://www.amazon.in/s?k=smart+bulbs&rh=n%3A1389401031", _STD),
+    ("https://www.amazon.in/s?k=security+cameras&rh=n%3A1389175031", _TOP),
+    ("https://www.amazon.in/s?k=smart+door+locks&rh=n%3A1389401031", _STD),
+    ("https://www.amazon.in/s?k=video+doorbells&rh=n%3A1389401031", _STD),
+    # ── Gaming (TOP) ─────────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=gaming+laptops&rh=n%3A1375424031", _TOP),
+    ("https://www.amazon.in/s?k=gaming+monitors&rh=n%3A1375425031", _STD),
+    ("https://www.amazon.in/s?k=gaming+headsets&rh=n%3A1388921031", _STD),
+    ("https://www.amazon.in/s?k=gaming+controllers&rh=n%3A976460031", _STD),
+    ("https://www.amazon.in/s?k=gaming+chairs&rh=n%3A3553048031", _STD),
+    # ── Storage & Networking ─────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=ssd+internal&rh=n%3A1375430031", _STD),
+    ("https://www.amazon.in/s?k=memory+cards&rh=n%3A1375430031", _STD),
+    ("https://www.amazon.in/s?k=wifi+mesh+systems&rh=n%3A1389401031", _STD),
+    ("https://www.amazon.in/s?k=nas+storage&rh=n%3A1375430031", _STD),
+    # ── Baby & Kids ──────────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=baby+strollers&rh=n%3A1571274031", _STD),
+    ("https://www.amazon.in/s?k=car+seats+baby&rh=n%3A1571274031", _STD),
+    ("https://www.amazon.in/s?k=baby+monitors&rh=n%3A1571274031", _STD),
+    # ── Car & Bike Accessories ───────────────────────────────────────────
+    ("https://www.amazon.in/s?k=dash+cameras&rh=n%3A4772060031", _STD),
+    ("https://www.amazon.in/s?k=car+chargers&rh=n%3A4772060031", _STD),
+    ("https://www.amazon.in/s?k=car+air+purifiers&rh=n%3A4772060031", _STD),
+    ("https://www.amazon.in/s?k=tyre+inflators&rh=n%3A4772060031", _STD),
+    # ── Musical Instruments ──────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=guitars&rh=n%3A3677697031", _STD),
+    ("https://www.amazon.in/s?k=keyboards+pianos&rh=n%3A3677697031", _STD),
+    # ── Luggage & Bags ───────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=laptop+bags+backpacks&rh=n%3A2454169031", _STD),
+    ("https://www.amazon.in/s?k=suitcases+trolley&rh=n%3A2454169031", _STD),
 ]
 
-# Maximum number of listing pages to follow per category.
+# Default fallback when --max-pages is passed via CLI (overrides all per-category limits).
 MAX_LISTING_PAGES = 5
 
 
@@ -86,9 +194,12 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             if category_urls
             else []
         )
-        self._max_pages = int(max_pages) if max_pages else MAX_LISTING_PAGES
+        # --max-pages CLI arg acts as a global override for ALL categories.
+        # When not set, per-category limits from SEED_CATEGORY_URLS are used.
+        self._max_pages_override: int | None = int(max_pages) if max_pages else None
         self._save_html = save_html == "1"
-        self._pages_followed: dict[str, int] = {}  # base_url → pages followed
+        self._pages_followed: dict[str, int] = {}   # base_url → pages followed
+        self._max_pages_map: dict[str, int] = {}     # base_url → per-category limit
 
     # ------------------------------------------------------------------
     # start_requests
@@ -96,9 +207,12 @@ class AmazonIndiaSpider(BaseWhydudSpider):
 
     def start_requests(self):
         """Emit initial requests from ScraperJob config or seed categories."""
-        urls = self._load_urls()
-        for url in urls:
-            self.logger.info(f"Starting category: {url}")
+        url_pairs = self._load_urls()
+        for url, max_pg in url_pairs:
+            # Store per-category page limit keyed by base URL
+            base = url.split("&page=")[0].split("?page=")[0]
+            self._max_pages_map[base] = max_pg
+            self.logger.info(f"Starting category ({max_pg} pages): {url}")
             yield scrapy.Request(
                 url,
                 callback=self.parse_listing_page,
@@ -108,11 +222,17 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                 dont_filter=True,
             )
 
-    def _load_urls(self) -> list[str]:
-        """Resolve the list of category/search URLs to crawl."""
-        # 1. Explicit CLI override
+    def _load_urls(self) -> list[tuple[str, int]]:
+        """Resolve the list of (url, max_pages) pairs to crawl.
+
+        Priority: CLI ``category_urls`` > ScraperJob > seed categories.
+        The ``--max-pages`` CLI arg overrides per-category limits globally.
+        """
+        fallback = self._max_pages_override or MAX_LISTING_PAGES
+
+        # 1. Explicit CLI override — flat URLs, use global limit
         if self._category_urls:
-            return self._category_urls
+            return [(u, fallback) for u in self._category_urls]
 
         # 2. ScraperJob (from DB)
         if self.job_id:
@@ -120,14 +240,14 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                 from apps.scraping.models import ScraperJob
 
                 job = ScraperJob.objects.get(id=self.job_id)
-                # The ScraperJob.marketplace gives us the marketplace,
-                # but category URLs would need to come from config or job metadata.
-                # For now, use marketplace base_url + seed patterns.
                 self.logger.info(f"Running for job {self.job_id}, marketplace: {job.marketplace.slug}")
             except Exception as exc:
                 self.logger.warning(f"Could not load ScraperJob {self.job_id}: {exc}")
 
         # 3. Fallback to seed categories
+        if self._max_pages_override is not None:
+            # CLI --max-pages overrides every per-category limit
+            return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
         return list(SEED_CATEGORY_URLS)
 
     # ------------------------------------------------------------------
@@ -175,10 +295,11 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                 },
             )
 
-        # Pagination — follow "Next" link up to max_pages
+        # Pagination — follow "Next" link up to per-category max_pages
         base_url = response.url.split("&page=")[0].split("?page=")[0]
         pages_so_far = self._pages_followed.get(base_url, 1)
-        if pages_so_far < self._max_pages:
+        max_for_category = self._max_pages_map.get(base_url, MAX_LISTING_PAGES)
+        if pages_so_far < max_for_category:
             next_link = response.css("a.s-pagination-next::attr(href)").get()
             if next_link:
                 self._pages_followed[base_url] = pages_so_far + 1
