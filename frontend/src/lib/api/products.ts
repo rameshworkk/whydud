@@ -23,9 +23,12 @@ export const productsApi = {
       params: { days },
     }),
 
-  getReviews: (slug: string, cursor?: string) =>
+  getReviews: (
+    slug: string,
+    params?: { cursor?: string; sort?: string; source?: string; rating?: string; verified?: string },
+  ) =>
     apiClient.get<Review[]>(`/api/v1/products/${slug}/reviews`, {
-      params: { cursor },
+      params,
     }),
 
   getBestDeals: (slug: string) =>

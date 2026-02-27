@@ -47,7 +47,7 @@ class ProductListView(APIView):
 
     def get(self, request: Request) -> Response:
         sort_map = ProductConfig.sort_map()
-        sort_by = request.query_params.get("sort_by", "dud_score")
+        sort_by = request.query_params.get("sort_by", "newest")
 
         if sort_by not in sort_map:
             return error_response(

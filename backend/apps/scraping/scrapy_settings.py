@@ -13,8 +13,10 @@ NEWSPIDER_MODULE = "apps.scraping.spiders"
 # ---------------------------------------------------------------------------
 ITEM_PIPELINES = {
     "apps.scraping.pipelines.ValidationPipeline": 100,
+    "apps.scraping.pipelines.ReviewValidationPipeline": 150,
     "apps.scraping.pipelines.NormalizationPipeline": 200,
     "apps.scraping.pipelines.ProductPipeline": 400,
+    "apps.scraping.pipelines.ReviewPersistencePipeline": 450,
     "apps.scraping.pipelines.MeilisearchIndexPipeline": 500,
 }
 

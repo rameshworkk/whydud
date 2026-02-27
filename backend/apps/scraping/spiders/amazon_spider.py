@@ -30,6 +30,126 @@ REVIEW_COUNT_RE = re.compile(r"([\d,]+)\s*(?:rating|review|customer)")
 
 MARKETPLACE_SLUG = "amazon_in"
 
+# ---------------------------------------------------------------------------
+# Amazon search keyword → Whydud category slug mapping
+#
+# Used to auto-assign a Whydud category to products based on which seed URL
+# (search keyword) they were scraped from. Keys are the `k=` param value
+# from the seed URL, normalised to lowercase with '+' replaced by ' '.
+# ---------------------------------------------------------------------------
+
+KEYWORD_CATEGORY_MAP: dict[str, str] = {
+    # Smartphones & Accessories
+    "smartphones": "smartphones",
+    "phone cases covers": "smartphones",
+    "screen protectors": "smartphones",
+    "power banks": "smartphones",
+    "mobile chargers": "smartphones",
+    # Computers & Peripherals
+    "laptops": "laptops",
+    "tablets": "tablets",
+    "monitors": "laptops",
+    "computer keyboards": "laptops",
+    "computer mouse": "laptops",
+    "printers": "laptops",
+    "routers": "laptops",
+    "external hard drives": "laptops",
+    "pen drives": "laptops",
+    "graphics cards": "laptops",
+    "webcams": "cameras",
+    # Audio
+    "headphones": "audio",
+    "earbuds tws": "audio",
+    "bluetooth speakers": "audio",
+    "soundbars": "audio",
+    "microphones": "audio",
+    # Wearables
+    "smartwatches": "smartwatches",
+    "fitness bands": "smartwatches",
+    # Cameras
+    "cameras": "cameras",
+    "camera lenses": "cameras",
+    "camera tripods": "cameras",
+    "action cameras": "cameras",
+    # TVs & Entertainment
+    "televisions": "televisions",
+    "projectors": "televisions",
+    "streaming devices": "televisions",
+    "tv wall mounts": "televisions",
+    # Large Appliances
+    "refrigerators": "refrigerators",
+    "washing machines": "washing-machines",
+    "air conditioners": "air-conditioners",
+    "microwave ovens": "appliances",
+    "dishwashers": "appliances",
+    "water heaters geysers": "appliances",
+    "chimneys": "appliances",
+    # Small Appliances
+    "air purifiers": "appliances",
+    "water purifiers": "appliances",
+    "vacuum cleaners": "appliances",
+    "robot vacuum cleaners": "appliances",
+    "mixer grinders": "kitchen-tools",
+    "induction cooktops": "kitchen-tools",
+    "electric kettles": "kitchen-tools",
+    "air fryers": "kitchen-tools",
+    "coffee machines": "kitchen-tools",
+    "irons steamers": "kitchen-tools",
+    "fans": "appliances",
+    "room heaters": "appliances",
+    # Personal Care & Grooming
+    "trimmers": "appliances",
+    "electric shavers": "appliances",
+    "hair dryers": "appliances",
+    "hair straighteners": "appliances",
+    "electric toothbrushes": "appliances",
+    # Fitness & Sports
+    "treadmills": "appliances",
+    "exercise bikes": "appliances",
+    "dumbbells weights": "appliances",
+    "yoga mats": "appliances",
+    # Home & Furniture
+    "mattresses": "home-kitchen",
+    "office chairs": "home-kitchen",
+    "study tables": "home-kitchen",
+    "beds": "home-kitchen",
+    "sofas": "home-kitchen",
+    "shoe racks": "home-kitchen",
+    # Smart Home & Security
+    "smart plugs": "electronics",
+    "smart bulbs": "electronics",
+    "security cameras": "cameras",
+    "smart door locks": "electronics",
+    "video doorbells": "electronics",
+    # Gaming
+    "gaming laptops": "laptops",
+    "gaming monitors": "laptops",
+    "gaming headsets": "audio",
+    "gaming controllers": "electronics",
+    "gaming chairs": "home-kitchen",
+    # Storage & Networking
+    "ssd internal": "laptops",
+    "memory cards": "laptops",
+    "wifi mesh systems": "laptops",
+    "nas storage": "laptops",
+    # Baby & Kids
+    "baby strollers": "home-kitchen",
+    "car seats baby": "home-kitchen",
+    "baby monitors": "cameras",
+    # Car & Bike
+    "dash cameras": "cameras",
+    "car chargers": "electronics",
+    "car air purifiers": "appliances",
+    "tyre inflators": "electronics",
+    # Musical Instruments
+    "guitars": "electronics",
+    "keyboards pianos": "electronics",
+    # Luggage
+    "laptop bags backpacks": "fashion",
+    "suitcases trolley": "fashion",
+}
+
+
 # Seed category search URLs — used when no ScraperJob provides URLs.
 # Format: (url, max_pages)  — max_pages controls pagination depth per category.
 # The rh=n%3A<id> parameter restricts results to a specific Amazon browse node.
@@ -264,6 +384,9 @@ class AmazonIndiaSpider(BaseWhydudSpider):
 
         self.logger.info(f"Found {len(results)} results on {response.url}")
 
+        # Resolve category slug from the seed URL keyword
+        category_slug = response.meta.get("category_slug") or self._resolve_category_from_url(response.url)
+
         for result in results:
             # Amazon 2025+: product link lives in div[data-cy="title-recipe"]
             # or as a.a-link-normal sibling to h2, no longer inside h2.
@@ -292,6 +415,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                     "playwright_page_methods": [
                         PageMethod("wait_for_selector", "#productTitle", timeout=10000),
                     ],
+                    "category_slug": category_slug,
                 },
             )
 
@@ -308,7 +432,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                     callback=self.parse_listing_page,
                     errback=self.handle_error,
                     headers=self._make_headers(),
-                    meta={"playwright": True},
+                    meta={"playwright": True, "category_slug": category_slug},
                 )
 
     # ------------------------------------------------------------------
@@ -350,6 +474,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
         item["seller_rating"] = None  # Amazon doesn't always expose seller rating on product page
         item["in_stock"] = self._extract_availability(response)
         item["fulfilled_by"] = self._extract_fulfilled_by(response)
+        item["category_slug"] = response.meta.get("category_slug")
         item["about_bullets"] = self._extract_about_bullets(response)
         item["offer_details"] = self._extract_offers(response)
         item["raw_html_path"] = raw_html_path
@@ -625,6 +750,30 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             offers.append(offer)
 
         return offers[:10]  # cap at 10
+
+    # ------------------------------------------------------------------
+    # Category resolution
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_category_from_url(url: str) -> str | None:
+        """Extract the Whydud category slug from an Amazon search URL.
+
+        Parses the `k=` query parameter and looks it up in KEYWORD_CATEGORY_MAP.
+        """
+        from urllib.parse import parse_qs, urlparse
+
+        try:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+            keyword = params.get("k", [None])[0]
+            if keyword:
+                # Normalise: "phone+cases+covers" → "phone cases covers"
+                normalised = keyword.replace("+", " ").strip().lower()
+                return KEYWORD_CATEGORY_MAP.get(normalised)
+        except Exception:
+            pass
+        return None
 
     # ------------------------------------------------------------------
     # Parsing utilities

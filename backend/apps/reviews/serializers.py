@@ -7,18 +7,30 @@ from .models import Review, ReviewerProfile, ReviewVote
 
 class ReviewSerializer(serializers.ModelSerializer):
     user_vote = serializers.SerializerMethodField()
-    marketplace_name = serializers.CharField(source="listing.marketplace.name", read_only=True)
+    marketplace_name = serializers.SerializerMethodField()
+    marketplace_slug = serializers.CharField(source="marketplace.slug", read_only=True, default=None)
+    external_reviewer_name = serializers.CharField(read_only=True)
+    helpful_vote_count = serializers.IntegerField(read_only=True)
+    variant_info = serializers.CharField(read_only=True)
+    external_review_url = serializers.URLField(read_only=True)
+    is_scraped = serializers.SerializerMethodField()
+    media = serializers.JSONField(read_only=True)
 
     class Meta:
         model = Review
         fields = [
-            "id", "marketplace_name", "reviewer_name", "rating",
-            "title", "body", "is_verified_purchase", "review_date",
-            "helpful_votes", "sentiment_score", "sentiment_label",
+            "id", "marketplace_name", "marketplace_slug",
+            "reviewer_name", "external_reviewer_name",
+            "rating", "title", "body",
+            "is_verified_purchase", "review_date",
+            "helpful_votes", "helpful_vote_count",
+            "sentiment_score", "sentiment_label",
             "extracted_pros", "extracted_cons",
             "credibility_score", "is_flagged", "fraud_flags",
             "upvotes", "downvotes", "vote_score",
-            "user_vote", "created_at",
+            "user_vote", "is_scraped",
+            "variant_info", "external_review_url", "media",
+            "created_at",
         ]
 
     def get_user_vote(self, obj: Review) -> int | None:
@@ -30,6 +42,16 @@ class ReviewSerializer(serializers.ModelSerializer):
             return vote.vote
         except ReviewVote.DoesNotExist:
             return None
+
+    def get_marketplace_name(self, obj: Review) -> str | None:
+        if obj.marketplace:
+            return obj.marketplace.name
+        if obj.listing and obj.listing.marketplace:
+            return obj.listing.marketplace.name
+        return None
+
+    def get_is_scraped(self, obj: Review) -> bool:
+        return obj.source == Review.Source.SCRAPED and obj.user is None
 
 
 class WriteReviewSerializer(serializers.ModelSerializer):

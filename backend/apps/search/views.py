@@ -130,13 +130,14 @@ class SearchView(APIView):
 
         # Map public sort_by to ORM ordering (reuse product sort map where possible).
         db_sort_map: dict[str, list[str]] = {
-            "relevance": ["-dud_score"],
+            "relevance": ["-created_at"],
             "price_asc": ["current_best_price"],
             "price_desc": ["-current_best_price"],
             "dud_score": ["-dud_score"],
             "top_rated": ["-avg_rating"],
+            "newest": ["-created_at"],
         }
-        db_ordering = db_sort_map.get(sort_by, ["-dud_score"])
+        db_ordering = db_sort_map.get(sort_by, ["-created_at"])
 
         qs = (
             Product.objects

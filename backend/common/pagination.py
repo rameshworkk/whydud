@@ -89,7 +89,7 @@ class ProductListPagination(CursorPagination):
     match the requested sort_by param.
     """
 
-    ordering = "-dud_score"
+    ordering = "-created_at"
 
     def get_page_size(self, request) -> int:
         max_size = ProductConfig.max_page_size()

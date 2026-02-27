@@ -42,9 +42,10 @@ class ProductReviewsView(APIView):
         sort = request.query_params.get("sort", "helpful")
         rating = request.query_params.get("rating")
         verified_only = request.query_params.get("verified") == "1"
+        source_filter = request.query_params.get("source")  # marketplace slug or "whydud"
 
         qs = Review.objects.filter(product=product, is_flagged=False).select_related(
-            "listing__marketplace"
+            "listing__marketplace", "marketplace"
         )
 
         if rating:
@@ -54,14 +55,19 @@ class ProductReviewsView(APIView):
                 pass
         if verified_only:
             qs = qs.filter(is_verified_purchase=True)
+        if source_filter:
+            if source_filter == "whydud":
+                qs = qs.filter(source=Review.Source.WHYDUD)
+            else:
+                qs = qs.filter(marketplace__slug=source_filter)
 
         sort_map = {
-            "helpful": "-vote_score",
+            "helpful": "-helpful_vote_count",
             "recent": "-review_date",
             "rating_asc": "rating",
             "rating_desc": "-rating",
         }
-        qs = qs.order_by(sort_map.get(sort, "-vote_score"))
+        qs = qs.order_by(sort_map.get(sort, "-helpful_vote_count"))
 
         paginator = CursorPagination()
         page = paginator.paginate_queryset(qs, request)

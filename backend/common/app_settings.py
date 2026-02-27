@@ -56,7 +56,7 @@ class ProductConfig:
     @classmethod
     def default_ordering(cls) -> str:
         """Single-field fallback when sort_map returns an empty list."""
-        return _get("PRODUCT_LIST_DEFAULT_ORDERING", "-dud_score")
+        return _get("PRODUCT_LIST_DEFAULT_ORDERING", "-created_at")
 
     @classmethod
     def sort_map(cls) -> dict[str, list[str]]:
@@ -141,8 +141,26 @@ class ScrapingConfig:
             {
                 "amazon-in": "amazon_in",
                 "flipkart": "flipkart",
+                "amazon_in_reviews": "amazon_in_reviews",
+                "flipkart_reviews": "flipkart_reviews",
             },
         )
+
+    @classmethod
+    def review_spider_map(cls) -> dict[str, str]:
+        """Marketplace slug → review spider name mapping."""
+        return _get(
+            "SCRAPING_REVIEW_SPIDER_MAP",
+            {
+                "amazon-in": "amazon_in_reviews",
+                "flipkart": "flipkart_reviews",
+            },
+        )
+
+    @classmethod
+    def default_max_review_pages(cls) -> int:
+        """Default number of review pages to scrape per product."""
+        return _get("SCRAPING_DEFAULT_MAX_REVIEW_PAGES", 3)
 
 
 # ---------------------------------------------------------------------------

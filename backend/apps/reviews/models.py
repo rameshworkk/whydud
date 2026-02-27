@@ -24,8 +24,20 @@ class Review(models.Model):
         "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="reviews"
     )
     source = models.CharField(max_length=20, choices=Source.choices, default=Source.SCRAPED)
-    external_review_id = models.CharField(max_length=200, blank=True)
+    external_review_id = models.CharField(max_length=200, blank=True, default="", db_index=True)
     reviewer_name = models.CharField(max_length=200, blank=True)
+
+    # Scraped marketplace review fields
+    external_reviewer_name = models.CharField(max_length=200, blank=True, default="")
+    external_reviewer_id = models.CharField(max_length=100, blank=True, default="")
+    external_review_url = models.URLField(max_length=500, blank=True, default="")
+    helpful_vote_count = models.PositiveIntegerField(default=0)
+    marketplace = models.ForeignKey(
+        "products.Marketplace", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="reviews"
+    )
+    variant_info = models.CharField(max_length=300, blank=True, default="")
+
     rating = models.SmallIntegerField()
     title = models.CharField(max_length=500, blank=True)
     body = models.TextField(blank=True)
@@ -91,6 +103,11 @@ class Review(models.Model):
                 fields=["user", "product"],
                 condition=models.Q(user__isnull=False),
                 name="one_review_per_user_product",
+            ),
+            models.UniqueConstraint(
+                fields=["external_review_id", "marketplace"],
+                condition=models.Q(external_review_id__gt=""),
+                name="unique_external_review_per_marketplace",
             ),
         ]
 

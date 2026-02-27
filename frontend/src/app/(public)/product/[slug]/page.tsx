@@ -6,8 +6,7 @@ import { DudScoreGauge } from "@/components/product/dud-score-gauge";
 import { CrossPlatformPricePanel } from "@/components/product/cross-platform-price-panel";
 import { CategoryScoreBars } from "@/components/product/category-score-bars";
 import { PriceChart } from "@/components/product/price-chart";
-import { RatingDistribution } from "@/components/reviews/rating-distribution";
-import { ReviewCard } from "@/components/reviews/review-card";
+import { ReviewSidebar } from "@/components/reviews/review-sidebar";
 import { ProductCard } from "@/components/product/product-card";
 import { ShareButton } from "@/components/product/share-button";
 import { RecentlyViewedTracker } from "@/components/product/recently-viewed-tracker";
@@ -481,67 +480,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </main>
 
         {/* -- Right Sidebar: Reviews -- */}
-        <aside className="w-[340px] shrink-0 overflow-y-auto no-scrollbar border-l border-slate-200 bg-white">
-          {/* Sticky header */}
-          <div className="p-4 border-b border-slate-100 sticky top-0 bg-white z-10">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-900">
-                Reviews
-                <span className="ml-2 text-sm font-normal text-slate-400">
-                  ({p.totalReviews.toLocaleString("en-IN")})
-                </span>
-              </h2>
-              <Link
-                href={`/product/${slug}/review`}
-                className="text-xs font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded"
-              >
-                Post a review
-              </Link>
-            </div>
-          </div>
-
-          {/* Rating distribution */}
-          <div className="p-4 border-b border-slate-100">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Community rating</h3>
-            <RatingDistribution
-              distribution={ratingDistribution}
-              avgRating={p.avgRating ?? 0}
-              totalReviews={p.totalReviews}
-            />
-          </div>
-
-          {/* Review filter tabs */}
-          <div className="px-4 py-3 border-b border-slate-100 flex gap-2 overflow-x-auto no-scrollbar">
-            {["All", "Positive", "Critical", "Verified"].map((tab, i) => (
-              <button
-                key={tab}
-                className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] ${
-                  i === 0
-                    ? "bg-[#F97316] text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          {/* Review cards */}
-          <div className="px-4">
-            {reviews.length > 0 ? (
-              reviews.map((review) => (
-                <ReviewCard key={review.id} review={review} />
-              ))
-            ) : (
-              <p className="py-6 text-sm text-slate-400 text-center">No reviews yet.</p>
-            )}
-            {reviews.length > 0 && (
-              <button className="w-full py-4 text-sm font-semibold text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
-                Load more reviews
-              </button>
-            )}
-          </div>
-        </aside>
+        <ReviewSidebar
+          slug={slug}
+          totalReviews={p.totalReviews}
+          avgRating={p.avgRating ?? 0}
+          ratingDistribution={ratingDistribution}
+          initialReviews={reviews}
+        />
       </div>
     </>
   );

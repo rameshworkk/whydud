@@ -67,13 +67,14 @@ _EAN_KEYS = frozenset({
 # Public API
 # ===================================================================
 
-def match_product(item, brand=None) -> MatchResult:
+def match_product(item, brand=None, category=None) -> MatchResult:
     """Match a scraped item to a canonical product.
 
     Args:
         item: A scrapy ProductItem dict-like with title, brand, specs, etc.
         brand: Pre-resolved Brand instance (optional). If *None* and
                ``item["brand"]`` is set, brand resolution runs internally.
+        category: Pre-resolved Category instance (optional).
 
     Returns:
         MatchResult with the matched (or newly created) Product,
@@ -93,6 +94,10 @@ def match_product(item, brand=None) -> MatchResult:
 
     if result is not None:
         product, confidence, method = result
+        # Backfill category on existing product if missing
+        if category and not product.category:
+            product.category = category
+            product.save(update_fields=["category", "updated_at"])
         logger.info(
             "Matched '%s' → product %s (confidence=%.2f, method=%s)",
             item["title"][:60],
@@ -108,13 +113,23 @@ def match_product(item, brand=None) -> MatchResult:
         )
 
     # Step 3 — Low confidence: create new canonical product
-    product = _create_canonical_product(item, brand)
+    product = _create_canonical_product(item, brand, category)
     return MatchResult(
         product=product,
         confidence=1.0,
         method="new",
         is_new=True,
     )
+
+
+def resolve_category(slug: str | None):
+    """Resolve a category slug to a Category instance. Returns None if not found."""
+    if not slug:
+        return None
+
+    from apps.products.models import Category
+
+    return Category.objects.filter(slug=slug).first()
 
 
 def resolve_or_create_brand(raw_brand: str):
@@ -461,7 +476,7 @@ def _find_best_match(item, brand, model_info: ModelInfo, ean: str | None):
 # Step 3 helper — create new canonical product
 # ===================================================================
 
-def _create_canonical_product(item, brand):
+def _create_canonical_product(item, brand, category=None):
     """Create a new canonical Product when no match is found."""
     from django.utils import timezone
     from django.utils.text import slugify
@@ -481,6 +496,7 @@ def _create_canonical_product(item, brand):
         slug=slug,
         title=item["title"],
         brand=brand,
+        category=category,
         description="",
         specs=item.get("specs") or {},
         images=item.get("images") or [],
@@ -491,5 +507,5 @@ def _create_canonical_product(item, brand):
         status=Product.Status.ACTIVE,
         last_scraped_at=now,
     )
-    logger.info("Created new canonical product: %s", product.slug)
+    logger.info("Created new canonical product: %s (category=%s)", product.slug, category)
     return product

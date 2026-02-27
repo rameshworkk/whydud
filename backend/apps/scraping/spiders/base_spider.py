@@ -38,10 +38,15 @@ class BaseWhydudSpider(scrapy.Spider):
     custom_settings = {
         "DOWNLOAD_DELAY": 2,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
+        "CONCURRENT_REQUESTS": 4,               # total concurrent requests (prevents RAM blowout)
         "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
         "ROBOTSTXT_OBEY": True,
         "COOKIES_ENABLED": True,
         "PLAYWRIGHT_BROWSER_TYPE": "chromium",
+        "PLAYWRIGHT_MAX_PAGES_PER_CONTEXT": 4,   # limit open browser tabs
+        "PLAYWRIGHT_LAUNCH_OPTIONS": {
+            "args": ["--disable-dev-shm-usage"],  # use /tmp instead of shared memory
+        },
         # Disable default UA middleware — we rotate manually.
         "DOWNLOADER_MIDDLEWARES": {
             "scrapy.downloadermiddlewares.useragent.UserAgentMiddleware": None,

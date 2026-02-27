@@ -1,17 +1,23 @@
 """Scrapy item pipelines for validation, product matching, and persistence.
 
 Pipeline order (configured in scrapy_settings.py):
-  100 — ValidationPipeline    → drop items missing required fields
-  200 — NormalizationPipeline → clean titles, normalise specs
-  400 — ProductPipeline       → match/create Product + Listing + PriceSnapshot
-  500 — MeilisearchIndexPipeline → batch-sync products to Meilisearch
+  100 — ValidationPipeline          → drop ProductItems missing required fields
+  150 — ReviewValidationPipeline    → drop ReviewItems missing required fields
+  200 — NormalizationPipeline       → clean titles, normalise specs
+  400 — ProductPipeline             → match/create Product + Listing + PriceSnapshot
+  450 — ReviewPersistencePipeline   → persist ReviewItems to Review model
+  500 — MeilisearchIndexPipeline    → batch-sync products to Meilisearch
 """
+import hashlib
 import logging
 import os
 import re
 from decimal import Decimal
 
+import dateutil.parser
 from scrapy.exceptions import DropItem
+
+from apps.scraping.items import ReviewItem
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +39,25 @@ class ValidationPipeline:
         if missing:
             spider.items_failed += 1
             raise DropItem(f"Missing required fields: {missing}")
+        return item
+
+
+# ===================================================================
+# 150 — Review Validation
+# ===================================================================
+
+class ReviewValidationPipeline:
+    """Validates ReviewItems — drops if missing required fields."""
+
+    def process_item(self, item, spider):
+        if not isinstance(item, ReviewItem):
+            return item  # Pass through ProductItems
+        if not item.get("marketplace_slug") or not item.get("product_external_id"):
+            raise DropItem("Missing marketplace or product ID")
+        if not item.get("rating") or not item.get("body"):
+            raise DropItem("Missing rating or body")
+        if len(item.get("body", "")) < 5:
+            raise DropItem("Review body too short")
         return item
 
 
@@ -124,6 +149,7 @@ class ProductPipeline:
         from apps.products.matching import (
             match_product,
             resolve_or_create_brand,
+            resolve_category,
             update_canonical_product,
         )
         from apps.products.models import (
@@ -163,6 +189,9 @@ class ProductPipeline:
         # ------- 3. Brand (alias-aware resolution) ------------------------
         brand = resolve_or_create_brand(item["brand"]) if item.get("brand") else None
 
+        # ------- 3b. Category resolution ----------------------------------
+        category = resolve_category(item.get("category_slug"))
+
         # ------- 4. Find or create ProductListing + Product ---------------
         listing = ProductListing.objects.filter(
             marketplace=marketplace,
@@ -173,10 +202,10 @@ class ProductPipeline:
             # Update existing listing
             product = listing.product
             self._update_listing(listing, item, seller, now)
-            self._update_product_from_listing(product, item, brand, now)
+            self._update_product_from_listing(product, item, brand, category, now)
         else:
             # 4-step matching engine (Steps 1-3)
-            result = match_product(item, brand=brand)
+            result = match_product(item, brand=brand, category=category)
             product = result.product
 
             listing = self._create_listing(
@@ -185,30 +214,32 @@ class ProductPipeline:
                 match_method=result.method,
             )
 
-        # ------- 5. PriceSnapshot — ALWAYS record after every scrape --------
+        # ------- 5. PriceSnapshot — record only when price is available --------
         # Raw SQL because price_snapshots is a TimescaleDB hypertable with no
         # auto-increment id column (managed=False). ORM .create() fails with
         # "column price_snapshots.id does not exist".
-        from django.db import connection
+        # Skip if price is None — hypertable has NOT NULL constraint on price.
+        if listing.current_price is not None:
+            from django.db import connection
 
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO price_snapshots
-                    (time, listing_id, product_id, marketplace_id, price, mrp, in_stock, seller_name)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                [
-                    now,
-                    listing.id,
-                    product.id,
-                    marketplace.id,
-                    listing.current_price,
-                    listing.mrp,
-                    listing.in_stock,
-                    item.get("seller_name") or "",
-                ],
-            )
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO price_snapshots
+                        (time, listing_id, product_id, marketplace_id, price, mrp, in_stock, seller_name)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    [
+                        now,
+                        listing.id,
+                        product.id,
+                        marketplace.id,
+                        listing.current_price,
+                        listing.mrp,
+                        listing.in_stock,
+                        item.get("seller_name") or "",
+                    ],
+                )
 
         # ------- 6. Recalculate canonical product aggregates (Step 4) -----
         update_canonical_product(product)
@@ -257,7 +288,7 @@ class ProductPipeline:
         )
 
     @staticmethod
-    def _update_product_from_listing(product, item, brand, now):
+    def _update_product_from_listing(product, item, brand, category, now):
         """Push fresh data onto the canonical Product."""
         update_fields = ["last_scraped_at", "updated_at"]
 
@@ -266,6 +297,10 @@ class ProductPipeline:
         if brand and not product.brand:
             product.brand = brand
             update_fields.append("brand")
+
+        if category and not product.category:
+            product.category = category
+            update_fields.append("category")
 
         # Update images if we have more / better ones
         if item.get("images") and (
@@ -324,6 +359,88 @@ class ProductPipeline:
             f"Created listing: {item['external_id']} on {marketplace.slug}"
         )
         return listing
+
+
+# ===================================================================
+# 450 — Review Persistence
+# ===================================================================
+
+class ReviewPersistencePipeline:
+    """Persists ReviewItems to the Review model."""
+
+    def process_item(self, item, spider):
+        if not isinstance(item, ReviewItem):
+            return item
+
+        from django.utils import timezone
+
+        from apps.products.models import ProductListing
+        from apps.reviews.models import Review
+
+        # Find the ProductListing → get canonical Product
+        listing = ProductListing.objects.filter(
+            marketplace__slug=item["marketplace_slug"],
+            external_id=item["product_external_id"]
+        ).select_related("product", "marketplace").first()
+
+        if not listing:
+            raise DropItem(f"No listing for {item['marketplace_slug']}:{item['product_external_id']}")
+
+        # Generate external_review_id if not provided
+        review_id = item.get("review_id", "")
+        if not review_id:
+            # Hash from marketplace + product + reviewer + date for dedup
+            hash_input = (
+                f"{item['marketplace_slug']}:{item['product_external_id']}:"
+                f"{item.get('reviewer_name', '')}:{item.get('review_date', '')}:"
+                f"{item['body'][:100]}"
+            )
+            review_id = hashlib.sha256(hash_input.encode()).hexdigest()[:32]
+
+        # Dedup check
+        if Review.objects.filter(
+            external_review_id=review_id,
+            marketplace=listing.marketplace
+        ).exists():
+            raise DropItem(f"Duplicate review: {review_id}")
+
+        # Parse date
+        review_date = None
+        if item.get("review_date"):
+            try:
+                review_date = dateutil.parser.parse(item["review_date"])
+            except (ValueError, TypeError):
+                review_date = timezone.now()
+        else:
+            review_date = timezone.now()
+
+        # Content hash for fraud detection
+        content_hash = hashlib.sha256(item["body"].encode()).hexdigest()
+
+        # Create review
+        Review.objects.create(
+            product=listing.product,
+            user=None,  # Scraped, not user-submitted
+            rating=int(item["rating"]),
+            title=item.get("title", "")[:500],
+            body=item["body"],
+            source=Review.Source.SCRAPED,
+            is_verified_purchase=bool(item.get("is_verified_purchase", False)),
+            is_published=True,
+            review_date=review_date,
+            content_hash=content_hash,
+            media=item.get("images", []),
+            external_reviewer_name=item.get("reviewer_name", "")[:200],
+            external_reviewer_id=item.get("reviewer_id", "")[:100],
+            external_review_id=review_id,
+            external_review_url=item.get("review_url", "")[:500],
+            helpful_vote_count=int(item.get("helpful_votes", 0)),
+            marketplace=listing.marketplace,
+            variant_info=item.get("variant", "")[:300],
+        )
+
+        spider.reviews_saved = getattr(spider, "reviews_saved", 0) + 1
+        return item
 
 
 # ===================================================================

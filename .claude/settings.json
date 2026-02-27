@@ -69,7 +69,11 @@
       "Bash(PYTHONIOENCODING=utf-8 python manage.py shell -c \":*)",
       "Bash(timeout 10 celery -A whydud flower --port=5555 --basic-auth=admin:admin)",
       "Read(//c/Users/rames/AppData/Local/ms-playwright/chromium-1208/**)",
-      "Read(//c/Users/rames/.claude/projects/**)"
+      "Read(//c/Users/rames/.claude/projects/**)",
+      "Bash(pkill -f \"apps.scraping.runner\")",
+      "Bash(pkill -f chromium)",
+      "Bash(cat \"/c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/app/\\(public\\)/page.tsx\")",
+      "Bash(cat \"/c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/app/\\(public\\)/search/page.tsx\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",

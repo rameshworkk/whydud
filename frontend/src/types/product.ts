@@ -169,11 +169,19 @@ export interface PricePoint {
 export interface Review {
   id: string;
   reviewerName: string;
+  externalReviewerName?: string;
   rating: 1 | 2 | 3 | 4 | 5;
   title: string;
   body: string;
   isVerifiedPurchase: boolean;
   reviewDate: string | null;
+  helpfulVoteCount: number;
+  marketplaceName?: string | null;
+  marketplaceSlug?: string | null;
+  variantInfo?: string;
+  externalReviewUrl?: string;
+  isScraped: boolean;
+  media: string[];
   sentimentScore: number | null;
   sentimentLabel: "positive" | "negative" | "neutral" | null;
   extractedPros: string[];

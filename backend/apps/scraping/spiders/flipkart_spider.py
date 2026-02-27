@@ -37,6 +37,18 @@ REVIEW_COUNT_RE = re.compile(r"([\d,]+)\s*(?:rating|review)", re.IGNORECASE)
 
 MARKETPLACE_SLUG = "flipkart"
 
+# Flipkart search keyword → Whydud category slug mapping
+KEYWORD_CATEGORY_MAP: dict[str, str] = {
+    "smartphones": "smartphones",
+    "laptops": "laptops",
+    "headphones": "audio",
+    "air purifiers": "appliances",
+    "washing machines": "washing-machines",
+    "refrigerators": "refrigerators",
+    "televisions": "televisions",
+    "cameras": "cameras",
+}
+
 # Seed search URLs — used when no ScraperJob provides URLs.
 SEED_CATEGORY_URLS = [
     "https://www.flipkart.com/search?q=smartphones&sort=popularity",
@@ -163,6 +175,9 @@ class FlipkartSpider(BaseWhydudSpider):
 
         self.logger.info(f"Found {len(unique_links)} products on {response.url}")
 
+        # Resolve category slug from the seed URL keyword
+        category_slug = response.meta.get("category_slug") or self._resolve_category_from_url(response.url)
+
         for link in unique_links:
             yield scrapy.Request(
                 link,
@@ -175,6 +190,7 @@ class FlipkartSpider(BaseWhydudSpider):
                     "playwright_page_methods": [
                         PageMethod("wait_for_load_state", "domcontentloaded"),
                     ],
+                    "category_slug": category_slug,
                 },
             )
 
@@ -190,7 +206,7 @@ class FlipkartSpider(BaseWhydudSpider):
                     callback=self.parse_listing_page,
                     errback=self.handle_error,
                     headers=self._make_headers(),
-                    meta={"playwright": True},
+                    meta={"playwright": True, "category_slug": category_slug},
                 )
 
     @staticmethod
@@ -252,6 +268,7 @@ class FlipkartSpider(BaseWhydudSpider):
         item["seller_rating"] = self._extract_seller_rating(response)
         item["in_stock"] = self._extract_availability(response, ld_json)
         item["fulfilled_by"] = self._extract_fulfilled_by(response)
+        item["category_slug"] = response.meta.get("category_slug")
         item["about_bullets"] = self._extract_highlights(response)
         item["offer_details"] = self._extract_offers(response)
         item["raw_html_path"] = raw_html_path
@@ -733,6 +750,26 @@ class FlipkartSpider(BaseWhydudSpider):
                     offers.append({"text": offer_text[:500], "type": offer_type})
 
         return offers[:10]
+
+    # ------------------------------------------------------------------
+    # Category resolution
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_category_from_url(url: str) -> str | None:
+        """Extract the Whydud category slug from a Flipkart search URL."""
+        from urllib.parse import parse_qs, urlparse
+
+        try:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+            keyword = params.get("q", [None])[0]
+            if keyword:
+                normalised = keyword.replace("+", " ").strip().lower()
+                return KEYWORD_CATEGORY_MAP.get(normalised)
+        except Exception:
+            pass
+        return None
 
     # ------------------------------------------------------------------
     # Parsing utilities

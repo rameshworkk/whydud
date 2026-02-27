@@ -63,4 +63,19 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute=0, hour="*/2"),  # every 2 hours at :00
         "options": {"queue": "scoring"},
     },
+    # Independent daily review scrapes (catch-up, supplements chain from product spider)
+    "scrape-amazon-in-reviews-daily": {
+        "task": "apps.scraping.tasks.run_review_spider",
+        "schedule": crontab(minute=0, hour=4),  # 04:00 UTC, after product scrapes
+        "args": ["amazon-in"],
+        "kwargs": {"max_review_pages": 3},
+        "options": {"queue": "scraping"},
+    },
+    "scrape-flipkart-reviews-daily": {
+        "task": "apps.scraping.tasks.run_review_spider",
+        "schedule": crontab(minute=0, hour=7),  # 07:00 UTC
+        "args": ["flipkart"],
+        "kwargs": {"max_review_pages": 3},
+        "options": {"queue": "scraping"},
+    },
 }

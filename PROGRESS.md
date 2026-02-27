@@ -872,3 +872,84 @@ Ran Amazon.in spider against a single category URL. Found and fixed 6 bugs:
   - Beat schedule visibility (all 8 periodic tasks)
   - Worker pool control (shutdown, restart, autoscale)
   - Broker connection status and stats
+
+### 2026-02-27 — Review Scraping Infrastructure
+- **Review model updated** (`apps/reviews/models.py`):
+  - Added 6 new fields for scraped marketplace reviews: `external_reviewer_name`, `external_reviewer_id`, `external_review_url`, `helpful_vote_count`, `marketplace` (FK to Marketplace), `variant_info`
+  - Updated `external_review_id` with `default=""` and `db_index=True`
+  - Added `unique_external_review_per_marketplace` constraint — `(external_review_id, marketplace)` where review ID is non-empty
+  - Migration `reviews/0004` created and applied
+  - `user` field already nullable — no change needed
+- **ReviewItem added** (`apps/scraping/items.py`):
+  - 4 required fields: `marketplace_slug`, `product_external_id`, `rating`, `body`
+  - 11 optional fields: `title`, `reviewer_name`, `reviewer_id`, `review_id`, `review_url`, `review_date`, `is_verified_purchase`, `helpful_votes`, `images`, `variant`, `country`
+- **Review pipelines added** (`apps/scraping/pipelines.py`):
+  - `ReviewValidationPipeline` (priority 150) — drops ReviewItems missing required fields or with body < 5 chars; passes through ProductItems
+  - `ReviewPersistencePipeline` (priority 450) — looks up ProductListing by marketplace+external_id, generates SHA256 review ID if none provided, dedup-checks, parses date, creates Review record
+- **Pipeline order** in `scrapy_settings.py`: 100 (Validation) → 150 (ReviewValidation) → 200 (Normalization) → 400 (Product) → 450 (ReviewPersistence) → 500 (Meilisearch)
+
+### 2026-02-27 — Amazon Review Spider
+- **Created `apps/scraping/spiders/amazon_review_spider.py`** — `AmazonReviewSpider` (name: `amazon_in_reviews`)
+  - Inherits `BaseWhydudSpider` (UA rotation, download delay, error counting)
+  - `start_requests()`: queries all in-stock Amazon ProductListings with < 10 scraped reviews, ordered by total_reviews desc, capped at 200 products
+  - Targets `/product-reviews/<ASIN>/` pages sorted by helpfulness
+  - `parse_review_page()` extracts per-review: review_id, rating (1-5), title, body, reviewer_name, reviewer_id (from profile link), review_date, country, is_verified_purchase, helpful_votes, images (thumbnail→full-res upgrade), variant, review_url
+  - Pagination: follows up to `max_review_pages` (default 3, ~30 reviews/product) if page has 8+ reviews
+  - Yields `ReviewItem` instances → processed by `ReviewValidationPipeline` (150) + `ReviewPersistencePipeline` (450)
+- **Updated `common/app_settings.py`** — added `"amazon_in_reviews": "amazon_in_reviews"` to `ScrapingConfig.spider_map()`
+- **Updated `apps/scraping/runner.py`** — added `--max-review-pages` CLI argument
+  - Invocation: `python -m apps.scraping.runner amazon_in_reviews --max-review-pages 3`
+
+### 2026-02-27 — Flipkart Review Spider
+- **Created `apps/scraping/spiders/flipkart_review_spider.py`** — `FlipkartReviewSpider` (name: `flipkart_reviews`)
+  - Inherits `BaseWhydudSpider` with Playwright download handlers (Flipkart 403s plain HTTP)
+  - `start_requests()`: queries all in-stock Flipkart ProductListings with < 10 scraped reviews, ordered by total_reviews desc, capped at 200 products
+  - `_build_review_url()`: converts product URL `/p/<FPID>` to `/product-reviews/<FPID>?page=1&sortOrder=MOST_HELPFUL`
+  - `_find_review_blocks()`: 4 CSS fallback selectors + XPath structural fallback (Flipkart obfuscates class names frequently)
+  - Field extraction: every field (`rating`, `title`, `body`, `reviewer_name`, `date`, `verified`, `helpful_votes`, `images`, `variant`) has 3-4 CSS selector fallbacks + XPath last resort
+  - Empty `review_id` — Flipkart doesn't expose per-review IDs in HTML; `ReviewPersistencePipeline` generates SHA256 content hash
+  - All reviews tagged `country="India"` (Flipkart is India-only)
+  - Image URLs upgraded to 832×832 resolution via regex substitution
+  - Pagination: follows up to `max_review_pages` (default 3, ~30 reviews/product) if page has 8+ reviews
+  - Yields `ReviewItem` instances → processed by review pipelines (150 + 450)
+- **Updated `common/app_settings.py`** — added `"flipkart_reviews": "flipkart_reviews"` to `ScrapingConfig.spider_map()`
+  - Invocation: `python -m apps.scraping.runner flipkart_reviews --max-review-pages 3`
+
+### 2026-02-27 — Auto Review Scraping After Product Scrape + Downstream Processing
+- **Added `run_review_spider` Celery task** (`apps/scraping/tasks.py`, `queue="scraping"`, `bind=True`, `max_retries=1`)
+  - Resolves review spider name via `ScrapingConfig.review_spider_map()`
+  - Creates `ScraperJob` for tracking, runs spider via subprocess with `--max-review-pages`
+  - On success: triggers `_queue_review_downstream_tasks()` for post-processing
+- **Chained review spider after product spider** — `run_marketplace_spider` now calls `run_review_spider.delay()` on successful completion for any marketplace with a review spider configured
+- **Added `_queue_review_downstream_tasks()` helper** — for each product with new reviews (last 2 hours):
+  1. Queues `detect_fake_reviews` (fraud detection per product)
+  2. Queues `compute_dudscore` (DudScore recalculation per product)
+  3. Updates `product.avg_rating` and `product.total_reviews` from published reviews aggregate
+- **Added Celery Beat schedule** (`whydud/celery.py`) — independent daily review scrapes:
+  - `scrape-amazon-in-reviews-daily`: 04:00 UTC (after product scrapes)
+  - `scrape-flipkart-reviews-daily`: 07:00 UTC
+  - Both safe to double-run (review spiders dedup on `external_review_id`)
+- **Added `ScrapingConfig` entries** (`common/app_settings.py`):
+  - `review_spider_map()`: marketplace slug → review spider name (`amazon-in` → `amazon_in_reviews`, `flipkart` → `flipkart_reviews`)
+  - `default_max_review_pages()`: defaults to 3
+
+### 2026-02-27 — Review Serializer + Frontend Review Display Overhaul
+- **Updated `ReviewSerializer`** (`apps/reviews/serializers.py`) — new fields:
+  - `external_reviewer_name`, `helpful_vote_count`, `variant_info`, `external_review_url`, `media` (direct model fields)
+  - `marketplace_name` (SerializerMethodField: checks `marketplace` FK, falls back to `listing.marketplace`)
+  - `marketplace_slug` (from `marketplace.slug`)
+  - `is_scraped` (SerializerMethodField: `source == "scraped"` and `user is None`)
+- **Updated `ProductReviewsView.get`** (`apps/reviews/views.py`):
+  - Added `source` query param filter (marketplace slug or `"whydud"`)
+  - Updated `select_related` to include `"marketplace"` directly
+  - Changed "helpful" sort to use `helpful_vote_count` (scraped marketplace data)
+- **Updated `Review` TypeScript interface** (`frontend/src/types/product.ts`) — added: `externalReviewerName`, `helpfulVoteCount`, `marketplaceName`, `marketplaceSlug`, `variantInfo`, `externalReviewUrl`, `isScraped`, `media`
+- **Updated `productsApi.getReviews`** (`frontend/src/lib/api/products.ts`) — now accepts `sort`, `source`, `rating`, `verified` params
+- **Rewrote `ReviewCard` component** (`frontend/src/components/reviews/review-card.tsx`):
+  - Scraped reviews: marketplace badge (orange Amazon, blue Flipkart), external reviewer name, helpful count, variant info chip, image gallery, "Read on Amazon →" link
+  - Whydud reviews: green "Whydud" badge, thumbs up/down vote buttons, "Verified Purchase" badge
+- **Created `ReviewSidebar` client component** (`frontend/src/components/reviews/review-sidebar.tsx`):
+  - Source filter tabs: All Reviews | Amazon.in | Flipkart | Whydud
+  - Sort dropdown: Most Helpful | Newest | Highest Rating | Lowest Rating
+  - Loading spinner during re-fetch, "Load more reviews" button
+- **Updated product detail page** (`frontend/src/app/(public)/product/[slug]/page.tsx`) — replaced 60-line inline review sidebar with `<ReviewSidebar>` component

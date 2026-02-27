@@ -27,30 +27,30 @@ export const metadata: Metadata = {
 // ── Category data ─────────────────────────────────────────────────────────────
 
 const CATEGORY_IMAGES = [
-  { label: "Mobiles",      slug: "Smartphones",                 img: "https://placehold.co/100x100/dbeafe/1d4ed8?text=📱", color: "#dbeafe" },
-  { label: "Laptops",      slug: "Laptops+%26+Computers",       img: "https://placehold.co/100x100/ede9fe/6d28d9?text=💻", color: "#ede9fe" },
-  { label: "Audio",        slug: "Earphones+%26+Headphones",    img: "https://placehold.co/100x100/fce7f3/be185d?text=🎧", color: "#fce7f3" },
-  { label: "Smartwatches", slug: "Smartwatches",                img: "https://placehold.co/100x100/d1fae5/065f46?text=⌚", color: "#d1fae5" },
-  { label: "Home",         slug: "Home+Appliances",             img: "https://placehold.co/100x100/fef3c7/92400e?text=🏠", color: "#fef3c7" },
-  { label: "Kitchen",      slug: "Kitchen+Appliances",          img: "https://placehold.co/100x100/ffedd5/9a3412?text=🍳", color: "#ffedd5" },
-  { label: "Fashion",      slug: "Fashion",                     img: "https://placehold.co/100x100/fce7f3/9d174d?text=👗", color: "#fce7f3" },
-  { label: "Beauty",       slug: "Beauty+%26+Personal+Care",    img: "https://placehold.co/100x100/fdf2f8/86198f?text=💄", color: "#fdf2f8" },
-  { label: "Sports",       slug: "Sports",                      img: "https://placehold.co/100x100/ecfdf5/047857?text=⚽", color: "#ecfdf5" },
-  { label: "Toys",         slug: "Toys",                        img: "https://placehold.co/100x100/fff7ed/c2410c?text=🧸", color: "#fff7ed" },
-  { label: "TVs",          slug: "TVs",                         img: "https://placehold.co/100x100/f0fdf4/166534?text=📺", color: "#f0fdf4" },
-  { label: "Grocery",      slug: "Grocery",                     img: "https://placehold.co/100x100/fefce8/713f12?text=🛒", color: "#fefce8" },
+  { label: "Mobiles",      slug: "smartphones",      img: "https://placehold.co/100x100/dbeafe/1d4ed8?text=📱", color: "#dbeafe" },
+  { label: "Laptops",      slug: "laptops",           img: "https://placehold.co/100x100/ede9fe/6d28d9?text=💻", color: "#ede9fe" },
+  { label: "Audio",        slug: "audio",             img: "https://placehold.co/100x100/fce7f3/be185d?text=🎧", color: "#fce7f3" },
+  { label: "Smartwatches", slug: "smartwatches",      img: "https://placehold.co/100x100/d1fae5/065f46?text=⌚", color: "#d1fae5" },
+  { label: "TVs",          slug: "televisions",       img: "https://placehold.co/100x100/f0fdf4/166534?text=📺", color: "#f0fdf4" },
+  { label: "Cameras",      slug: "cameras",           img: "https://placehold.co/100x100/fef3c7/92400e?text=📷", color: "#fef3c7" },
+  { label: "Tablets",      slug: "tablets",            img: "https://placehold.co/100x100/ffedd5/9a3412?text=📟", color: "#ffedd5" },
+  { label: "Appliances",   slug: "appliances",        img: "https://placehold.co/100x100/ecfdf5/047857?text=🏠", color: "#ecfdf5" },
+  { label: "Kitchen",      slug: "kitchen-tools",     img: "https://placehold.co/100x100/fff7ed/c2410c?text=🍳", color: "#fff7ed" },
+  { label: "Home",         slug: "home-kitchen",      img: "https://placehold.co/100x100/fdf2f8/86198f?text=🛋️", color: "#fdf2f8" },
+  { label: "Fashion",      slug: "fashion",           img: "https://placehold.co/100x100/fce7f3/9d174d?text=👗", color: "#fce7f3" },
+  { label: "Electronics",  slug: "electronics",       img: "https://placehold.co/100x100/fefce8/713f12?text=🔌", color: "#fefce8" },
 ];
 
 const FILTER_CHIPS = [
   { label: "All", slug: "" },
-  { label: "Mobiles", slug: "Smartphones" },
-  { label: "Laptops", slug: "Laptops+%26+Computers" },
-  { label: "Audio", slug: "Earphones+%26+Headphones" },
-  { label: "Smartwatches", slug: "Smartwatches" },
-  { label: "Home Appliances", slug: "Home+Appliances" },
-  { label: "Kitchen", slug: "Kitchen+Appliances" },
-  { label: "Fashion", slug: "Fashion" },
-  { label: "Beauty", slug: "Beauty+%26+Personal+Care" },
+  { label: "Mobiles", slug: "smartphones" },
+  { label: "Laptops", slug: "laptops" },
+  { label: "Audio", slug: "audio" },
+  { label: "Smartwatches", slug: "smartwatches" },
+  { label: "Appliances", slug: "appliances" },
+  { label: "Kitchen", slug: "kitchen-tools" },
+  { label: "TVs", slug: "televisions" },
+  { label: "Cameras", slug: "cameras" },
 ];
 
 // ── Deal type config ──────────────────────────────────────────────────────────
