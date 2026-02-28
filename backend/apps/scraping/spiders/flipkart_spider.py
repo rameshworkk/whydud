@@ -37,28 +37,305 @@ REVIEW_COUNT_RE = re.compile(r"([\d,]+)\s*(?:rating|review)", re.IGNORECASE)
 
 MARKETPLACE_SLUG = "flipkart"
 
+# ---------------------------------------------------------------------------
 # Flipkart search keyword → Whydud category slug mapping
+# ---------------------------------------------------------------------------
+
 KEYWORD_CATEGORY_MAP: dict[str, str] = {
+    # Smartphones & Accessories
     "smartphones": "smartphones",
+    "phone cases covers": "smartphones",
+    "screen protectors": "smartphones",
+    "power banks": "smartphones",
+    "mobile chargers": "smartphones",
+    "mobile holders stands": "smartphones",
+    # Computers & Peripherals
     "laptops": "laptops",
+    "tablets": "tablets",
+    "monitors": "laptops",
+    "computer keyboards": "laptops",
+    "computer mouse": "laptops",
+    "printers": "laptops",
+    "routers": "laptops",
+    "external hard drives": "laptops",
+    "pen drives": "laptops",
+    "graphics cards": "laptops",
+    "webcams": "cameras",
+    # Audio
     "headphones": "audio",
-    "air purifiers": "appliances",
-    "washing machines": "washing-machines",
-    "refrigerators": "refrigerators",
-    "televisions": "televisions",
+    "earbuds tws": "audio",
+    "bluetooth speakers": "audio",
+    "soundbars": "audio",
+    "microphones": "audio",
+    "home theatre systems": "audio",
+    # Wearables
+    "smartwatches": "smartwatches",
+    "fitness bands": "smartwatches",
+    # Cameras & Photography
     "cameras": "cameras",
+    "camera lenses": "cameras",
+    "camera tripods": "cameras",
+    "action cameras": "cameras",
+    "drones cameras": "cameras",
+    # TVs & Entertainment
+    "televisions": "televisions",
+    "projectors": "televisions",
+    "streaming devices": "televisions",
+    "tv wall mounts": "televisions",
+    # Large Appliances
+    "refrigerators": "refrigerators",
+    "washing machines": "washing-machines",
+    "air conditioners": "air-conditioners",
+    "microwave ovens": "appliances",
+    "dishwashers": "appliances",
+    "water heaters geysers": "appliances",
+    "chimneys": "appliances",
+    # Small Appliances
+    "air purifiers": "appliances",
+    "water purifiers": "appliances",
+    "vacuum cleaners": "appliances",
+    "robot vacuum cleaners": "appliances",
+    "mixer grinders": "kitchen-tools",
+    "induction cooktops": "kitchen-tools",
+    "electric kettles": "kitchen-tools",
+    "air fryers": "kitchen-tools",
+    "coffee machines": "kitchen-tools",
+    "irons steamers": "kitchen-tools",
+    "fans": "appliances",
+    "room heaters": "appliances",
+    "juicer mixer grinder": "kitchen-tools",
+    "hand blenders": "kitchen-tools",
+    "sandwich makers": "kitchen-tools",
+    "toasters": "kitchen-tools",
+    "rice cookers": "kitchen-tools",
+    "pressure cookers": "kitchen-tools",
+    # Personal Care & Grooming
+    "trimmers": "grooming",
+    "electric shavers": "grooming",
+    "hair dryers": "grooming",
+    "hair straighteners": "grooming",
+    "electric toothbrushes": "grooming",
+    "epilators": "grooming",
+    # Fitness & Sports
+    "treadmills": "fitness",
+    "exercise bikes": "fitness",
+    "dumbbells weights": "fitness",
+    "yoga mats": "fitness",
+    "gym equipment": "fitness",
+    # Home & Furniture
+    "mattresses": "home-kitchen",
+    "office chairs": "home-kitchen",
+    "study tables": "home-kitchen",
+    "beds": "home-kitchen",
+    "sofas": "home-kitchen",
+    "shoe racks": "home-kitchen",
+    "dining tables": "home-kitchen",
+    "wardrobes": "home-kitchen",
+    "bean bags": "home-kitchen",
+    "curtains": "home-kitchen",
+    "bedsheets": "home-kitchen",
+    # Smart Home & Security
+    "smart plugs": "electronics",
+    "smart bulbs": "electronics",
+    "security cameras": "cameras",
+    "smart door locks": "electronics",
+    "video doorbells": "electronics",
+    "smart speakers": "electronics",
+    # Gaming
+    "gaming laptops": "laptops",
+    "gaming monitors": "laptops",
+    "gaming headsets": "audio",
+    "gaming controllers": "electronics",
+    "gaming chairs": "home-kitchen",
+    "gaming consoles": "electronics",
+    # Storage & Networking
+    "ssd internal": "laptops",
+    "memory cards": "laptops",
+    "wifi mesh systems": "laptops",
+    "nas storage": "laptops",
+    # Baby & Kids
+    "baby strollers": "baby-kids",
+    "car seats baby": "baby-kids",
+    "baby monitors": "cameras",
+    "baby toys": "baby-kids",
+    # Car & Bike Accessories
+    "dash cameras": "cameras",
+    "car chargers": "electronics",
+    "car air purifiers": "appliances",
+    "tyre inflators": "electronics",
+    "car accessories": "electronics",
+    "helmet": "automotive",
+    # Musical Instruments
+    "guitars": "electronics",
+    "keyboards pianos": "electronics",
+    # Luggage & Bags
+    "laptop bags backpacks": "fashion",
+    "suitcases trolley": "fashion",
+    "handbags": "fashion",
+    # Books & Stationery
+    "books bestsellers": "books",
+    "school bags": "books",
+    # Fashion & Accessories
+    "sunglasses": "fashion",
+    "watches men": "fashion",
+    "watches women": "fashion",
+    # Kitchen & Dining
+    "cookware sets": "kitchen-tools",
+    "water bottles": "kitchen-tools",
+    "lunch boxes": "kitchen-tools",
+    "kitchen storage": "kitchen-tools",
 }
 
-# Seed search URLs — used when no ScraperJob provides URLs.
-SEED_CATEGORY_URLS = [
-    "https://www.flipkart.com/search?q=smartphones&sort=popularity",
-    "https://www.flipkart.com/search?q=laptops&sort=popularity",
-    "https://www.flipkart.com/search?q=headphones&sort=popularity",
-    "https://www.flipkart.com/search?q=air+purifiers&sort=popularity",
-    "https://www.flipkart.com/search?q=washing+machines&sort=popularity",
-    "https://www.flipkart.com/search?q=refrigerators&sort=popularity",
-    "https://www.flipkart.com/search?q=televisions&sort=popularity",
-    "https://www.flipkart.com/search?q=cameras&sort=popularity",
+
+# Seed category search URLs — used when no ScraperJob provides URLs.
+# Format: (url, max_pages) — controls pagination depth per category.
+# Top categories get 30 pages (~480 products), standard get 20 pages (~320 products).
+
+_TOP = 30   # pages for top categories
+_STD = 20   # pages for standard categories
+
+SEED_CATEGORY_URLS: list[tuple[str, int]] = [
+    # ── Smartphones & Accessories (TOP) ──────────────────────────────────
+    ("https://www.flipkart.com/search?q=smartphones&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=phone+cases+covers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=screen+protectors&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=power+banks&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=mobile+chargers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=mobile+holders+stands&sort=popularity", _STD),
+    # ── Computers & Peripherals (TOP) ────────────────────────────────────
+    ("https://www.flipkart.com/search?q=laptops&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=tablets&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=monitors&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=computer+keyboards&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=computer+mouse&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=printers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=routers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=external+hard+drives&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=pen+drives&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=graphics+cards&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=webcams&sort=popularity", _STD),
+    # ── Audio (TOP) ──────────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=headphones&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=earbuds+tws&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=bluetooth+speakers&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=soundbars&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=microphones&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=home+theatre+systems&sort=popularity", _STD),
+    # ── Wearables (TOP) ──────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=smartwatches&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=fitness+bands&sort=popularity", _STD),
+    # ── Cameras & Photography ────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=cameras&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=camera+lenses&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=camera+tripods&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=action+cameras&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=drones+cameras&sort=popularity", _STD),
+    # ── TVs & Entertainment (TOP) ────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=televisions&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=projectors&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=streaming+devices&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=tv+wall+mounts&sort=popularity", _STD),
+    # ── Large Appliances (TOP) ───────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=refrigerators&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=washing+machines&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=air+conditioners&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=microwave+ovens&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=dishwashers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=water+heaters+geysers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=chimneys&sort=popularity", _STD),
+    # ── Small Appliances ─────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=air+purifiers&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=water+purifiers&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=vacuum+cleaners&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=robot+vacuum+cleaners&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=mixer+grinders&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=induction+cooktops&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=electric+kettles&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=air+fryers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=coffee+machines&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=irons+steamers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=fans&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=room+heaters&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=juicer+mixer+grinder&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=hand+blenders&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=sandwich+makers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=toasters&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=rice+cookers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=pressure+cookers&sort=popularity", _STD),
+    # ── Personal Care & Grooming (TOP) ───────────────────────────────────
+    ("https://www.flipkart.com/search?q=trimmers&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=electric+shavers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=hair+dryers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=hair+straighteners&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=electric+toothbrushes&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=epilators&sort=popularity", _STD),
+    # ── Fitness & Sports ─────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=treadmills&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=exercise+bikes&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=dumbbells+weights&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=yoga+mats&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=gym+equipment&sort=popularity", _STD),
+    # ── Home & Furniture (TOP) ───────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=mattresses&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=office+chairs&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=study+tables&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=beds&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=sofas&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=shoe+racks&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=dining+tables&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=wardrobes&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=bean+bags&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=curtains&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=bedsheets&sort=popularity", _STD),
+    # ── Smart Home & Security (TOP) ──────────────────────────────────────
+    ("https://www.flipkart.com/search?q=smart+plugs&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=smart+bulbs&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=security+cameras&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=smart+door+locks&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=video+doorbells&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=smart+speakers&sort=popularity", _STD),
+    # ── Gaming (TOP) ─────────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=gaming+laptops&sort=popularity", _TOP),
+    ("https://www.flipkart.com/search?q=gaming+monitors&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=gaming+headsets&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=gaming+controllers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=gaming+chairs&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=gaming+consoles&sort=popularity", _STD),
+    # ── Storage & Networking ─────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=ssd+internal&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=memory+cards&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=wifi+mesh+systems&sort=popularity", _STD),
+    # ── Baby & Kids ──────────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=baby+strollers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=car+seats+baby&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=baby+monitors&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=baby+toys&sort=popularity", _STD),
+    # ── Car & Bike Accessories ───────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=dash+cameras&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=car+chargers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=car+air+purifiers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=tyre+inflators&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=car+accessories&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=helmet&sort=popularity", _STD),
+    # ── Musical Instruments ──────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=guitars&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=keyboards+pianos&sort=popularity", _STD),
+    # ── Luggage & Bags ───────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=laptop+bags+backpacks&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=suitcases+trolley&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=handbags&sort=popularity", _STD),
+    # ── Books ────────────────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=books+bestsellers&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=school+bags&sort=popularity", _STD),
+    # ── Fashion & Accessories ────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=sunglasses&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=watches+men&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=watches+women&sort=popularity", _STD),
+    # ── Kitchen & Dining ─────────────────────────────────────────────────
+    ("https://www.flipkart.com/search?q=cookware+sets&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=water+bottles&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=lunch+boxes&sort=popularity", _STD),
+    ("https://www.flipkart.com/search?q=kitchen+storage&sort=popularity", _STD),
 ]
 
 MAX_LISTING_PAGES = 5
@@ -81,12 +358,28 @@ class FlipkartSpider(BaseWhydudSpider):
     allowed_domains = ["flipkart.com", "www.flipkart.com"]
 
     # Playwright for both listing and product pages (Flipkart 403s plain HTTP).
+    # Uses StealthPlaywrightHandler to inject anti-detection patches into
+    # every browser context before navigation.
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
+        "DOWNLOAD_DELAY": 7,
+        "CONCURRENT_REQUESTS": 2,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
         "DOWNLOAD_HANDLERS": {
-            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "https": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
+            "http": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
         },
+        # Flipkart returns 403 on robots.txt — disable to avoid blocking.
+        "ROBOTSTXT_OBEY": False,
+        # Flipkart serves valid page content with 403 status codes (anti-bot
+        # challenge pages that still render product data via JS). Allow the
+        # spider to process these responses instead of discarding them.
+        "HTTPERROR_ALLOWED_CODES": [403],
+        # AutoThrottle
+        "AUTOTHROTTLE_ENABLED": True,
+        "AUTOTHROTTLE_START_DELAY": 8,
+        "AUTOTHROTTLE_MAX_DELAY": 45,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
     }
 
     # ------------------------------------------------------------------
@@ -109,34 +402,58 @@ class FlipkartSpider(BaseWhydudSpider):
             if category_urls
             else []
         )
-        self._max_pages = int(max_pages) if max_pages else MAX_LISTING_PAGES
+        # --max-pages CLI arg acts as a global override for ALL categories.
+        # When not set, per-category limits from SEED_CATEGORY_URLS are used.
+        self._max_pages_override: int | None = int(max_pages) if max_pages else None
         self._save_html = save_html == "1"
         self._pages_followed: dict[str, int] = {}
+        self._max_pages_map: dict[str, int] = {}  # base_url → per-category limit
 
     # ------------------------------------------------------------------
     # start_requests
     # ------------------------------------------------------------------
 
     def start_requests(self):
-        """Emit initial requests from ScraperJob config or seed categories."""
-        urls = self._load_urls()
-        for url in urls:
-            self.logger.info(f"Starting category: {url}")
+        """Emit initial requests from ScraperJob config or seed categories.
+
+        Flipkart returns 403 on listing pages but still renders valid product
+        data via JS. HTTPERROR_ALLOWED_CODES includes 403 so responses are
+        processed normally.
+        """
+        url_pairs = self._load_urls()
+        for url, max_pg in url_pairs:
+            base = re.sub(r"[&?]page=\d+", "", url)
+            self._max_pages_map[base] = max_pg
+            self.logger.info(f"Starting category ({max_pg} pages): {url}")
+            meta = {
+                "playwright": True,
+                "playwright_page_methods": [
+                    PageMethod("wait_for_load_state", "networkidle"),
+                ],
+            }
+            self._with_proxy_session(meta, session_key=base)
             yield scrapy.Request(
                 url,
                 callback=self.parse_listing_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
-                # Listing pages need Playwright — cards are lazy-loaded.
-                meta={"playwright": True},
+                meta=meta,
                 dont_filter=True,
             )
 
-    def _load_urls(self) -> list[str]:
-        """Resolve the list of search/category URLs to crawl."""
-        if self._category_urls:
-            return self._category_urls
+    def _load_urls(self) -> list[tuple[str, int]]:
+        """Resolve the list of (url, max_pages) pairs to crawl.
 
+        Priority: CLI ``category_urls`` > ScraperJob > seed categories.
+        The ``--max-pages`` CLI arg overrides per-category limits globally.
+        """
+        fallback = self._max_pages_override or MAX_LISTING_PAGES
+
+        # 1. Explicit CLI override — flat URLs, use global limit
+        if self._category_urls:
+            return [(u, fallback) for u in self._category_urls]
+
+        # 2. ScraperJob (from DB)
         if self.job_id:
             try:
                 from apps.scraping.models import ScraperJob
@@ -148,6 +465,9 @@ class FlipkartSpider(BaseWhydudSpider):
             except Exception as exc:
                 self.logger.warning(f"Could not load ScraperJob {self.job_id}: {exc}")
 
+        # 3. Fallback to seed categories
+        if self._max_pages_override is not None:
+            return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
         return list(SEED_CATEGORY_URLS)
 
     # ------------------------------------------------------------------
@@ -177,36 +497,50 @@ class FlipkartSpider(BaseWhydudSpider):
 
         # Resolve category slug from the seed URL keyword
         category_slug = response.meta.get("category_slug") or self._resolve_category_from_url(response.url)
+        session_key = response.meta.get("proxy_session")
 
         for link in unique_links:
+            detail_meta = {
+                "playwright": True,
+                "playwright_page_methods": [
+                    PageMethod("wait_for_load_state", "domcontentloaded"),
+                ],
+                "category_slug": category_slug,
+            }
+            if session_key:
+                self._with_proxy_session(detail_meta, session_key)
             yield scrapy.Request(
                 link,
                 callback=self.parse_product_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
                 # Flipkart returns 403 on plain HTTP — Playwright needed.
-                meta={
-                    "playwright": True,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "domcontentloaded"),
-                    ],
-                    "category_slug": category_slug,
-                },
+                meta=detail_meta,
             )
 
-        # Pagination
+        # Pagination — follow "Next" link up to per-category max_pages
         base_url = re.sub(r"[&?]page=\d+", "", response.url)
         pages_so_far = self._pages_followed.get(base_url, 1)
-        if pages_so_far < self._max_pages:
+        max_for_category = self._max_pages_map.get(base_url, MAX_LISTING_PAGES)
+        if pages_so_far < max_for_category:
             next_link = self._find_next_page(response)
             if next_link:
                 self._pages_followed[base_url] = pages_so_far + 1
+                page_meta = {
+                    "playwright": True,
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_load_state", "networkidle"),
+                    ],
+                    "category_slug": category_slug,
+                }
+                if session_key:
+                    self._with_proxy_session(page_meta, session_key)
                 yield scrapy.Request(
                     response.urljoin(next_link),
                     callback=self.parse_listing_page,
                     errback=self.handle_error,
                     headers=self._make_headers(),
-                    meta={"playwright": True, "category_slug": category_slug},
+                    meta=page_meta,
                 )
 
     @staticmethod
@@ -272,6 +606,20 @@ class FlipkartSpider(BaseWhydudSpider):
         item["about_bullets"] = self._extract_highlights(response)
         item["offer_details"] = self._extract_offers(response)
         item["raw_html_path"] = raw_html_path
+
+        # Extended fields — comprehensive product info
+        item["description"] = self._extract_description(response, ld_json)
+        item["warranty"] = self._extract_warranty(response)
+        item["delivery_info"] = self._extract_delivery_info(response)
+        item["return_policy"] = self._extract_return_policy(response)
+        item["breadcrumbs"] = self._extract_breadcrumbs(response)
+        item["variant_options"] = self._extract_variants(response)
+        specs = item["specs"]
+        item["country_of_origin"] = self._extract_from_specs(specs, ["Country of Origin", "country of origin", "Country Of Origin"])
+        item["manufacturer"] = self._extract_from_specs(specs, ["Manufacturer", "manufacturer"])
+        item["model_number"] = self._extract_from_specs(specs, ["Model Number", "Model Name", "model number"])
+        item["weight"] = self._extract_from_specs(specs, ["Weight", "Net Weight", "weight", "Product Weight"])
+        item["dimensions"] = self._extract_from_specs(specs, ["Dimensions", "Product Dimensions", "dimensions"])
 
         self.items_scraped += 1
         yield item
@@ -750,6 +1098,126 @@ class FlipkartSpider(BaseWhydudSpider):
                     offers.append({"text": offer_text[:500], "type": offer_type})
 
         return offers[:10]
+
+    # ------------------------------------------------------------------
+    # Extended field extraction (description, warranty, delivery, etc.)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_description(response, ld_json: dict | None) -> str | None:
+        """Extract product description from JSON-LD or page content."""
+        # JSON-LD description
+        if ld_json and ld_json.get("description"):
+            return ld_json["description"].strip()[:5000]
+
+        # Flipkart product description section
+        desc_parts = response.css("div._1mXcCf p::text, div._1mXcCf::text").getall()
+        if desc_parts:
+            return " ".join(t.strip() for t in desc_parts if t.strip())[:5000]
+
+        # Fallback: look for "Description" section
+        desc = response.xpath(
+            '//div[.//text()="Description" or .//text()="DESCRIPTION"]'
+            '//following-sibling::div[1]//text()'
+        ).getall()
+        if desc:
+            return " ".join(t.strip() for t in desc if t.strip())[:5000]
+
+        return None
+
+    @staticmethod
+    def _extract_warranty(response) -> str | None:
+        """Extract warranty information from specs or dedicated section."""
+        # Check specs table for warranty
+        for row in response.css("div._14cfVK tr, table._14cfVK tr, div._3k-BhJ tr"):
+            key = row.css("td:first-child::text").get("").strip().lower()
+            if "warranty" in key:
+                return row.css("td:last-child::text, td:last-child li::text").get("").strip()
+
+        # XPath fallback for "Warranty" section
+        warranty = response.xpath(
+            '//td[contains(translate(text(),"WARRANTY","warranty"),"warranty")]'
+            '/following-sibling::td//text()'
+        ).get()
+        return warranty.strip() if warranty else None
+
+    @staticmethod
+    def _extract_delivery_info(response) -> str | None:
+        """Extract delivery estimate."""
+        # Flipkart delivery info near pincode section
+        for sel in [
+            "div._3XINqE::text",
+            "div._1TPvmH span::text",
+            "div._2H87wv span::text",
+        ]:
+            text = response.css(sel).get()
+            if text and text.strip() and "deliver" in text.lower():
+                return text.strip()
+        return None
+
+    @staticmethod
+    def _extract_return_policy(response) -> str | None:
+        """Extract return policy text."""
+        # Flipkart return policy is often in the offers/services section
+        for sel in [
+            "div._3n2dkM::text",
+            "div._2TnXLR span::text",
+        ]:
+            text = response.css(sel).get()
+            if text and text.strip() and "return" in text.lower():
+                return text.strip()
+
+        # XPath for return policy section
+        ret = response.xpath(
+            '//*[contains(text(),"Return Policy") or contains(text(),"day replacement")]//text()'
+        ).get()
+        return ret.strip() if ret else None
+
+    @staticmethod
+    def _extract_breadcrumbs(response) -> list[str]:
+        """Extract navigation breadcrumb trail."""
+        crumbs = response.css("div._1MR4o5 a::text, div._2whKao a::text").getall()
+        if crumbs:
+            return [c.strip() for c in crumbs if c.strip()]
+        # XPath fallback
+        crumbs = response.xpath('//div[contains(@class,"breadcrumb")]//a//text()').getall()
+        return [c.strip() for c in crumbs if c.strip()]
+
+    @staticmethod
+    def _extract_variants(response) -> list[dict]:
+        """Extract available variant options (color, RAM, storage, etc.)."""
+        variants: list[dict] = []
+
+        # Flipkart variant selectors (thumbnail swatches and text options)
+        for swatch in response.css("div._3V2wfe a, div._1fGeJ5 a, a._2GcJMG"):
+            label = swatch.css("::attr(title)").get() or swatch.css("::text").get()
+            href = swatch.css("::attr(href)").get()
+            if label and label.strip():
+                variant = {"value": label.strip()}
+                if href and "/p/" in href:
+                    variant["url"] = response.urljoin(href)
+                variants.append(variant)
+
+        # ID-based variant buttons (RAM/Storage selection)
+        for btn in response.css("div._3V2wfe div, li._1fGeJ5"):
+            text = btn.css("a::text").get() or btn.css("::text").get()
+            if text and text.strip():
+                variants.append({"value": text.strip()})
+
+        return variants[:30]
+
+    @staticmethod
+    def _extract_from_specs(specs: dict, keys: list[str]) -> str | None:
+        """Extract a specific value from specs dict by trying multiple key names."""
+        if not specs:
+            return None
+        for key in keys:
+            if key in specs:
+                return specs[key]
+            for spec_key, spec_val in specs.items():
+                if spec_key.lower().strip() == key.lower().strip():
+                    return spec_val
+        return None
 
     # ------------------------------------------------------------------
     # Category resolution

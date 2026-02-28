@@ -123,13 +123,24 @@ def match_product(item, brand=None, category=None) -> MatchResult:
 
 
 def resolve_category(slug: str | None):
-    """Resolve a category slug to a Category instance. Returns None if not found."""
+    """Resolve a category slug to a Category instance, creating it if missing."""
     if not slug:
         return None
 
     from apps.products.models import Category
 
-    return Category.objects.filter(slug=slug).first()
+    category = Category.objects.filter(slug=slug).first()
+    if category:
+        return category
+
+    # Auto-create with a human-readable name derived from slug
+    name = slug.replace("-", " ").replace("_", " ").title()
+    category, _ = Category.objects.get_or_create(
+        slug=slug,
+        defaults={"name": name, "level": 0},
+    )
+    logger.info("Auto-created category: %s (%s)", name, slug)
+    return category
 
 
 def resolve_or_create_brand(raw_brand: str):

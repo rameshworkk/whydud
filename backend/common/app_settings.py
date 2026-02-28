@@ -141,8 +141,6 @@ class ScrapingConfig:
             {
                 "amazon-in": "amazon_in",
                 "flipkart": "flipkart",
-                "amazon_in_reviews": "amazon_in_reviews",
-                "flipkart_reviews": "flipkart_reviews",
             },
         )
 
@@ -161,6 +159,37 @@ class ScrapingConfig:
     def default_max_review_pages(cls) -> int:
         """Default number of review pages to scrape per product."""
         return _get("SCRAPING_DEFAULT_MAX_REVIEW_PAGES", 3)
+
+    @classmethod
+    def proxy_list(cls) -> list[str]:
+        """Comma-separated proxy URLs from SCRAPING_PROXY_LIST env var.
+
+        Format: http://user:pass@host:port,http://host2:port2
+        Returns empty list when not configured (graceful fallback to direct).
+        """
+        import os
+
+        raw = _get("SCRAPING_PROXY_LIST", "") or os.environ.get(
+            "SCRAPING_PROXY_LIST", ""
+        )
+        if not raw.strip():
+            return []
+        return [p.strip() for p in raw.split(",") if p.strip()]
+
+    @classmethod
+    def proxy_ban_cooldown_base(cls) -> float:
+        """Base cooldown in seconds when a proxy is banned (exponential backoff)."""
+        return float(_get("SCRAPING_PROXY_BAN_COOLDOWN_BASE", 30.0))
+
+    @classmethod
+    def proxy_ban_max_cooldown(cls) -> float:
+        """Maximum cooldown in seconds for a banned proxy."""
+        return float(_get("SCRAPING_PROXY_BAN_MAX_COOLDOWN", 600.0))
+
+    @classmethod
+    def proxy_enabled(cls) -> bool:
+        """Whether proxy rotation is enabled (True if proxy list is non-empty)."""
+        return len(cls.proxy_list()) > 0
 
 
 # ---------------------------------------------------------------------------

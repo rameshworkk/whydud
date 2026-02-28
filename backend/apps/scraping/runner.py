@@ -24,6 +24,7 @@ def main() -> None:
     parser.add_argument("--max-pages", default=None, help="Max listing pages per category")
     parser.add_argument("--save-html", action="store_true", help="Save raw HTML for debugging")
     parser.add_argument("--max-review-pages", default=None, help="Max review pages per product (review spiders)")
+    parser.add_argument("--proxy-list", default=None, help="Comma-separated proxy URLs (overrides SCRAPING_PROXY_LIST env var)")
     args = parser.parse_args()
 
     # Load .env so DB credentials etc. are available in subprocess context.
@@ -42,6 +43,11 @@ def main() -> None:
     from apps.scraping.scrapy_settings import get_scrapy_settings
 
     settings = get_scrapy_settings()
+
+    # CLI proxy list override — passed to middleware via Scrapy settings
+    if args.proxy_list:
+        settings["PROXY_LIST_OVERRIDE"] = args.proxy_list
+
     process = CrawlerProcess(settings)
 
     spider_kwargs: dict[str, str] = {}

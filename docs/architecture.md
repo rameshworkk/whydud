@@ -6,6 +6,8 @@
 **Supersedes:** v2.1, v2.0, v1.0-v1.3 (all previous amendments merged)
 **v2.2 Changes:** No user-facing rate limits. Admin fully independent (admin.whydud.com, IP-restricted). Cross-platform product matching engine. Enhanced comparison architecture (marketplace × product price matrix, floating compare tray). Price alerts as standalone feature. Recently viewed, stock alerts, similar products, share functionality. Multi-domain email (whyd.in/.click/.shop) + send via Resend. Affiliate click tracking.
 
+
+
 ---
 
 ## EXECUTIVE SUMMARY

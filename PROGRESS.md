@@ -953,3 +953,295 @@ Ran Amazon.in spider against a single category URL. Found and fixed 6 bugs:
   - Sort dropdown: Most Helpful | Newest | Highest Rating | Lowest Rating
   - Loading spinner during re-fetch, "Load more reviews" button
 - **Updated product detail page** (`frontend/src/app/(public)/product/[slug]/page.tsx`) — replaced 60-line inline review sidebar with `<ReviewSidebar>` component
+
+### 2026-02-28 — Review Scraping E2E Testing & Spider Rewrites
+
+**Amazon Review Spider — Complete Rewrite** (`apps/scraping/spiders/amazon_review_spider.py`):
+- **Problem**: Original spider targeted `/product-reviews/ASIN` pages which require Amazon sign-in — all requests 302'd to `/ap/signin`
+- **Fix 1**: Added Playwright download handlers + `ROBOTSTXT_OBEY: False` (Amazon redirects trigger false robots.txt blocks)
+- **Fix 2**: Switched URL pattern from `/product-reviews/ASIN` to `/dp/ASIN` (product detail page) — embeds ~8 "Top Reviews" without sign-in
+- **Fix 3**: Added synthetic ASIN filter — skips seed-data ASINs (`amazon_in_*` prefix or length > 12)
+- **Fix 4**: Updated CSS selectors — reviews are `<li data-hook="review">` (not `<div>`), title in `[data-hook="review-title"] span:not(.a-icon-alt):not(.a-letter-space)`, verified purchase detected via full text search
+- **Result**: 76 Amazon.in reviews scraped successfully (from ~168 product pages)
+
+**Flipkart Review Spider — Complete Rewrite** (`apps/scraping/spiders/flipkart_review_spider.py`):
+- **Problem**: Flipkart switched to React Native Web — all CSS class names changed to obfuscated utility hashes (`css-175oi2r`, `css-1rynq56`), every selector returned 0 matches
+- **Solution**: Replaced CSS selector extraction with JavaScript DOM extraction via `PageMethod("evaluate", EXTRACT_REVIEWS_JS)`:
+  - Walks DOM text nodes to find "Verified Purchase" / "Certified Buyer" anchors
+  - Walks up parent chain to find review container (div matching `^[1-5]\.0` pattern)
+  - Extracts rating, title, body, reviewer name, helpful votes, date, variant, images
+  - Injects results as JSON into `<script id="whydud-reviews" type="application/json">`
+  - Spider reads JSON blob via `response.css("script#whydud-reviews::text")`
+- **Result**: 1,447 Flipkart reviews scraped successfully
+
+**Pipeline Bug Fixes** (`apps/scraping/pipelines.py`):
+- `ValidationPipeline` (priority 100) checked for `external_id` and `url` fields that don't exist on `ReviewItem` — was dropping ALL review items before they reached `ReviewValidationPipeline`
+- `ProductPipeline` (priority 200) tried to process `ReviewItem` as product data — would fail on missing fields
+- **Fix**: Added `isinstance(item, ReviewItem): return item` guard to both pipelines, letting review items pass through to the review-specific pipelines (400+)
+
+**Fraud Detection Verification**:
+- Ran `detect_fake_reviews()` on 20 products with scraped reviews
+- 408 reviews flagged across all products (rules triggered: `unverified_5star`, `suspiciously_short`, `copy_paste`, `rating_burst`)
+- Credibility scores computed (0.00–1.00) for all reviews
+
+**Frontend API Verification**:
+- `GET /api/v1/products/{slug}/reviews` returns reviews with marketplace badges, credibility scores, images, helpful vote counts
+- `is_flagged=False` filter correctly hides fraud-flagged reviews from public API
+- ReviewSidebar component fetches and displays reviews client-side
+
+**Final Counts**: 2,178 total reviews in DB (was 655 seed data). 1,770 unflagged/visible, 408 flagged by fraud detection. Sources: 76 Amazon.in + 1,447 Flipkart + 655 seed data.
+
+### 2026-02-28 — Amazon Scraper Anti-Detection & Stealth Fixes
+
+**Problem**: Amazon spider was getting 0 items scraped — all product detail pages timed out waiting for `#productTitle` selector (10s). Amazon's bot detection was blocking headless Playwright from rendering product pages.
+
+**Fixes Applied**:
+
+1. **Installed `playwright-stealth` (v2.0.2)** — injects anti-detection scripts that hide headless browser fingerprints (navigator.webdriver, chrome.runtime, WebGL, etc.)
+
+2. **Base spider updates** (`apps/scraping/spiders/base_spider.py`):
+   - Added `Stealth` config instance (class-level, shared by all spiders)
+   - Added `--disable-blink-features=AutomationControlled` to Chromium launch args
+   - Bumped `DOWNLOAD_DELAY` from 2s → 3s for more human-like timing
+
+3. **Amazon spider updates** (`apps/scraping/spiders/amazon_spider.py`):
+   - Added `_apply_stealth()` async callback — runs on every Playwright page before navigation
+   - Replaced hard `wait_for_selector("#productTitle", timeout=10s)` with `wait_for_load_state("domcontentloaded")` + 3s delay — eliminates timeouts entirely
+   - Added 6+ CSS title selector fallbacks + `<title>` tag + `og:title` meta extraction
+   - Filters out CAPTCHA pages (pages where title = "Amazon.in")
+   - Moved `--save-html` debug dump to before title check (so failing pages can be inspected)
+
+4. **Scrapy settings updates** (`apps/scraping/scrapy_settings.py`):
+   - Added stealth Chromium launch args globally
+   - Added `PLAYWRIGHT_CONTEXTS` with Indian locale (`en-IN`), timezone (`Asia/Kolkata`), realistic viewport (1366×768)
+
+**Results** (1-page smartphones test):
+
+| Metric | Before Fix | After Fix |
+|---|---|---|
+| Timeouts | 18/25 pages | 0/25 pages |
+| HTTP 200 responses | 7/25 | 25/25 |
+| Items scraped | 0 | 24 |
+| Scrape speed | 0 items/min | 15 items/min |
+
+~10/25 pages still serve Amazon CAPTCHA (no proxy rotation yet) — those are correctly skipped. Remaining pages extract fully: title, brand, price, MRP, rating, images, seller, specs, about bullets, offers.
+
+**Note**: Items extracted but not persisted to DB — PostgreSQL not running locally. Start Docker containers to enable DB persistence.
+
+### 2026-02-28 — Proxy Rotation Middleware for Scraping
+
+**Problem**: Amazon scraper achieved only ~16% success rate (237 items from 1,400 responses) due to single-IP rate limiting — Amazon serves CAPTCHAs and 503 errors on product detail pages. Without proxy rotation, the IP gets rapidly flagged.
+
+**Solution**: Environment-based proxy rotation via a custom Scrapy downloader middleware that integrates with scrapy-playwright's browser context system. Proxies are set at the Playwright context level (not per-request, which scrapy-playwright doesn't support).
+
+**Files Created/Modified**:
+
+1. **CREATED: `apps/scraping/middlewares.py`** — Core proxy rotation infrastructure:
+   - `ProxyState` — health tracker per proxy (ban state, exponential backoff cooldown)
+   - `ProxyPool` — round-robin rotation with health tracking, loads from env or CLI
+   - `PlaywrightProxyMiddleware` — Scrapy downloader middleware that:
+     - Assigns named Playwright contexts per proxy (`proxy_0`, `proxy_1`, etc.)
+     - Detects bans via HTTP status (403/429/503) + CAPTCHA markers in response body
+     - Applies exponential backoff (30s → 60s → 120s... capped at 600s)
+     - Supports session stickiness (`meta["proxy_session"]`) — listing + child product pages use same proxy
+   - `_parse_proxy_url()` — converts `http://user:pass@host:port` to Playwright proxy dict format
+
+2. **MODIFIED: `common/app_settings.py`** — Added to `ScrapingConfig`:
+   - `proxy_list()` — reads `SCRAPING_PROXY_LIST` env var (comma-separated proxy URLs)
+   - `proxy_ban_cooldown_base()` — base cooldown seconds (default 30)
+   - `proxy_ban_max_cooldown()` — max cooldown cap (default 600)
+   - `proxy_enabled()` — True if proxy list is non-empty
+
+3. **MODIFIED: `apps/scraping/scrapy_settings.py`** — Registered `PlaywrightProxyMiddleware` at priority 400
+
+4. **MODIFIED: `apps/scraping/spiders/base_spider.py`** — Added `_with_proxy_session()` helper + middleware in `custom_settings`
+
+5. **MODIFIED: `apps/scraping/spiders/amazon_spider.py`** — Sticky proxy sessions: `start_requests()` → `parse_listing_page()` → `parse_product_page()` + CAPTCHA retry all propagate `proxy_session`
+
+6. **MODIFIED: `apps/scraping/spiders/flipkart_spider.py`** — Same sticky proxy session pattern for listing → product detail → pagination
+
+7. **MODIFIED: `apps/scraping/runner.py`** — Added `--proxy-list` CLI arg to override env var
+
+8. **MODIFIED: `.env.example`** — Added `SCRAPING_PROXY_LIST`, `SCRAPING_PROXY_BAN_COOLDOWN_BASE`, `SCRAPING_PROXY_BAN_MAX_COOLDOWN`
+
+**Key Design Decisions**:
+- Graceful fallback: no proxies configured = behavior identical to before (direct requests)
+- Session stickiness: category listing + all child product pages use same proxy, cleared on ban
+- Contexts registered at startup via `from_crawler()`, created lazily by scrapy-playwright
+- Review spiders auto-benefit — they inherit `BaseWhydudSpider` and the middleware applies to all Playwright requests
+
+**Usage**:
+```bash
+# Via environment variable
+SCRAPING_PROXY_LIST=http://user:pass@proxy1:8080,http://proxy2:8080
+
+# Via CLI override
+python -m apps.scraping.runner amazon_in --proxy-list "http://p1:8080,http://p2:8080" --urls "..."
+```
+
+**Regression test**: All proxy rotation unit tests pass. Empty proxy pool correctly falls back to direct requests.
+
+### 2026-02-28 — Comprehensive Scraping Upgrade (All Categories + Full Data Extraction)
+
+**Goal**: Scrape ALL product categories from Amazon.in and Flipkart with complete product data extraction — no information left behind.
+
+#### Critical Bug Fix — Marketplace Slug Mismatch
+- **Bug**: `amazon_spider.py` had `MARKETPLACE_SLUG = "amazon_in"` (underscore) but the DB Marketplace record uses `slug="amazon-in"` (hyphen). This caused **every** Amazon ProductItem to be silently dropped by ProductPipeline with "Unknown marketplace" error.
+- **Fix**: Changed to `"amazon-in"` in `amazon_spider.py`, `amazon_review_spider.py`, and all DB query filters in review spider.
+- **Also fixed**: `app_settings.py` `spider_map()` had review spider entries mixed in — removed them (handled by `review_spider_map()`).
+
+#### Category Expansion — Amazon.in (90 → 130+ categories)
+- Added ~30 new seed URLs covering: kitchen tools, fashion (men/women/kids), books, baby products, automotive, gaming consoles, smart speakers, home improvement, garden, pet supplies, art supplies, musical instruments, office products
+- Expanded `KEYWORD_CATEGORY_MAP` from ~90 to ~130 keyword→slug entries
+- Per-category page limits: `_TOP=10` (popular categories), `_STD=5` (niche categories)
+
+#### Category Expansion — Flipkart (8 → 110+ categories)
+- Expanded from 8 seed URLs to 110+ with full keyword→category mapping
+- Changed `SEED_CATEGORY_URLS` from flat URL list to `list[tuple[str, int]]` with per-category page limits
+- Refactored `start_requests()` and `_load_urls()` to support `(url, max_pages)` tuples
+- Added `_max_pages_override` and `_max_pages_map` to match Amazon's pagination pattern
+- Full category coverage: smartphones, laptops, TVs, appliances, fashion, beauty, books, baby, automotive, sports, gaming, musical instruments, pet supplies, and more
+
+#### Enhanced Anti-Detection
+- **User-Agents**: Expanded from 10 to 25+ strings covering Chrome 124-131, Firefox 125-133, Edge, Safari 17-18, Chrome Android mobile
+- **Viewport Randomization**: 7 viewport sizes (1920×1080 through 2560×1440), randomized per spider instance
+- **Accept-Language**: 5 Indian locale variants rotated per request
+- **Sec-CH-UA Client Hints**: 4 variants matching Chrome UA versions, added to headers for Chrome UAs only
+- **Sec-Fetch Headers**: Full set (Dest, Mode, Site, User) + Cache-Control, Pragma, Upgrade-Insecure-Requests
+- **Playwright Launch Args**: Added `--disable-infobars`, `--disable-extensions`, `--disable-gpu`, `--lang=en-IN`
+
+#### Full Product Data Extraction (11 New Fields)
+Added to `ProductItem` in `items.py`:
+- `description` — full product description text
+- `warranty` — warranty information
+- `delivery_info` — delivery estimate text
+- `return_policy` — return policy text
+- `breadcrumbs` — navigation breadcrumb trail (list[str])
+- `variant_options` — color/size/storage variants (list[dict])
+- `country_of_origin` — manufacturing country
+- `manufacturer` — manufacturer name
+- `model_number` — model/part number
+- `weight` — product weight
+- `dimensions` — product dimensions
+
+**Amazon spider** — 7 new extraction methods:
+- `_extract_description()`: productDescription → productOverview → A+ content fallbacks
+- `_extract_warranty()`: techSpec table → detailBullets → bullet text with "warranty" keyword
+- `_extract_delivery_info()`: deliveryBlockMessage → delivery-promise-text
+- `_extract_return_policy()`: productSupportAndReturnPolicy → returnPolicyFeature
+- `_extract_breadcrumbs()`: wayfinding-breadcrumbs navigation trail
+- `_extract_variants()`: variation_color_name, variation_size_name with ASIN capture
+- `_extract_from_specs()`: case-insensitive spec key lookup for country_of_origin, manufacturer, etc.
+
+**Flipkart spider** — same 7 extraction methods adapted for Flipkart's HTML/JSON-LD structure.
+
+#### Auto-Category Creation from Breadcrumbs
+- Added `_resolve_category_from_breadcrumbs()` to `ProductPipeline` in `pipelines.py`
+- Walks breadcrumbs deepest-first, skips generic terms ("home", "all categories")
+- Auto-creates `Category` with slug from breadcrumb text, resolves parent from adjacent level
+- Falls back to keyword→slug mapping when breadcrumbs unavailable
+- Specs now merge (existing + new) instead of replace-if-richer
+
+#### Files Modified
+- `apps/scraping/spiders/amazon_spider.py` — slug fix, 30+ new URLs, 130+ keyword mappings, 7 extraction methods
+- `apps/scraping/spiders/flipkart_spider.py` — 110+ URLs with per-category limits, 130+ keyword mappings, 7 extraction methods
+- `apps/scraping/spiders/amazon_review_spider.py` — slug fix in MARKETPLACE_SLUG and DB queries
+- `apps/scraping/spiders/base_spider.py` — 25+ UAs, viewport pool, Client Hints, Sec-Fetch headers
+- `apps/scraping/items.py` — 11 new ProductItem fields
+- `apps/scraping/pipelines.py` — breadcrumb category creation, spec merging, description persistence
+- `apps/scraping/scrapy_settings.py` — viewport randomization, timeout, bypass_csp, extra headers
+- `common/app_settings.py` — cleaned spider_map (removed review spider entries)
+
+---
+
+### Scraping Pipeline Fixes & Multi-Category Scrape Run — 2026-02-28
+
+#### Critical Fixes
+
+**1. Stealth Playwright Handler** (`apps/scraping/playwright_handler.py` — NEW)
+- Created `StealthPlaywrightHandler` subclass of `ScrapyPlaywrightDownloadHandler`
+- Overrides `_create_browser_context()` to inject `playwright-stealth` init scripts into every new browser context BEFORE page navigation
+- Patches: `navigator.webdriver`, `navigator.plugins`, `window.chrome`, WebGL vendor/renderer, Permission API
+- The base spider's `Stealth()` object was previously defined but never applied — this handler makes it active
+
+**2. Flipkart 403 Fix** (`apps/scraping/spiders/flipkart_spider.py`)
+- **Root cause:** Flipkart returns HTTP 403 on listing/search pages but still renders valid product data via JavaScript. Scrapy's `HttpErrorMiddleware` was discarding these valid responses.
+- **Fix:** Added `"HTTPERROR_ALLOWED_CODES": [403]` to Flipkart spider's `custom_settings`
+- Added `"ROBOTSTXT_OBEY": False` — Flipkart's robots.txt itself returns 403
+- Added `PageMethod("wait_for_load_state", "networkidle")` to listing page requests for reliable JS rendering
+- Switched download handler to `StealthPlaywrightHandler`
+
+**3. Scrapy Settings** (`apps/scraping/scrapy_settings.py`)
+- Updated default `DOWNLOAD_HANDLERS` to use `StealthPlaywrightHandler` globally (benefits both Amazon and Flipkart spiders)
+
+#### Scrape Results (10 categories x 2 pages each, no proxies)
+
+| Metric | Amazon.in | Flipkart | Combined |
+|--------|-----------|----------|----------|
+| Items scraped | ~340 | 520 | ~860 |
+| Pipeline drops | 0 | 0 | 0 |
+| Pipeline success | 100% | 100% | 100% |
+
+**Final DB totals:**
+- **729 products** across 12 categories
+- **969 listings** (515 Amazon + 454 Flipkart)
+- **144 cross-marketplace matches** (products found on both Amazon & Flipkart)
+- **729/729 synced to Meilisearch**
+
+Categories scraped: Smartphones, Laptops, Headphones/Audio, Televisions, Washing Machines, Refrigerators, Cameras, Smartwatches, Tablets, Air Purifiers, Electronics, Fashion
+
+#### Files Modified
+- `apps/scraping/playwright_handler.py` — NEW: StealthPlaywrightHandler with init script injection
+- `apps/scraping/spiders/flipkart_spider.py` — HTTPERROR_ALLOWED_CODES, ROBOTSTXT_OBEY, StealthPlaywrightHandler, networkidle page methods
+- `apps/scraping/spiders/base_spider.py` — Updated Stealth() usage comment
+- `apps/scraping/scrapy_settings.py` — Default handler switched to StealthPlaywrightHandler
+
+---
+
+### 2026-02-28 — Scraping Anti-Detection & Reliability Overhaul
+
+**Problem:** Amazon scraping hitting ~4 items/min with massive proxy bans and 503 errors. Root cause analysis found 7 issues.
+
+#### Critical Fix: Amazon Spider Missing Stealth
+The Amazon spider was using `scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler` (basic, no anti-detection) instead of the custom `StealthPlaywrightHandler`. Flipkart was correctly using stealth, but Amazon was not — this was the #1 cause of CAPTCHA/503 failures.
+
+#### Changes Made
+
+**1. Amazon Spider** (`apps/scraping/spiders/amazon_spider.py`)
+- Fixed DOWNLOAD_HANDLERS to use `StealthPlaywrightHandler` (was using basic handler with no stealth)
+- Reduced concurrency: `CONCURRENT_REQUESTS=2`, `CONCURRENT_REQUESTS_PER_DOMAIN=1` (was 4/2)
+- Increased base delay: `DOWNLOAD_DELAY=7` (was 4)
+- Enabled AutoThrottle (start 8s, max 45s, target concurrency 1.0)
+- Replaced default retry with `BackoffRetryMiddleware` (exponential backoff on 503/429)
+- Batched category starts: only 5 categories upfront, rest drip-fed as earlier ones complete
+- Categories shuffled to distribute load across browse nodes
+- CAPTCHA retries: 3 (was 2), with escalating wait (10-38s), forces new proxy on retry
+- Randomized `wait_for_timeout` (2.5-5s) instead of fixed 4s
+- Changed `_TOP=30`, `_STD=20` pages per category (was 10/5)
+
+**2. Flipkart Spider** (`apps/scraping/spiders/flipkart_spider.py`)
+- Added `DOWNLOAD_DELAY=7`, `CONCURRENT_REQUESTS=2`, `CONCURRENT_REQUESTS_PER_DOMAIN=1`
+- Enabled AutoThrottle (start 8s, max 45s, target concurrency 1.0)
+- Changed `_TOP=30`, `_STD=20` pages per category (was 10/5)
+
+**3. Base Spider** (`apps/scraping/spiders/base_spider.py`)
+- Reduced defaults: `DOWNLOAD_DELAY=6`, `CONCURRENT_REQUESTS=2`, `CONCURRENT_REQUESTS_PER_DOMAIN=1`
+- Enabled AutoThrottle globally (start 6s, max 30s, target 1.0)
+- Replaced default retry middleware with `BackoffRetryMiddleware`
+
+**4. Middlewares** (`apps/scraping/middlewares.py`)
+- NEW: `BackoffRetryMiddleware` — exponential backoff on retries (10s → 20s → 40s → 80s → 120s cap, ±50% jitter)
+- Proxy ban cooldown increased: base 60s (was 30s), max 900s (was 600s)
+- Added jitter to proxy ban cooldown to prevent thundering herd
+
+**5. Scrapy Settings** (`apps/scraping/scrapy_settings.py`)
+- Enabled AutoThrottle globally
+- Replaced default retry middleware with `BackoffRetryMiddleware`
+- Increased `DOWNLOAD_TIMEOUT` to 60s (was 45s)
+
+#### Expected Impact
+- Stealth fix alone should dramatically reduce CAPTCHA/503 rates
+- AutoThrottle dynamically adapts — slows down when server pushes back
+- Batched starts prevent burst traffic that triggers anti-bot systems
+- Backoff retries prevent retry storms that compound bans
+- Net throughput: slower per-request (~6-10 items/min) but much higher success rate

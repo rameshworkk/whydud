@@ -9,8 +9,8 @@ class ProductItem(scrapy.Item):
     E.g., ₹24,999 → 2499900 paisa.
     """
 
-    marketplace_slug = scrapy.Field()   # str — e.g., "amazon-in"
-    external_id = scrapy.Field()        # str — ASIN for Amazon, product ID for others
+    marketplace_slug = scrapy.Field()   # str — e.g., "amazon-in", "flipkart"
+    external_id = scrapy.Field()        # str — ASIN for Amazon, FPID for Flipkart
     url = scrapy.Field()                # str — canonical product URL
     title = scrapy.Field()              # str
     brand = scrapy.Field()              # str | None
@@ -23,18 +23,31 @@ class ProductItem(scrapy.Item):
     seller_name = scrapy.Field()        # str | None
     seller_rating = scrapy.Field()      # Decimal (0-5) | None
     in_stock = scrapy.Field()           # bool
-    fulfilled_by = scrapy.Field()       # str | None — "Amazon" or seller name
-    category_slug = scrapy.Field()       # str | None — Whydud category slug
+    fulfilled_by = scrapy.Field()       # str | None — "Amazon"/"Flipkart" or seller name
+    category_slug = scrapy.Field()      # str | None — Whydud category slug
     about_bullets = scrapy.Field()      # list[str] — "About this item" bullet points
     offer_details = scrapy.Field()      # list[dict] — bank offers, coupons, EMI
     raw_html_path = scrapy.Field()      # str | None — local path to saved HTML
+
+    # Extended fields — comprehensive product info
+    description = scrapy.Field()        # str | None — full product description text
+    warranty = scrapy.Field()           # str | None — warranty info (e.g. "1 Year Manufacturer")
+    delivery_info = scrapy.Field()      # str | None — delivery estimate text
+    return_policy = scrapy.Field()      # str | None — return policy text
+    breadcrumbs = scrapy.Field()        # list[str] — navigation breadcrumb trail
+    variant_options = scrapy.Field()    # list[dict] — color/size/storage variants
+    country_of_origin = scrapy.Field()  # str | None — manufacturing country
+    manufacturer = scrapy.Field()       # str | None — manufacturer name
+    model_number = scrapy.Field()       # str | None — model/part number
+    weight = scrapy.Field()             # str | None — product weight
+    dimensions = scrapy.Field()         # str | None — product dimensions
 
 
 class ReviewItem(scrapy.Item):
     """Structured review data yielded by marketplace spiders."""
 
     # Required
-    marketplace_slug = scrapy.Field()     # "amazon_in" / "flipkart"
+    marketplace_slug = scrapy.Field()     # "amazon-in" / "flipkart"
     product_external_id = scrapy.Field()  # ASIN or FPID — links to ProductListing
     rating = scrapy.Field()               # int 1-5
     body = scrapy.Field()                 # Full review text

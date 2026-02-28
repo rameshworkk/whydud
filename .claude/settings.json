@@ -73,7 +73,9 @@
       "Bash(pkill -f \"apps.scraping.runner\")",
       "Bash(pkill -f chromium)",
       "Bash(cat \"/c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/app/\\(public\\)/page.tsx\")",
-      "Bash(cat \"/c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/app/\\(public\\)/search/page.tsx\")"
+      "Bash(cat \"/c/Users/rames/Downloads/whydud/platform/whydud/frontend/src/app/\\(public\\)/search/page.tsx\")",
+      "Bash(POSTGRES_PASSWORD=whydud_dev docker compose -f docker-compose.dev.yml ps)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m apps.scraping.runner flipkart_reviews --max-review-pages 1)"
     ],
     "additionalDirectories": [
       "c:\\Users\\rames\\Downloads\\whydud\\platform\\whydud\\frontend\\src\\app\\(public)\\seller",

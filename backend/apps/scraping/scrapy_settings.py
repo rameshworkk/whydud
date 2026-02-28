@@ -3,6 +3,7 @@
 These are loaded by the spider runner (apps/scraping/runner.py)
 and merged with per-spider custom_settings.
 """
+import random
 
 BOT_NAME = "whydud_scraper"
 SPIDER_MODULES = ["apps.scraping.spiders"]
@@ -24,25 +25,74 @@ ITEM_PIPELINES = {
 # Download & request settings
 # ---------------------------------------------------------------------------
 LOG_LEVEL = "INFO"
-DOWNLOAD_TIMEOUT = 30
-RETRY_TIMES = 3
+DOWNLOAD_TIMEOUT = 45          # generous timeout for Playwright pages
+DOWNLOAD_MAXSIZE = 10485760    # 10MB max response
+RETRY_TIMES = 2
 RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
 
 # We rotate User-Agents in BaseWhydudSpider — disable Scrapy's built-in UA middleware.
+# Replace default retry with BackoffRetryMiddleware for exponential backoff.
 DOWNLOADER_MIDDLEWARES = {
     "scrapy.downloadermiddlewares.useragent.UserAgentMiddleware": None,
-    # TODO Sprint 3: Add proxy rotation middleware
+    "scrapy.downloadermiddlewares.retry.RetryMiddleware": None,
+    "apps.scraping.middlewares.BackoffRetryMiddleware": 350,
+    "apps.scraping.middlewares.PlaywrightProxyMiddleware": 400,
 }
 
+# ---------------------------------------------------------------------------
+# AutoThrottle — dynamically adjusts request rate based on server latency
+# ---------------------------------------------------------------------------
+AUTOTHROTTLE_ENABLED = True
+AUTOTHROTTLE_START_DELAY = 3       # start at 3s, scales up dynamically
+AUTOTHROTTLE_MAX_DELAY = 30        # back off up to 30s when server is stressed
+AUTOTHROTTLE_TARGET_CONCURRENCY = 2.0   # aim for 2 concurrent requests
+
+# ---------------------------------------------------------------------------
 # Playwright (for JS-rendered pages)
+# ---------------------------------------------------------------------------
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 DOWNLOAD_HANDLERS = {
-    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+    "https": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
+    "http": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
 }
 PLAYWRIGHT_BROWSER_TYPE = "chromium"
 PLAYWRIGHT_LAUNCH_OPTIONS = {
     "headless": True,
+    "args": [
+        "--disable-blink-features=AutomationControlled",
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+        "--disable-infobars",
+        "--disable-extensions",
+        "--disable-gpu",
+        "--lang=en-IN",
+    ],
+}
+PLAYWRIGHT_MAX_PAGES_PER_CONTEXT = 4
+
+# Randomize viewport per spider run — reduces fingerprinting consistency.
+_VIEWPORT_CHOICES = [
+    {"width": 1920, "height": 1080},
+    {"width": 1366, "height": 768},
+    {"width": 1536, "height": 864},
+    {"width": 1440, "height": 900},
+    {"width": 1280, "height": 720},
+]
+_VIEWPORT = random.choice(_VIEWPORT_CHOICES)
+
+# Default context kwargs — mimic a real Indian Chrome user.
+PLAYWRIGHT_CONTEXTS = {
+    "default": {
+        "locale": "en-IN",
+        "timezone_id": "Asia/Kolkata",
+        "viewport": _VIEWPORT,
+        "java_script_enabled": True,
+        "ignore_https_errors": True,
+        "bypass_csp": True,
+        "extra_http_headers": {
+            "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
+        },
+    },
 }
 
 

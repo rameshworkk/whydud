@@ -7,8 +7,8 @@ Sprint 2, Week 4.
 """
 import hashlib
 import os
+import random
 import re
-import time
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -28,7 +28,7 @@ PRICE_RE = re.compile(r"[\d,.]+")
 RATING_RE = re.compile(r"([\d.]+)\s*out of\s*5")
 REVIEW_COUNT_RE = re.compile(r"([\d,]+)\s*(?:rating|review|customer)")
 
-MARKETPLACE_SLUG = "amazon_in"
+MARKETPLACE_SLUG = "amazon-in"
 
 # ---------------------------------------------------------------------------
 # Amazon search keyword → Whydud category slug mapping
@@ -45,6 +45,7 @@ KEYWORD_CATEGORY_MAP: dict[str, str] = {
     "screen protectors": "smartphones",
     "power banks": "smartphones",
     "mobile chargers": "smartphones",
+    "mobile holders stands": "smartphones",
     # Computers & Peripherals
     "laptops": "laptops",
     "tablets": "tablets",
@@ -63,6 +64,7 @@ KEYWORD_CATEGORY_MAP: dict[str, str] = {
     "bluetooth speakers": "audio",
     "soundbars": "audio",
     "microphones": "audio",
+    "home theatre systems": "audio",
     # Wearables
     "smartwatches": "smartwatches",
     "fitness bands": "smartwatches",
@@ -71,6 +73,7 @@ KEYWORD_CATEGORY_MAP: dict[str, str] = {
     "camera lenses": "cameras",
     "camera tripods": "cameras",
     "action cameras": "cameras",
+    "drones cameras": "cameras",
     # TVs & Entertainment
     "televisions": "televisions",
     "projectors": "televisions",
@@ -97,17 +100,25 @@ KEYWORD_CATEGORY_MAP: dict[str, str] = {
     "irons steamers": "kitchen-tools",
     "fans": "appliances",
     "room heaters": "appliances",
+    "juicer mixer grinder": "kitchen-tools",
+    "hand blenders": "kitchen-tools",
+    "sandwich makers": "kitchen-tools",
+    "toasters": "kitchen-tools",
+    "rice cookers": "kitchen-tools",
+    "pressure cookers": "kitchen-tools",
     # Personal Care & Grooming
-    "trimmers": "appliances",
-    "electric shavers": "appliances",
-    "hair dryers": "appliances",
-    "hair straighteners": "appliances",
-    "electric toothbrushes": "appliances",
+    "trimmers": "grooming",
+    "electric shavers": "grooming",
+    "hair dryers": "grooming",
+    "hair straighteners": "grooming",
+    "electric toothbrushes": "grooming",
+    "epilators": "grooming",
     # Fitness & Sports
-    "treadmills": "appliances",
-    "exercise bikes": "appliances",
-    "dumbbells weights": "appliances",
-    "yoga mats": "appliances",
+    "treadmills": "fitness",
+    "exercise bikes": "fitness",
+    "dumbbells weights": "fitness",
+    "yoga mats": "fitness",
+    "gym equipment": "fitness",
     # Home & Furniture
     "mattresses": "home-kitchen",
     "office chairs": "home-kitchen",
@@ -115,49 +126,72 @@ KEYWORD_CATEGORY_MAP: dict[str, str] = {
     "beds": "home-kitchen",
     "sofas": "home-kitchen",
     "shoe racks": "home-kitchen",
+    "dining tables": "home-kitchen",
+    "wardrobes": "home-kitchen",
+    "bean bags": "home-kitchen",
+    "curtains": "home-kitchen",
+    "bedsheets": "home-kitchen",
     # Smart Home & Security
     "smart plugs": "electronics",
     "smart bulbs": "electronics",
     "security cameras": "cameras",
     "smart door locks": "electronics",
     "video doorbells": "electronics",
+    "smart speakers": "electronics",
     # Gaming
     "gaming laptops": "laptops",
     "gaming monitors": "laptops",
     "gaming headsets": "audio",
     "gaming controllers": "electronics",
     "gaming chairs": "home-kitchen",
+    "gaming consoles": "electronics",
     # Storage & Networking
     "ssd internal": "laptops",
     "memory cards": "laptops",
     "wifi mesh systems": "laptops",
     "nas storage": "laptops",
     # Baby & Kids
-    "baby strollers": "home-kitchen",
-    "car seats baby": "home-kitchen",
+    "baby strollers": "baby-kids",
+    "car seats baby": "baby-kids",
     "baby monitors": "cameras",
+    "baby toys": "baby-kids",
     # Car & Bike
     "dash cameras": "cameras",
     "car chargers": "electronics",
     "car air purifiers": "appliances",
     "tyre inflators": "electronics",
+    "car accessories": "electronics",
+    "helmet": "automotive",
     # Musical Instruments
     "guitars": "electronics",
     "keyboards pianos": "electronics",
-    # Luggage
+    # Luggage & Bags
     "laptop bags backpacks": "fashion",
     "suitcases trolley": "fashion",
+    "handbags": "fashion",
+    # Books & Stationery
+    "books bestsellers": "books",
+    "school bags": "books",
+    # Fashion & Accessories
+    "sunglasses": "fashion",
+    "watches men": "fashion",
+    "watches women": "fashion",
+    # Kitchen & Dining
+    "cookware sets": "kitchen-tools",
+    "water bottles": "kitchen-tools",
+    "lunch boxes": "kitchen-tools",
+    "kitchen storage": "kitchen-tools",
 }
 
 
 # Seed category search URLs — used when no ScraperJob provides URLs.
 # Format: (url, max_pages)  — max_pages controls pagination depth per category.
 # The rh=n%3A<id> parameter restricts results to a specific Amazon browse node.
-# Top 30 high-value categories get 10 pages (~200 products each).
-# Remaining 60 categories get 5 pages (~100 products each).
+# Top 30 high-value categories get 30 pages (~480 products each).
+# Remaining 60 categories get 20 pages (~320 products each).
 
-_TOP = 10   # pages for top categories
-_STD = 5    # pages for standard categories
+_TOP = 30   # pages for top categories
+_STD = 20   # pages for standard categories
 
 SEED_CATEGORY_URLS: list[tuple[str, int]] = [
     # ── Smartphones & Accessories (TOP) ──────────────────────────────────
@@ -268,6 +302,51 @@ SEED_CATEGORY_URLS: list[tuple[str, int]] = [
     # ── Luggage & Bags ───────────────────────────────────────────────────
     ("https://www.amazon.in/s?k=laptop+bags+backpacks&rh=n%3A2454169031", _STD),
     ("https://www.amazon.in/s?k=suitcases+trolley&rh=n%3A2454169031", _STD),
+    ("https://www.amazon.in/s?k=handbags&rh=n%3A2454169031", _STD),
+    # ── Additional Small Appliances ──────────────────────────────────────
+    ("https://www.amazon.in/s?k=juicer+mixer+grinder", _STD),
+    ("https://www.amazon.in/s?k=hand+blenders", _STD),
+    ("https://www.amazon.in/s?k=sandwich+makers", _STD),
+    ("https://www.amazon.in/s?k=toasters", _STD),
+    ("https://www.amazon.in/s?k=rice+cookers", _STD),
+    ("https://www.amazon.in/s?k=pressure+cookers", _STD),
+    # ── Personal Care (extra) ────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=epilators", _STD),
+    # ── Fitness (extra) ──────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=gym+equipment", _STD),
+    # ── Home & Furniture (extra) ─────────────────────────────────────────
+    ("https://www.amazon.in/s?k=dining+tables", _STD),
+    ("https://www.amazon.in/s?k=wardrobes", _STD),
+    ("https://www.amazon.in/s?k=bean+bags", _STD),
+    ("https://www.amazon.in/s?k=curtains", _STD),
+    ("https://www.amazon.in/s?k=bedsheets", _STD),
+    # ── Smart Home (extra) ───────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=smart+speakers", _STD),
+    # ── Gaming (extra) ───────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=gaming+consoles", _STD),
+    # ── Baby & Kids (extra) ──────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=baby+toys", _STD),
+    # ── Car & Bike (extra) ───────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=car+accessories", _STD),
+    ("https://www.amazon.in/s?k=helmet", _STD),
+    # ── Books & Stationery ───────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=books+bestsellers", _STD),
+    ("https://www.amazon.in/s?k=school+bags", _STD),
+    # ── Fashion & Accessories ────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=sunglasses", _STD),
+    ("https://www.amazon.in/s?k=watches+men", _STD),
+    ("https://www.amazon.in/s?k=watches+women", _STD),
+    # ── Kitchen & Dining ─────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=cookware+sets", _STD),
+    ("https://www.amazon.in/s?k=water+bottles", _STD),
+    ("https://www.amazon.in/s?k=lunch+boxes", _STD),
+    ("https://www.amazon.in/s?k=kitchen+storage", _STD),
+    # ── Cameras (extra) ──────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=drones+cameras", _STD),
+    # ── Audio (extra) ────────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=home+theatre+systems", _STD),
+    # ── Misc ─────────────────────────────────────────────────────────────
+    ("https://www.amazon.in/s?k=mobile+holders+stands", _STD),
 ]
 
 # Default fallback when --max-pages is passed via CLI (overrides all per-category limits).
@@ -287,10 +366,31 @@ class AmazonIndiaSpider(BaseWhydudSpider):
     name = "amazon_in"
     allowed_domains = ["amazon.in", "www.amazon.in"]
 
+    # Max retries for CAPTCHA pages before giving up on a product URL.
+    CAPTCHA_MAX_RETRIES = 3
+
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
+        "DOWNLOAD_DELAY": 3,                    # base delay — AutoThrottle will increase if needed
+        "CONCURRENT_REQUESTS": 4,               # allow 4 in-flight requests
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,    # 2 concurrent to amazon.in
         "DOWNLOAD_HANDLERS": {
-            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "https": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
+            "http": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
+        },
+        # AutoThrottle — will scale delay UP if Amazon is slow/blocking
+        "AUTOTHROTTLE_ENABLED": True,
+        "AUTOTHROTTLE_START_DELAY": 3,          # start at 3s, ramp up as needed
+        "AUTOTHROTTLE_MAX_DELAY": 30,           # back off up to 30s under stress
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0, # aim for 2 concurrent requests
+        # Retry with non-blocking backoff
+        "RETRY_TIMES": 2,
+        "RETRY_HTTP_CODES": [500, 502, 503, 504, 408, 429],
+        "DOWNLOADER_MIDDLEWARES": {
+            "scrapy.downloadermiddlewares.useragent.UserAgentMiddleware": None,
+            "scrapy.downloadermiddlewares.retry.RetryMiddleware": None,
+            "apps.scraping.middlewares.BackoffRetryMiddleware": 350,
+            "apps.scraping.middlewares.PlaywrightProxyMiddleware": 400,
         },
     }
 
@@ -325,22 +425,40 @@ class AmazonIndiaSpider(BaseWhydudSpider):
     # start_requests
     # ------------------------------------------------------------------
 
+    async def _apply_stealth(self, page, request):
+        """Apply playwright-stealth scripts to a page before navigation."""
+        await self.STEALTH.apply_stealth_async(page)
+
     def start_requests(self):
-        """Emit initial requests from ScraperJob config or seed categories."""
+        """Emit requests for all categories.
+
+        Scrapy's scheduler + AutoThrottle handle concurrency and rate
+        limiting — no need for manual batching which starves the spider.
+        Categories are shuffled to distribute load across browse nodes.
+        """
         url_pairs = self._load_urls()
+        random.shuffle(url_pairs)
+
         for url, max_pg in url_pairs:
-            # Store per-category page limit keyed by base URL
             base = url.split("&page=")[0].split("?page=")[0]
             self._max_pages_map[base] = max_pg
-            self.logger.info(f"Starting category ({max_pg} pages): {url}")
+
+            self.logger.info(f"Queuing category ({max_pg} pages): {url}")
+            meta = {
+                "playwright": True,
+                "playwright_page_init_callback": self._apply_stealth,
+            }
+            self._with_proxy_session(meta, session_key=base)
             yield scrapy.Request(
                 url,
                 callback=self.parse_listing_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
-                meta={"playwright": True},
+                meta=meta,
                 dont_filter=True,
             )
+
+        self.logger.info(f"Queued {len(url_pairs)} categories")
 
     def _load_urls(self) -> list[tuple[str, int]]:
         """Resolve the list of (url, max_pages) pairs to crawl.
@@ -386,6 +504,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
 
         # Resolve category slug from the seed URL keyword
         category_slug = response.meta.get("category_slug") or self._resolve_category_from_url(response.url)
+        session_key = response.meta.get("proxy_session")
 
         for result in results:
             # Amazon 2025+: product link lives in div[data-cy="title-recipe"]
@@ -405,18 +524,23 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             if "/dp/" not in full_url and "/gp/product/" not in full_url:
                 continue
 
+            meta = {
+                "playwright": True,
+                "playwright_page_init_callback": self._apply_stealth,
+                "playwright_page_methods": [
+                    PageMethod("wait_for_load_state", "domcontentloaded"),
+                    PageMethod("wait_for_timeout", random.randint(2500, 5000)),
+                ],
+                "category_slug": category_slug,
+            }
+            if session_key:
+                self._with_proxy_session(meta, session_key=session_key)
             yield scrapy.Request(
                 full_url,
                 callback=self.parse_product_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
-                meta={
-                    "playwright": True,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_selector", "#productTitle", timeout=10000),
-                    ],
-                    "category_slug": category_slug,
-                },
+                meta=meta,
             )
 
         # Pagination — follow "Next" link up to per-category max_pages
@@ -427,36 +551,88 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             next_link = response.css("a.s-pagination-next::attr(href)").get()
             if next_link:
                 self._pages_followed[base_url] = pages_so_far + 1
+                meta = {
+                    "playwright": True,
+                    "playwright_page_init_callback": self._apply_stealth,
+                    "category_slug": category_slug,
+                }
+                if session_key:
+                    self._with_proxy_session(meta, session_key=session_key)
                 yield scrapy.Request(
                     response.urljoin(next_link),
                     callback=self.parse_listing_page,
                     errback=self.handle_error,
                     headers=self._make_headers(),
-                    meta={"playwright": True, "category_slug": category_slug},
+                    meta=meta,
                 )
 
     # ------------------------------------------------------------------
     # Product detail page
     # ------------------------------------------------------------------
 
+    def _is_captcha_page(self, response) -> bool:
+        """Detect if Amazon served a CAPTCHA / bot-check page."""
+        page_title = response.css("title::text").get() or ""
+        if page_title.strip().lower() in ("amazon.in", "robot check", ""):
+            return True
+        if response.css("form[action*='validateCaptcha']"):
+            return True
+        if b"captcha" in response.body[:5000].lower():
+            return True
+        return False
+
     def parse_product_page(self, response):
         """Extract all product data from an Amazon.in product detail page."""
+        # --- CAPTCHA detection & retry ---
+        retries = response.meta.get("captcha_retries", 0)
+        if self._is_captcha_page(response):
+            if retries < self.CAPTCHA_MAX_RETRIES:
+                self.logger.info(
+                    f"CAPTCHA detected on {response.url} — retry {retries + 1}/{self.CAPTCHA_MAX_RETRIES}"
+                )
+                meta = {
+                    "playwright": True,
+                    "playwright_page_init_callback": self._apply_stealth,
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_load_state", "domcontentloaded"),
+                        PageMethod("wait_for_timeout", random.randint(3000, 6000)),
+                    ],
+                    "category_slug": response.meta.get("category_slug"),
+                    "captcha_retries": retries + 1,
+                    # Non-blocking delay via Scrapy's scheduler
+                    "download_delay": 5 * (retries + 1) + random.uniform(2, 5),
+                }
+                yield scrapy.Request(
+                    response.url,
+                    callback=self.parse_product_page,
+                    errback=self.handle_error,
+                    headers=self._make_headers(),
+                    meta=meta,
+                    dont_filter=True,
+                    priority=-1,  # low priority — let other requests go first
+                )
+                return
+            else:
+                self.logger.warning(f"CAPTCHA persists after {retries} retries — skipping {response.url}")
+                self.items_failed += 1
+                return
+
         asin = self._extract_asin(response)
         if not asin:
             self.logger.warning(f"Could not extract ASIN from {response.url}")
             self.items_failed += 1
             return
 
-        title = self._extract_title(response)
-        if not title:
-            self.logger.warning(f"No title found for ASIN {asin}")
-            self.items_failed += 1
-            return
-
-        # Save raw HTML for debugging (optional)
+        # Save raw HTML for debugging BEFORE extraction (so we can debug failures)
         raw_html_path = None
         if self._save_html:
             raw_html_path = self._save_raw_html(response, asin)
+
+        title = self._extract_title(response)
+        if not title:
+            self.logger.warning(f"No title found for ASIN {asin} — page length={len(response.text)}")
+            self.items_failed += 1
+            return
 
         item = ProductItem()
         item["marketplace_slug"] = MARKETPLACE_SLUG
@@ -478,6 +654,19 @@ class AmazonIndiaSpider(BaseWhydudSpider):
         item["about_bullets"] = self._extract_about_bullets(response)
         item["offer_details"] = self._extract_offers(response)
         item["raw_html_path"] = raw_html_path
+
+        # Extended fields — comprehensive product info
+        item["description"] = self._extract_description(response)
+        item["warranty"] = self._extract_warranty(response)
+        item["delivery_info"] = self._extract_delivery_info(response)
+        item["return_policy"] = self._extract_return_policy(response)
+        item["breadcrumbs"] = self._extract_breadcrumbs(response)
+        item["variant_options"] = self._extract_variants(response)
+        item["country_of_origin"] = self._extract_from_specs(item["specs"], ["Country of Origin", "country of origin"])
+        item["manufacturer"] = self._extract_from_specs(item["specs"], ["Manufacturer", "manufacturer"])
+        item["model_number"] = self._extract_from_specs(item["specs"], ["Item model number", "Model Number", "Model Name", "model number"])
+        item["weight"] = self._extract_from_specs(item["specs"], ["Item Weight", "Product Weight", "Weight", "item weight"])
+        item["dimensions"] = self._extract_from_specs(item["specs"], ["Product Dimensions", "Item Dimensions", "Dimensions", "product dimensions"])
 
         self.items_scraped += 1
         yield item
@@ -501,13 +690,37 @@ class AmazonIndiaSpider(BaseWhydudSpider):
         return asin.strip() if asin else None
 
     def _extract_title(self, response) -> str | None:
-        """Extract product title."""
-        title = response.css("#productTitle::text").get()
-        if title:
-            return title.strip()
-        # Fallback: try the Apple-style title
-        title = response.css("#title span::text").get()
-        return title.strip() if title else None
+        """Extract product title from various Amazon page layouts."""
+        selectors = [
+            "#productTitle::text",
+            "#title span::text",
+            "#title_feature_div #productTitle::text",
+            # Some Amazon pages nest title differently
+            'span[id="productTitle"]::text',
+            "h1#title span::text",
+            "h1.product-title-word-break::text",
+        ]
+        for sel in selectors:
+            title = response.css(sel).get()
+            if title and title.strip():
+                return title.strip()
+
+        # Fallback: extract from <title> tag (format: "Product Name : Amazon.in")
+        page_title = response.css("title::text").get()
+        if page_title:
+            # Remove Amazon suffix
+            cleaned = re.sub(r"\s*[:\-|]\s*Amazon\.in.*$", "", page_title.strip())
+            cleaned = re.sub(r"^Amazon\.in\s*[:\-|]\s*", "", cleaned)
+            # Skip generic Amazon titles (CAPTCHA / redirect pages)
+            if cleaned and len(cleaned) > 5 and cleaned.lower() != "amazon.in":
+                return cleaned
+
+        # Fallback: og:title meta tag
+        og_title = response.css('meta[property="og:title"]::attr(content)').get()
+        if og_title and og_title.strip():
+            return og_title.strip()
+
+        return None
 
     def _extract_brand(self, response) -> str | None:
         """Extract brand name from byline or tech specs."""
@@ -750,6 +963,130 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             offers.append(offer)
 
         return offers[:10]  # cap at 10
+
+    # ------------------------------------------------------------------
+    # Extended field extraction (description, warranty, delivery, etc.)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_description(response) -> str | None:
+        """Extract product description from the product overview or description section."""
+        # Primary: product description section
+        desc_parts = response.css("#productDescription p::text, #productDescription span::text").getall()
+        if desc_parts:
+            return " ".join(t.strip() for t in desc_parts if t.strip())[:5000]
+
+        # Fallback: product overview feature div
+        overview = response.css("#productOverview_feature_div td::text").getall()
+        if overview:
+            return " | ".join(t.strip() for t in overview if t.strip())[:5000]
+
+        # Fallback: A+ content / brand story
+        aplus = response.css("#aplus p::text, #aplus span::text").getall()
+        if aplus:
+            return " ".join(t.strip() for t in aplus if t.strip())[:5000]
+
+        return None
+
+    @staticmethod
+    def _extract_warranty(response) -> str | None:
+        """Extract warranty information."""
+        # Look for warranty in specs table
+        for row in response.css("#productDetails_techSpec_section_1 tr, #productDetails_detailBullets_sections1 tr"):
+            label = row.css("th::text").get("").strip().lower()
+            if "warranty" in label:
+                return row.css("td::text").get("").strip()
+
+        # Look for warranty in product information table
+        for row in response.css("#productDetails_db_sections tr"):
+            label = row.css("th::text").get("").strip().lower()
+            if "warranty" in label:
+                return row.css("td::text").get("").strip()
+
+        # Look in detail bullets
+        for li in response.css("#detailBullets_feature_div li"):
+            text = " ".join(li.css("span::text").getall()).lower()
+            if "warranty" in text:
+                parts = [t.strip() for t in li.css("span::text").getall() if t.strip()]
+                if len(parts) >= 2:
+                    return parts[-1]
+
+        return None
+
+    @staticmethod
+    def _extract_delivery_info(response) -> str | None:
+        """Extract delivery estimate from the page."""
+        # Primary: delivery message
+        delivery = response.css("#deliveryBlockMessage .a-text-bold::text").get()
+        if delivery and delivery.strip():
+            return delivery.strip()
+
+        # Fallback: delivery date text
+        delivery = response.css("#mir-layout-DELIVERY_BLOCK-slot-PRIMARY_DELIVERY_MESSAGE_LARGE span::text").get()
+        if delivery and delivery.strip():
+            return delivery.strip()
+
+        delivery = response.css("#delivery-promise-text span::text").get()
+        return delivery.strip() if delivery else None
+
+    @staticmethod
+    def _extract_return_policy(response) -> str | None:
+        """Extract return policy text."""
+        for sel in [
+            '#productSupportAndReturnPolicy-return_policy_feature_div span::text',
+            '#returnPolicyFeature_feature_div span::text',
+        ]:
+            text = response.css(sel).get()
+            if text and text.strip() and len(text.strip()) > 5:
+                return text.strip()
+        return None
+
+    @staticmethod
+    def _extract_breadcrumbs(response) -> list[str]:
+        """Extract navigation breadcrumb trail."""
+        crumbs = response.css("#wayfinding-breadcrumbs_feature_div ul li a::text").getall()
+        return [c.strip() for c in crumbs if c.strip()]
+
+    @staticmethod
+    def _extract_variants(response) -> list[dict]:
+        """Extract available variant options (color, size, storage, etc.)."""
+        variants: list[dict] = []
+
+        # Color/pattern variants
+        for swatch in response.css("#variation_color_name li"):
+            label = swatch.css("img::attr(alt)").get() or swatch.css("::attr(title)").get()
+            if label:
+                variant = {"type": "color", "value": label.strip()}
+                asin = swatch.css("::attr(data-defaultasin)").get()
+                if asin:
+                    variant["asin"] = asin
+                variants.append(variant)
+
+        # Size/storage variants
+        for swatch in response.css("#variation_size_name li, #variation_style_name li"):
+            label = swatch.css(".a-size-base::text").get() or swatch.css("::attr(title)").get()
+            if label:
+                variant = {"type": "size", "value": label.strip()}
+                asin = swatch.css("::attr(data-defaultasin)").get()
+                if asin:
+                    variant["asin"] = asin
+                variants.append(variant)
+
+        return variants[:30]  # cap at 30 variants
+
+    @staticmethod
+    def _extract_from_specs(specs: dict, keys: list[str]) -> str | None:
+        """Extract a specific value from the specs dict by trying multiple key names."""
+        if not specs:
+            return None
+        for key in keys:
+            if key in specs:
+                return specs[key]
+            # Case-insensitive fallback
+            for spec_key, spec_val in specs.items():
+                if spec_key.lower().strip() == key.lower().strip():
+                    return spec_val
+        return None
 
     # ------------------------------------------------------------------
     # Category resolution
