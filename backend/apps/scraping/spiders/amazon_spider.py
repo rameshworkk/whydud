@@ -1,11 +1,16 @@
 """Amazon.in spider — scrapes product listings, detail pages, prices, and offers.
 
-Uses Playwright for JS-rendered product detail pages (prices and availability
-are sometimes loaded via JavaScript on Amazon.in).
+Two-phase architecture:
+  Phase 1 — Listing pages (/s?k=...) use PLAIN HTTP (no Playwright).
+            Product links, titles, and basic info are in raw HTML.
+            Falls back to Playwright only on CAPTCHA detection.
+  Phase 2 — Product detail pages (/dp/ASIN) use Playwright for JS-rendered
+            prices, availability, and dynamic content.
 
 Sprint 2, Week 4.
 """
 import hashlib
+import json
 import os
 import random
 import re
@@ -354,7 +359,11 @@ MAX_LISTING_PAGES = 5
 
 
 class AmazonIndiaSpider(BaseWhydudSpider):
-    """Scrapes Amazon.in product pages using Playwright for JS rendering.
+    """Scrapes Amazon.in with a two-phase approach.
+
+    Phase 1: Listing pages via plain HTTP (fast, ~0.5s per page).
+             CAPTCHA triggers automatic promotion to Playwright.
+    Phase 2: Product detail pages via Playwright (JS rendering for prices).
 
     Spider arguments (passed via ``-a``):
       job_id       — UUID of a ScraperJob row to pull config from.
@@ -366,32 +375,19 @@ class AmazonIndiaSpider(BaseWhydudSpider):
     name = "amazon_in"
     allowed_domains = ["amazon.in", "www.amazon.in"]
 
-    # Max retries for CAPTCHA pages before giving up on a product URL.
+    # Max retries for CAPTCHA pages before giving up on a URL.
     CAPTCHA_MAX_RETRIES = 3
+
+    # Quick mode: only use first N categories when --max-pages <= 3
+    QUICK_MODE_CATEGORIES = 10
 
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
-        "DOWNLOAD_DELAY": 3,                    # base delay — AutoThrottle will increase if needed
-        "CONCURRENT_REQUESTS": 4,               # allow 4 in-flight requests
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,    # 2 concurrent to amazon.in
-        "DOWNLOAD_HANDLERS": {
-            "https": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
-            "http": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
-        },
-        # AutoThrottle — will scale delay UP if Amazon is slow/blocking
-        "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 3,          # start at 3s, ramp up as needed
-        "AUTOTHROTTLE_MAX_DELAY": 30,           # back off up to 30s under stress
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0, # aim for 2 concurrent requests
-        # Retry with non-blocking backoff
+        "DOWNLOAD_DELAY": 3,
+        "CONCURRENT_REQUESTS": 4,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
         "RETRY_TIMES": 2,
         "RETRY_HTTP_CODES": [500, 502, 503, 504, 408, 429],
-        "DOWNLOADER_MIDDLEWARES": {
-            "scrapy.downloadermiddlewares.useragent.UserAgentMiddleware": None,
-            "scrapy.downloadermiddlewares.retry.RetryMiddleware": None,
-            "apps.scraping.middlewares.BackoffRetryMiddleware": 350,
-            "apps.scraping.middlewares.PlaywrightProxyMiddleware": 400,
-        },
     }
 
     # ------------------------------------------------------------------
@@ -421,19 +417,49 @@ class AmazonIndiaSpider(BaseWhydudSpider):
         self._pages_followed: dict[str, int] = {}   # base_url → pages followed
         self._max_pages_map: dict[str, int] = {}     # base_url → per-category limit
 
+        # Proxy mode: rotating proxies get fewer CAPTCHA retries (new IP each time)
+        self._is_rotating = (
+            os.environ.get("SCRAPING_PROXY_TYPE", "static").lower() == "rotating"
+        )
+
+        # Scrape stats
+        self._listing_pages_scraped: int = 0
+        self._product_pages_scraped: int = 0
+        self._captcha_count: int = 0
+        self._products_extracted: int = 0
+
+    def closed(self, reason):
+        """Log final scrape statistics."""
+        total = self._product_pages_scraped + self.items_failed
+        rate = (self._product_pages_scraped / total * 100) if total > 0 else 0
+        self.logger.info(
+            f"Amazon spider finished ({reason}): "
+            f"listings={self._listing_pages_scraped}, "
+            f"product_attempts={total}, "
+            f"products_ok={self._product_pages_scraped} ({rate:.0f}%), "
+            f"captchas={self._captcha_count}, "
+            f"failed={self.items_failed}"
+        )
+
     # ------------------------------------------------------------------
-    # start_requests
+    # start_requests — Phase 1: plain HTTP for listings
     # ------------------------------------------------------------------
 
     async def _apply_stealth(self, page, request):
         """Apply playwright-stealth scripts to a page before navigation."""
-        await self.STEALTH.apply_stealth_async(page)
+        try:
+            await self.STEALTH.apply_stealth_async(page)
+            # Increase timeouts for proxy connections (DataImpulse adds latency)
+            page.set_default_navigation_timeout(60000)  # 60s instead of 30s
+            page.set_default_timeout(45000)  # 45s for other operations
+        except Exception as e:
+            self.logger.warning(f"Stealth setup issue: {e}")
 
     def start_requests(self):
-        """Emit requests for all categories.
+        """Emit plain HTTP requests for all category listing pages.
 
-        Scrapy's scheduler + AutoThrottle handle concurrency and rate
-        limiting — no need for manual batching which starves the spider.
+        Listing pages don't need Playwright — product links and titles
+        are in raw HTML. This cuts download time from ~5-8s to ~0.5s per page.
         Categories are shuffled to distribute load across browse nodes.
         """
         url_pairs = self._load_urls()
@@ -444,27 +470,24 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             self._max_pages_map[base] = max_pg
 
             self.logger.info(f"Queuing category ({max_pg} pages): {url}")
-            meta = {
-                "playwright": True,
-                "playwright_page_init_callback": self._apply_stealth,
-            }
-            self._with_proxy_session(meta, session_key=base)
+            # Phase 1: NO playwright — plain HTTP for listing pages
             yield scrapy.Request(
                 url,
                 callback=self.parse_listing_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
-                meta=meta,
+                meta={"category_slug": self._resolve_category_from_url(url)},
                 dont_filter=True,
             )
 
-        self.logger.info(f"Queued {len(url_pairs)} categories")
+        self.logger.info(f"Queued {len(url_pairs)} categories (plain HTTP)")
 
     def _load_urls(self) -> list[tuple[str, int]]:
         """Resolve the list of (url, max_pages) pairs to crawl.
 
         Priority: CLI ``category_urls`` > ScraperJob > seed categories.
         The ``--max-pages`` CLI arg overrides per-category limits globally.
+        Quick mode: when --max-pages <= 3, only use top N categories.
         """
         fallback = self._max_pages_override or MAX_LISTING_PAGES
 
@@ -484,16 +507,61 @@ class AmazonIndiaSpider(BaseWhydudSpider):
 
         # 3. Fallback to seed categories
         if self._max_pages_override is not None:
+            # Quick mode: take top N categories only for small runs
+            if self._max_pages_override <= 3:
+                self.logger.info(
+                    f"Quick mode: using first {self.QUICK_MODE_CATEGORIES} categories "
+                    f"(max_pages={self._max_pages_override})"
+                )
+                return [
+                    (url, self._max_pages_override)
+                    for url, _ in SEED_CATEGORY_URLS[:self.QUICK_MODE_CATEGORIES]
+                ]
             # CLI --max-pages overrides every per-category limit
             return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
         return list(SEED_CATEGORY_URLS)
 
     # ------------------------------------------------------------------
-    # Listing page (search results / category pages)
+    # Phase 1: Listing page (search results / category pages)
     # ------------------------------------------------------------------
 
     def parse_listing_page(self, response):
-        """Extract product links from a search results page."""
+        """Extract product links from a search results page (plain HTTP).
+
+        If Amazon serves a CAPTCHA, promote this page to Playwright and retry.
+        """
+        self._listing_pages_scraped += 1
+
+        # CAPTCHA detection — promote to Playwright on CAPTCHA
+        if self._is_captcha_page(response):
+            self._captcha_count += 1
+            retries = response.meta.get("captcha_retries", 0)
+            if retries < self.CAPTCHA_MAX_RETRIES:
+                self.logger.info(
+                    f"CAPTCHA on listing {response.url} — promoting to Playwright "
+                    f"(retry {retries + 1}/{self.CAPTCHA_MAX_RETRIES})"
+                )
+                yield scrapy.Request(
+                    response.url,
+                    callback=self.parse_listing_page,
+                    errback=self.handle_error,
+                    headers=self._make_headers(),
+                    meta={
+                        "playwright": True,
+                        "playwright_page_init_callback": self._apply_stealth,
+                        "category_slug": response.meta.get("category_slug"),
+                        "captcha_retries": retries + 1,
+                        "download_delay": 5 * (retries + 1) + random.uniform(2, 5),
+                    },
+                    dont_filter=True,
+                    priority=-1,
+                )
+            else:
+                self.logger.warning(
+                    f"CAPTCHA persists after {retries} retries on listing — skipping {response.url}"
+                )
+            return
+
         results = response.css('div[data-component-type="s-search-result"]')
 
         if not results:
@@ -502,9 +570,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
 
         self.logger.info(f"Found {len(results)} results on {response.url}")
 
-        # Resolve category slug from the seed URL keyword
         category_slug = response.meta.get("category_slug") or self._resolve_category_from_url(response.url)
-        session_key = response.meta.get("proxy_session")
 
         for result in results:
             # Amazon 2025+: product link lives in div[data-cy="title-recipe"]
@@ -524,17 +590,18 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             if "/dp/" not in full_url and "/gp/product/" not in full_url:
                 continue
 
+            # Phase 2: Product pages USE Playwright (JS-rendered prices)
+            # No proxy_session — let middleware round-robin per request
             meta = {
                 "playwright": True,
                 "playwright_page_init_callback": self._apply_stealth,
+                "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"},
                 "playwright_page_methods": [
                     PageMethod("wait_for_load_state", "domcontentloaded"),
                     PageMethod("wait_for_timeout", random.randint(2500, 5000)),
                 ],
                 "category_slug": category_slug,
             }
-            if session_key:
-                self._with_proxy_session(meta, session_key=session_key)
             yield scrapy.Request(
                 full_url,
                 callback=self.parse_product_page,
@@ -543,7 +610,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                 meta=meta,
             )
 
-        # Pagination — follow "Next" link up to per-category max_pages
+        # Pagination — follow "Next" link up to per-category max_pages (plain HTTP)
         base_url = response.url.split("&page=")[0].split("?page=")[0]
         pages_so_far = self._pages_followed.get(base_url, 1)
         max_for_category = self._max_pages_map.get(base_url, MAX_LISTING_PAGES)
@@ -551,23 +618,17 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             next_link = response.css("a.s-pagination-next::attr(href)").get()
             if next_link:
                 self._pages_followed[base_url] = pages_so_far + 1
-                meta = {
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "category_slug": category_slug,
-                }
-                if session_key:
-                    self._with_proxy_session(meta, session_key=session_key)
+                # Stay in plain HTTP for next listing page
                 yield scrapy.Request(
                     response.urljoin(next_link),
                     callback=self.parse_listing_page,
                     errback=self.handle_error,
                     headers=self._make_headers(),
-                    meta=meta,
+                    meta={"category_slug": category_slug},
                 )
 
     # ------------------------------------------------------------------
-    # Product detail page
+    # Phase 2: Product detail page (Playwright)
     # ------------------------------------------------------------------
 
     def _is_captcha_page(self, response) -> bool:
@@ -583,24 +644,40 @@ class AmazonIndiaSpider(BaseWhydudSpider):
 
     def parse_product_page(self, response):
         """Extract all product data from an Amazon.in product detail page."""
+        self._product_pages_scraped += 1
+
+        # Check middleware's CAPTCHA flag first (rotating proxy already detected it)
+        if response.meta.get("_rotating_proxy_captcha"):
+            self._captcha_count += 1
+            self.items_failed += 1
+            self.logger.debug(
+                f"CAPTCHA flagged by proxy middleware — skipping {response.url[:60]}"
+            )
+            return
+
         # --- CAPTCHA detection & retry ---
         retries = response.meta.get("captcha_retries", 0)
         if self._is_captcha_page(response):
-            if retries < self.CAPTCHA_MAX_RETRIES:
+            self._captcha_count += 1
+
+            # With rotating proxies, retry ONCE (next request gets new IP).
+            # With static/no proxies, retry up to CAPTCHA_MAX_RETRIES.
+            max_retries = 1 if self._is_rotating else self.CAPTCHA_MAX_RETRIES
+
+            if retries < max_retries:
                 self.logger.info(
-                    f"CAPTCHA detected on {response.url} — retry {retries + 1}/{self.CAPTCHA_MAX_RETRIES}"
+                    f"CAPTCHA on {response.url} — retry {retries + 1}/{max_retries}"
                 )
                 meta = {
                     "playwright": True,
                     "playwright_page_init_callback": self._apply_stealth,
+                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"},
                     "playwright_page_methods": [
                         PageMethod("wait_for_load_state", "domcontentloaded"),
                         PageMethod("wait_for_timeout", random.randint(3000, 6000)),
                     ],
                     "category_slug": response.meta.get("category_slug"),
                     "captcha_retries": retries + 1,
-                    # Non-blocking delay via Scrapy's scheduler
-                    "download_delay": 5 * (retries + 1) + random.uniform(2, 5),
                 }
                 yield scrapy.Request(
                     response.url,
@@ -609,13 +686,14 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                     headers=self._make_headers(),
                     meta=meta,
                     dont_filter=True,
-                    priority=-1,  # low priority — let other requests go first
+                    priority=-1,
                 )
                 return
-            else:
-                self.logger.warning(f"CAPTCHA persists after {retries} retries — skipping {response.url}")
-                self.items_failed += 1
-                return
+
+            # Max retries reached — skip this product
+            self.logger.info(f"Skipping {response.url} after {retries} CAPTCHA retries")
+            self.items_failed += 1
+            return
 
         asin = self._extract_asin(response)
         if not asin:
@@ -628,7 +706,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
         if self._save_html:
             raw_html_path = self._save_raw_html(response, asin)
 
-        title = self._extract_title(response)
+        title = self._extract_title(response, asin)
         if not title:
             self.logger.warning(f"No title found for ASIN {asin} — page length={len(response.text)}")
             self.items_failed += 1
@@ -669,6 +747,7 @@ class AmazonIndiaSpider(BaseWhydudSpider):
         item["dimensions"] = self._extract_from_specs(item["specs"], ["Product Dimensions", "Item Dimensions", "Dimensions", "product dimensions"])
 
         self.items_scraped += 1
+        self._products_extracted += 1
         yield item
 
     # ------------------------------------------------------------------
@@ -689,36 +768,63 @@ class AmazonIndiaSpider(BaseWhydudSpider):
         asin = response.css("#ASIN::attr(value)").get()
         return asin.strip() if asin else None
 
-    def _extract_title(self, response) -> str | None:
-        """Extract product title from various Amazon page layouts."""
-        selectors = [
-            "#productTitle::text",
-            "#title span::text",
-            "#title_feature_div #productTitle::text",
-            # Some Amazon pages nest title differently
-            'span[id="productTitle"]::text',
-            "h1#title span::text",
-            "h1.product-title-word-break::text",
-        ]
-        for sel in selectors:
-            title = response.css(sel).get()
-            if title and title.strip():
-                return title.strip()
+    def _extract_title(self, response, asin: str = "") -> str | None:
+        """Extract product title from multiple sources in priority order.
 
-        # Fallback: extract from <title> tag (format: "Product Name : Amazon.in")
-        page_title = response.css("title::text").get()
-        if page_title:
-            # Remove Amazon suffix
-            cleaned = re.sub(r"\s*[:\-|]\s*Amazon\.in.*$", "", page_title.strip())
-            cleaned = re.sub(r"^Amazon\.in\s*[:\-|]\s*", "", cleaned)
-            # Skip generic Amazon titles (CAPTCHA / redirect pages)
-            if cleaned and len(cleaned) > 5 and cleaned.lower() != "amazon.in":
-                return cleaned
+        Tries 7 methods to maximize resilience against Amazon layout changes.
+        Logs which method succeeded for debugging.
+        """
+        # Method 1: #productTitle (most common)
+        title = response.css("#productTitle::text").get()
+        if title and title.strip():
+            self.logger.debug(f"Title for {asin} extracted via method 1 (#productTitle)")
+            return title.strip()
 
-        # Fallback: og:title meta tag
+        # Method 2: #title span
+        title = response.css("#title span::text").get()
+        if title and title.strip():
+            self.logger.debug(f"Title for {asin} extracted via method 2 (#title span)")
+            return title.strip()
+
+        # Method 3: h1#title span.a-text-normal
+        title = response.css("h1#title span.a-text-normal::text").get()
+        if title and title.strip():
+            self.logger.debug(f"Title for {asin} extracted via method 3 (h1#title span.a-text-normal)")
+            return title.strip()
+
+        # Method 4: any h1 span
+        title = response.css("h1 span::text").get()
+        if title and title.strip():
+            self.logger.debug(f"Title for {asin} extracted via method 4 (h1 span)")
+            return title.strip()
+
+        # Method 5: JSON-LD Product schema
+        for script in response.css('script[type="application/ld+json"]::text').getall():
+            try:
+                data = json.loads(script)
+                # Handle both single object and array of objects
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    if isinstance(item, dict) and item.get("@type") == "Product" and item.get("name"):
+                        self.logger.debug(f"Title for {asin} extracted via method 5 (JSON-LD)")
+                        return item["name"].strip()
+            except (json.JSONDecodeError, KeyError, TypeError):
+                continue
+
+        # Method 6: Open Graph og:title
         og_title = response.css('meta[property="og:title"]::attr(content)').get()
         if og_title and og_title.strip():
+            self.logger.debug(f"Title for {asin} extracted via method 6 (og:title)")
             return og_title.strip()
+
+        # Method 7: <title> tag — strip " : Amazon.in" suffix
+        page_title = response.css("title::text").get()
+        if page_title:
+            cleaned = re.sub(r"\s*[:\-|]\s*Amazon\.in.*$", "", page_title.strip())
+            cleaned = re.sub(r"^Amazon\.in\s*[:\-|]\s*", "", cleaned)
+            if cleaned and len(cleaned) > 5 and cleaned.lower() != "amazon.in":
+                self.logger.debug(f"Title for {asin} extracted via method 7 (<title> tag)")
+                return cleaned
 
         return None
 
@@ -807,7 +913,6 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             dynamic = response.css("#landingImage::attr(data-a-dynamic-image)").get()
             if dynamic:
                 try:
-                    import json
                     url_map = json.loads(dynamic)
                     # Keys are URLs, values are [width, height] — pick largest
                     sorted_urls = sorted(url_map.items(), key=lambda x: x[1][0], reverse=True)

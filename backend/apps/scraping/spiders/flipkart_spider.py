@@ -1,8 +1,11 @@
 """Flipkart spider — scrapes product listings, detail pages, prices, and offers.
 
-Flipkart renders most content server-side, so Playwright is only used for
-listing pages (lazy-loaded product cards). Product detail pages are fetched
-via standard HTTP.
+Two-phase architecture:
+  Phase 1 — Listing pages (/search?q=...) use Playwright (React-rendered).
+            Includes block detection (403, 429, Access Denied).
+  Phase 2 — Product detail pages try PLAIN HTTP first.
+            Flipkart serves JSON-LD structured data in the initial HTML.
+            Only falls back to Playwright if JSON-LD is missing/incomplete.
 
 Strategy:
   1. JSON-LD structured data (``<script type="application/ld+json">``) is the
@@ -15,6 +18,7 @@ Sprint 2, Week 5.
 """
 import json
 import os
+import random
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -152,7 +156,6 @@ KEYWORD_CATEGORY_MAP: dict[str, str] = {
     "ssd internal": "laptops",
     "memory cards": "laptops",
     "wifi mesh systems": "laptops",
-    "nas storage": "laptops",
     # Baby & Kids
     "baby strollers": "baby-kids",
     "car seats baby": "baby-kids",
@@ -342,10 +345,12 @@ MAX_LISTING_PAGES = 5
 
 
 class FlipkartSpider(BaseWhydudSpider):
-    """Scrapes Flipkart product pages.
+    """Scrapes Flipkart with a two-phase approach.
 
-    Flipkart renders most product detail content server-side, so Playwright
-    is only activated for listing pages (product cards are lazy-loaded).
+    Phase 1: Listing pages via Playwright (React-rendered, lazy-loaded cards).
+             Includes block detection for 403/429/Access Denied.
+    Phase 2: Product detail pages try plain HTTP first (JSON-LD is in raw HTML).
+             Falls back to Playwright only when JSON-LD data is incomplete.
 
     Spider arguments (passed via ``-a``):
       job_id        — UUID of a ScraperJob row.
@@ -357,29 +362,18 @@ class FlipkartSpider(BaseWhydudSpider):
     name = "flipkart"
     allowed_domains = ["flipkart.com", "www.flipkart.com"]
 
-    # Playwright for both listing and product pages (Flipkart 403s plain HTTP).
-    # Uses StealthPlaywrightHandler to inject anti-detection patches into
-    # every browser context before navigation.
+    # Quick mode: only use first N categories when --max-pages <= 3
+    QUICK_MODE_CATEGORIES = 10
+
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
-        "DOWNLOAD_DELAY": 7,
+        "DOWNLOAD_DELAY": 10,
         "CONCURRENT_REQUESTS": 2,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
-        "DOWNLOAD_HANDLERS": {
-            "https": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
-            "http": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
-        },
-        # Flipkart returns 403 on robots.txt — disable to avoid blocking.
-        "ROBOTSTXT_OBEY": False,
         # Flipkart serves valid page content with 403 status codes (anti-bot
         # challenge pages that still render product data via JS). Allow the
         # spider to process these responses instead of discarding them.
         "HTTPERROR_ALLOWED_CODES": [403],
-        # AutoThrottle
-        "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 8,
-        "AUTOTHROTTLE_MAX_DELAY": 45,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
     }
 
     # ------------------------------------------------------------------
@@ -409,43 +403,86 @@ class FlipkartSpider(BaseWhydudSpider):
         self._pages_followed: dict[str, int] = {}
         self._max_pages_map: dict[str, int] = {}  # base_url → per-category limit
 
+        # Proxy mode: rotating proxies get fewer block retries (new IP each time)
+        self._is_rotating = (
+            os.environ.get("SCRAPING_PROXY_TYPE", "static").lower() == "rotating"
+        )
+
+        # Scrape stats
+        self._listing_pages_scraped: int = 0
+        self._product_pages_scraped: int = 0
+        self._product_pages_plain_http: int = 0
+        self._product_pages_playwright: int = 0
+        self._blocked_count: int = 0
+        self._products_extracted: int = 0
+
+    def closed(self, reason):
+        """Log final scrape statistics."""
+        total = self._product_pages_scraped + self.items_failed
+        rate = (self._product_pages_scraped / total * 100) if total > 0 else 0
+        self.logger.info(
+            f"Flipkart spider finished ({reason}): "
+            f"listings={self._listing_pages_scraped}, "
+            f"product_attempts={total}, "
+            f"products_ok={self._product_pages_scraped} ({rate:.0f}%), "
+            f"plain_http={self._product_pages_plain_http}, "
+            f"playwright={self._product_pages_playwright}, "
+            f"blocked={self._blocked_count}, "
+            f"failed={self.items_failed}"
+        )
+
     # ------------------------------------------------------------------
-    # start_requests
+    # start_requests — Phase 1: Playwright for listings
     # ------------------------------------------------------------------
+
+    async def _apply_stealth(self, page, request):
+        """Apply playwright-stealth scripts to a page before navigation."""
+        try:
+            await self.STEALTH.apply_stealth_async(page)
+            # Increase timeouts for proxy connections (DataImpulse adds latency)
+            page.set_default_navigation_timeout(60000)  # 60s instead of 30s
+            page.set_default_timeout(45000)  # 45s for other operations
+        except Exception as e:
+            self.logger.warning(f"Stealth setup issue: {e}")
 
     def start_requests(self):
-        """Emit initial requests from ScraperJob config or seed categories.
+        """Emit Playwright requests for all category listing pages.
 
-        Flipkart returns 403 on listing pages but still renders valid product
-        data via JS. HTTPERROR_ALLOWED_CODES includes 403 so responses are
-        processed normally.
+        Flipkart listing pages are React-rendered — Playwright is required.
+        Categories are shuffled to distribute load.
         """
         url_pairs = self._load_urls()
+        random.shuffle(url_pairs)
+
         for url, max_pg in url_pairs:
             base = re.sub(r"[&?]page=\d+", "", url)
             self._max_pages_map[base] = max_pg
-            self.logger.info(f"Starting category ({max_pg} pages): {url}")
-            meta = {
-                "playwright": True,
-                "playwright_page_methods": [
-                    PageMethod("wait_for_load_state", "networkidle"),
-                ],
-            }
-            self._with_proxy_session(meta, session_key=base)
+            self.logger.info(f"Queuing category ({max_pg} pages): {url}")
+            # Phase 1: Playwright for listing pages (React-rendered)
             yield scrapy.Request(
                 url,
                 callback=self.parse_listing_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
-                meta=meta,
+                meta={
+                    "playwright": True,
+                    "playwright_page_init_callback": self._apply_stealth,
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_load_state", "networkidle"),
+                    ],
+                    "category_slug": self._resolve_category_from_url(url),
+                },
                 dont_filter=True,
             )
+
+        self.logger.info(f"Queued {len(url_pairs)} categories (Playwright)")
 
     def _load_urls(self) -> list[tuple[str, int]]:
         """Resolve the list of (url, max_pages) pairs to crawl.
 
         Priority: CLI ``category_urls`` > ScraperJob > seed categories.
         The ``--max-pages`` CLI arg overrides per-category limits globally.
+        Quick mode: when --max-pages <= 3, only use top N categories.
         """
         fallback = self._max_pages_override or MAX_LISTING_PAGES
 
@@ -467,15 +504,70 @@ class FlipkartSpider(BaseWhydudSpider):
 
         # 3. Fallback to seed categories
         if self._max_pages_override is not None:
+            # Quick mode: take top N categories only for small runs
+            if self._max_pages_override <= 3:
+                self.logger.info(
+                    f"Quick mode: using first {self.QUICK_MODE_CATEGORIES} categories "
+                    f"(max_pages={self._max_pages_override})"
+                )
+                return [
+                    (url, self._max_pages_override)
+                    for url, _ in SEED_CATEGORY_URLS[:self.QUICK_MODE_CATEGORIES]
+                ]
+            # CLI --max-pages overrides every per-category limit
             return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
         return list(SEED_CATEGORY_URLS)
 
     # ------------------------------------------------------------------
-    # Listing page (search results / category pages)
+    # Phase 1: Listing page (search results / category pages)
     # ------------------------------------------------------------------
 
     def parse_listing_page(self, response):
-        """Extract product links from a Flipkart search/category page."""
+        """Extract product links from a Flipkart search/category page.
+
+        Includes block detection for 403, 429, and Access Denied responses.
+        """
+        self._listing_pages_scraped += 1
+        block_retries = response.meta.get("block_retries", 0)
+
+        # Block detection: 403/429 status codes
+        if response.status in (403, 429):
+            # Check if it's a real block vs Flipkart's normal 403-with-content
+            if not response.css('a[href*="/p/itm"]'):
+                self._blocked_count += 1
+
+                # With rotating proxies, retry once (next request gets new IP)
+                max_retries = 1 if self._is_rotating else 0
+                if block_retries < max_retries:
+                    self.logger.info(
+                        f"Flipkart blocked listing HTTP {response.status} — "
+                        f"retry {block_retries + 1}/{max_retries}: {response.url}"
+                    )
+                    yield scrapy.Request(
+                        response.url,
+                        callback=self.parse_listing_page,
+                        errback=self.handle_error,
+                        headers=self._make_headers(),
+                        meta={
+                            "playwright": True,
+                            "playwright_page_init_callback": self._apply_stealth,
+                            "playwright_page_methods": [
+                                PageMethod("wait_for_load_state", "networkidle"),
+                            ],
+                            "category_slug": response.meta.get("category_slug"),
+                            "block_retries": block_retries + 1,
+                        },
+                        dont_filter=True,
+                        priority=-1,
+                    )
+                    return
+
+                self.logger.warning(
+                    f"Flipkart blocked listing page: HTTP {response.status} on {response.url}"
+                )
+                self.items_failed += 1
+                return
+
         # Flipkart product links always contain /p/itm
         product_links = response.css('a[href*="/p/itm"]::attr(href)').getall()
         # Deduplicate while preserving order
@@ -490,32 +582,54 @@ class FlipkartSpider(BaseWhydudSpider):
                 unique_links.append(full)
 
         if not unique_links:
+            # Check for Access Denied block
+            if "Access Denied" in response.text[:1000]:
+                self._blocked_count += 1
+
+                # With rotating proxies, retry once
+                max_retries = 1 if self._is_rotating else 0
+                if block_retries < max_retries:
+                    self.logger.info(
+                        f"Flipkart Access Denied — retry {block_retries + 1}/{max_retries}: {response.url}"
+                    )
+                    yield scrapy.Request(
+                        response.url,
+                        callback=self.parse_listing_page,
+                        errback=self.handle_error,
+                        headers=self._make_headers(),
+                        meta={
+                            "playwright": True,
+                            "playwright_page_init_callback": self._apply_stealth,
+                            "playwright_page_methods": [
+                                PageMethod("wait_for_load_state", "networkidle"),
+                            ],
+                            "category_slug": response.meta.get("category_slug"),
+                            "block_retries": block_retries + 1,
+                        },
+                        dont_filter=True,
+                        priority=-1,
+                    )
+                    return
+
+                self.logger.warning(f"Flipkart Access Denied on {response.url}")
+                self.items_failed += 1
+                return
             self.logger.warning(f"No product links found on {response.url}")
             return
 
         self.logger.info(f"Found {len(unique_links)} products on {response.url}")
 
-        # Resolve category slug from the seed URL keyword
         category_slug = response.meta.get("category_slug") or self._resolve_category_from_url(response.url)
-        session_key = response.meta.get("proxy_session")
 
         for link in unique_links:
-            detail_meta = {
-                "playwright": True,
-                "playwright_page_methods": [
-                    PageMethod("wait_for_load_state", "domcontentloaded"),
-                ],
-                "category_slug": category_slug,
-            }
-            if session_key:
-                self._with_proxy_session(detail_meta, session_key)
+            # Phase 2: Try plain HTTP first for product pages
+            # No proxy_session — let middleware round-robin per request
             yield scrapy.Request(
                 link,
                 callback=self.parse_product_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
-                # Flipkart returns 403 on plain HTTP — Playwright needed.
-                meta=detail_meta,
+                meta={"category_slug": category_slug},
             )
 
         # Pagination — follow "Next" link up to per-category max_pages
@@ -526,21 +640,20 @@ class FlipkartSpider(BaseWhydudSpider):
             next_link = self._find_next_page(response)
             if next_link:
                 self._pages_followed[base_url] = pages_so_far + 1
-                page_meta = {
-                    "playwright": True,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                    ],
-                    "category_slug": category_slug,
-                }
-                if session_key:
-                    self._with_proxy_session(page_meta, session_key)
+                # Stay in Playwright for next listing page
                 yield scrapy.Request(
                     response.urljoin(next_link),
                     callback=self.parse_listing_page,
                     errback=self.handle_error,
                     headers=self._make_headers(),
-                    meta=page_meta,
+                    meta={
+                        "playwright": True,
+                        "playwright_page_init_callback": self._apply_stealth,
+                        "playwright_page_methods": [
+                            PageMethod("wait_for_load_state", "networkidle"),
+                        ],
+                        "category_slug": category_slug,
+                    },
                 )
 
     @staticmethod
@@ -558,24 +671,111 @@ class FlipkartSpider(BaseWhydudSpider):
         return nav_link
 
     # ------------------------------------------------------------------
-    # Product detail page
+    # Phase 2: Product detail page (plain HTTP first → Playwright fallback)
     # ------------------------------------------------------------------
 
     def parse_product_page(self, response):
-        """Extract all product data from a Flipkart product page.
+        """Extract product data — tries plain HTTP + JSON-LD first.
 
-        Primary source: JSON-LD structured data.
-        Fallback: CSS selectors and XPath.
+        If JSON-LD has title + price → sufficient, no Playwright needed.
+        If incomplete and this was plain HTTP → retry with Playwright.
+        If this was already Playwright → extract whatever we can.
         """
+        self._product_pages_scraped += 1
+
+        # Check middleware's CAPTCHA flag first (rotating proxy already detected it)
+        if response.meta.get("_rotating_proxy_captcha"):
+            self._captcha_count = getattr(self, "_captcha_count", 0) + 1
+            self.items_failed += 1
+            self.logger.debug(
+                f"CAPTCHA flagged by proxy middleware — skipping {response.url[:60]}"
+            )
+            return
+
+        is_playwright = response.meta.get("playwright", False)
+
+        if is_playwright:
+            self._product_pages_playwright += 1
+        else:
+            self._product_pages_plain_http += 1
+
+        # Block detection
+        if response.status in (403, 429) and not is_playwright:
+            # Plain HTTP got blocked — promote to Playwright
+            self.logger.info(f"HTTP {response.status} on product page — promoting to Playwright: {response.url}")
+            yield scrapy.Request(
+                response.url,
+                callback=self.parse_product_page,
+                errback=self.handle_error,
+                headers=self._make_headers(),
+                meta={
+                    "playwright": True,
+                    "playwright_page_init_callback": self._apply_stealth,
+                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"},
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_load_state", "domcontentloaded"),
+                    ],
+                    "category_slug": response.meta.get("category_slug"),
+                },
+                dont_filter=True,
+            )
+            return
+
         fpid = self._extract_fpid(response)
         if not fpid:
             self.logger.warning(f"Could not extract FPID from {response.url}")
             self.items_failed += 1
             return
 
-        # Parse JSON-LD once — used by many extractors.
+        # Parse JSON-LD once — used by many extractors
         ld_json = self._parse_json_ld(response)
 
+        # Check if we have enough data from plain HTML + JSON-LD
+        has_title = bool(
+            (ld_json and ld_json.get("name"))
+            or response.css("span.VU-ZEz::text").get()
+            or response.css("h1 span::text").get()
+        )
+        has_price = bool(
+            (ld_json and ld_json.get("offers"))
+            or response.css("div._30jeq3::text").get()
+            or response.css("div.Nx9bqj::text").get()
+        )
+
+        if has_title and has_price:
+            # Success — extract from HTML + JSON-LD
+            yield from self._build_item(response, fpid, ld_json)
+            return
+
+        # Insufficient data — if plain HTTP, retry with Playwright
+        if not is_playwright:
+            self.logger.info(
+                f"Incomplete data for FPID {fpid} (title={has_title}, price={has_price}) "
+                f"— promoting to Playwright"
+            )
+            yield scrapy.Request(
+                response.url,
+                callback=self.parse_product_page,
+                errback=self.handle_error,
+                headers=self._make_headers(),
+                meta={
+                    "playwright": True,
+                    "playwright_page_init_callback": self._apply_stealth,
+                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"},
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_load_state", "domcontentloaded"),
+                    ],
+                    "category_slug": response.meta.get("category_slug"),
+                },
+                dont_filter=True,
+            )
+            return
+
+        # Already Playwright — extract whatever we can
+        yield from self._build_item(response, fpid, ld_json)
+
+    def _build_item(self, response, fpid: str, ld_json: dict | None):
+        """Build and yield a ProductItem from HTML + JSON-LD data."""
         title = self._extract_title(response, ld_json)
         if not title:
             self.logger.warning(f"No title found for FPID {fpid}")
@@ -622,6 +822,7 @@ class FlipkartSpider(BaseWhydudSpider):
         item["dimensions"] = self._extract_from_specs(specs, ["Dimensions", "Product Dimensions", "dimensions"])
 
         self.items_scraped += 1
+        self._products_extracted += 1
         yield item
 
     # ------------------------------------------------------------------
@@ -657,13 +858,22 @@ class FlipkartSpider(BaseWhydudSpider):
 
     @staticmethod
     def _extract_fpid(response) -> str | None:
-        """Extract Flipkart Product ID (FPID) from URL."""
+        """Extract Flipkart Product ID (FPID) from URL.
+
+        Handles URL patterns:
+          /product-name/p/itmXXXX             (standard)
+          /product-name/p/itmXXXX?pid=XXXX    (with tracking)
+          /dl/product-name/p/itmXXXX          (deep link)
+        """
         match = FPID_RE.search(response.url)
         if match:
             return match.group(1)
         # Fallback: look for pid parameter in URL query
-        pid = response.url.split("pid=")[-1].split("&")[0] if "pid=" in response.url else None
-        return pid if pid else None
+        if "pid=" in response.url:
+            pid = response.url.split("pid=")[-1].split("&")[0]
+            if pid:
+                return pid
+        return None
 
     @staticmethod
     def _extract_title(response, ld_json: dict | None) -> str | None:
@@ -895,7 +1105,6 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _extract_seller_rating(response) -> Decimal | None:
         """Extract seller rating (shown next to seller name)."""
-        # Seller rating is usually a small number like "4.5" near the seller name
         for sel in [
             "#sellerName div._3LWZlK::text",
             'div._3enH3G div._3LWZlK::text',

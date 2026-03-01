@@ -7,6 +7,7 @@ Pipeline order (configured in scrapy_settings.py):
   400 — ProductPipeline             → match/create Product + Listing + PriceSnapshot
   450 — ReviewPersistencePipeline   → persist ReviewItems to Review model
   500 — MeilisearchIndexPipeline    → batch-sync products to Meilisearch
+  600 — SpiderStatsUpdatePipeline   → update ScraperJob row with item counts
 """
 import hashlib
 import logging
@@ -39,7 +40,7 @@ class ValidationPipeline:
             return item  # ReviewItems validated by ReviewValidationPipeline
         missing = [f for f in REQUIRED_FIELDS if not item.get(f)]
         if missing:
-            spider.items_failed += 1
+            spider.items_failed = getattr(spider, "items_failed", 0) + 1
             raise DropItem(f"Missing required fields: {missing}")
         return item
 
@@ -170,7 +171,7 @@ class ProductPipeline:
             marketplace = Marketplace.objects.get(slug=item["marketplace_slug"])
         except Marketplace.DoesNotExist:
             logger.error(f"Marketplace '{item['marketplace_slug']}' not found — skipping item")
-            spider.items_failed += 1
+            spider.items_failed = getattr(spider, "items_failed", 0) + 1
             raise DropItem(f"Unknown marketplace: {item['marketplace_slug']}")
 
         # ------- 2. Seller ------------------------------------------------
@@ -227,26 +228,36 @@ class ProductPipeline:
         # auto-increment id column (managed=False). ORM .create() fails with
         # "column price_snapshots.id does not exist".
         # Skip if price is None — hypertable has NOT NULL constraint on price.
+        # Wrapped in try/except: a missing snapshot is recoverable, a dropped
+        # product item is not.
         if listing.current_price is not None:
-            from django.db import connection
+            try:
+                from django.db import connection
 
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO price_snapshots
-                        (time, listing_id, product_id, marketplace_id, price, mrp, in_stock, seller_name)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    [
-                        now,
-                        listing.id,
-                        product.id,
-                        marketplace.id,
-                        listing.current_price,
-                        listing.mrp,
-                        listing.in_stock,
-                        item.get("seller_name") or "",
-                    ],
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO price_snapshots
+                            (time, listing_id, product_id, marketplace_id, price, mrp, in_stock, seller_name)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        [
+                            now,
+                            listing.id,
+                            product.id,
+                            marketplace.id,
+                            listing.current_price,
+                            listing.mrp,
+                            listing.in_stock,
+                            item.get("seller_name") or "",
+                        ],
+                    )
+            except Exception:
+                logger.warning(
+                    "Failed to insert PriceSnapshot for listing %s — "
+                    "product saved, snapshot skipped",
+                    listing.id,
+                    exc_info=True,
                 )
 
         # ------- 6. Recalculate canonical product aggregates (Step 4) -----
@@ -470,11 +481,15 @@ class ReviewPersistencePipeline:
         ).exists():
             raise DropItem(f"Duplicate review: {review_id}")
 
-        # Parse date
+        # Parse date — ensure timezone-aware (Django USE_TZ=True)
         review_date = None
         if item.get("review_date"):
             try:
                 review_date = dateutil.parser.parse(item["review_date"])
+                if review_date.tzinfo is None:
+                    review_date = timezone.make_aware(
+                        review_date, timezone.get_default_timezone()
+                    )
             except (ValueError, TypeError):
                 review_date = timezone.now()
         else:
@@ -526,9 +541,8 @@ class MeilisearchIndexPipeline:
 
     def close_spider(self, spider):
         """Sync all products from this spider run to Meilisearch."""
-        product_ids = list(
-            getattr(spider, ProductPipeline._product_ids_attr, set())
-        )
+        _attr = getattr(ProductPipeline, "_product_ids_attr", "_synced_product_ids")
+        product_ids = list(getattr(spider, _attr, set()))
         if not product_ids:
             return
 
@@ -542,3 +556,43 @@ class MeilisearchIndexPipeline:
             sync_products_to_meilisearch.delay(product_ids=product_ids)
         except Exception:
             logger.exception("Failed to queue Meilisearch sync for %d products", len(product_ids))
+
+
+# ===================================================================
+# 600 — ScraperJob stats (real-time item counts)
+# ===================================================================
+
+class SpiderStatsUpdatePipeline:
+    """Update ScraperJob row with real-time item counts.
+
+    Writes every 50 items (not every item) to avoid excessive DB writes.
+    Final update happens in close_spider.
+    """
+
+    def __init__(self):
+        self._count = 0
+        self._last_update = 0
+
+    def process_item(self, item, spider):
+        self._count += 1
+        if self._count - self._last_update >= 50:
+            self._update_job(spider)
+            self._last_update = self._count
+        return item
+
+    def close_spider(self, spider):
+        self._update_job(spider)
+
+    def _update_job(self, spider):
+        job_id = getattr(spider, "job_id", None)
+        if not job_id:
+            return
+        try:
+            from apps.scraping.models import ScraperJob
+
+            ScraperJob.objects.filter(id=job_id).update(
+                items_scraped=getattr(spider, "items_scraped", 0),
+                items_failed=getattr(spider, "items_failed", 0),
+            )
+        except Exception:
+            pass  # Best effort

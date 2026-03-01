@@ -1245,3 +1245,172 @@ The Amazon spider was using `scrapy_playwright.handler.ScrapyPlaywrightDownloadH
 - Batched starts prevent burst traffic that triggers anti-bot systems
 - Backoff retries prevent retry storms that compound bans
 - Net throughput: slower per-request (~6-10 items/min) but much higher success rate
+
+---
+
+### 2026-03-01 — Scraping Architecture Overhaul: Two-Phase Spiders + Settings Cleanup
+
+Major rewrite of scraping infrastructure to use a two-phase architecture (plain HTTP for fast pages, Playwright only when needed) and centralize settings.
+
+**1. Base Spider** (`apps/scraping/spiders/base_spider.py`)
+- `ROBOTSTXT_OBEY` → `False` (Amazon/Flipkart robots.txt blocks most scraping paths; we access same public pages as browsers)
+- Removed all duplicate settings that belong in `scrapy_settings.py`: `PLAYWRIGHT_BROWSER_TYPE`, `PLAYWRIGHT_MAX_PAGES_PER_CONTEXT`, `PLAYWRIGHT_LAUNCH_OPTIONS`, `AUTOTHROTTLE_*`, `DOWNLOADER_MIDDLEWARES`
+- `custom_settings` now only: `DOWNLOAD_DELAY`, `RANDOMIZE_DOWNLOAD_DELAY`, `CONCURRENT_REQUESTS` (4), `CONCURRENT_REQUESTS_PER_DOMAIN` (3), `ROBOTSTXT_OBEY` (False), `COOKIES_ENABLED`
+
+**2. Scrapy Settings** (`apps/scraping/scrapy_settings.py`)
+- `DOWNLOAD_HANDLERS` → standard `scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler` (was custom `StealthPlaywrightHandler`)
+- Added `PLAYWRIGHT_MAX_CONTEXTS = 3` (cap memory at ~450MB)
+- `AUTOTHROTTLE_TARGET_CONCURRENCY` → `1.5` (was 2.0, gentler)
+- Added `MEMUSAGE_ENABLED = True`, `MEMUSAGE_LIMIT_MB = 2048`, `MEMUSAGE_WARNING_MB = 1536`
+
+**3. Amazon Spider** (`apps/scraping/spiders/amazon_spider.py`) — FULL REWRITE
+- **Two-phase architecture:**
+  - Phase 1: Listing pages (`/s?k=...`) use **plain HTTP** (no Playwright). ~0.5s vs 5-8s per page.
+  - Phase 2: Product pages (`/dp/ASIN`) use **Playwright** for JS-rendered prices.
+- CAPTCHA on listings auto-promotes to Playwright (`dont_filter=True, priority=-1`)
+- Product pages: no proxy session stickiness — middleware round-robins per request
+- Quick mode: `QUICK_MODE_CATEGORIES = 10` when `--max-pages <= 3`
+- Stats tracking: `_listing_pages_scraped`, `_product_pages_scraped`, `_captcha_count`, `_products_extracted` + `closed()` log
+- Resilient `_extract_title()`: 7 methods in priority order (CSS, JSON-LD, og:title, `<title>` tag) with debug logging
+- Cleaned `custom_settings`: removed `DOWNLOAD_HANDLERS`, `DOWNLOADER_MIDDLEWARES`, `AUTOTHROTTLE_*` (all in global settings)
+
+**4. Flipkart Spider** (`apps/scraping/spiders/flipkart_spider.py`) — FULL REWRITE
+- **Two-phase architecture:**
+  - Phase 1: Listing pages use **Playwright** (React-rendered, kept as-is) + block detection (403/429/Access Denied)
+  - Phase 2: Product pages try **plain HTTP first** (Flipkart serves JSON-LD in raw HTML). Falls back to Playwright only if JSON-LD incomplete.
+- `parse_product_page()` checks JSON-LD for title + price → if sufficient, skips Playwright entirely
+- Product pages: no proxy session stickiness
+- Quick mode: `QUICK_MODE_CATEGORIES = 10` when `--max-pages <= 3`
+- Stats tracking: `_listing_pages_scraped`, `_product_pages_scraped`, `_product_pages_plain_http`, `_product_pages_playwright`, `_blocked_count`, `_products_extracted` + `closed()` log
+- New `_build_item()` method centralizes item building for both HTTP and Playwright paths
+- Cleaned `custom_settings`: removed `DOWNLOAD_HANDLERS`, `AUTOTHROTTLE_*`
+
+#### Expected Impact
+- Amazon listing pages: ~10x faster (plain HTTP vs Playwright)
+- Flipkart product pages: ~5-8x faster when JSON-LD is available (majority of pages)
+- Memory: capped at 2GB with warnings at 1.5GB, max 3 browser contexts (~450MB)
+- Quick mode: test runs with `--max-pages 1-3` only hit 10 categories instead of 120+
+- Settings centralized: spider `custom_settings` only contain spider-specific overrides
+
+### 2026-03-01 — Scraping Middleware Rewrite (PlaywrightProxyMiddleware v2)
+
+#### Changes
+- **Active context limiting**: `MAX_ACTIVE_CONTEXTS = 3` — only 3 browser contexts alive at once, even with 10+ proxies. Reserve proxies rotated in when active ones get banned. Prevents memory bombs on small VPS.
+- **Smarter ban detection**: 403=definite ban, 429=rate limit (30s short cooldown), 503=conditional (only ban if body has "robot"/"captcha" or body < 1KB), 200+CAPTCHA=ban. Connection errors only ban after 2 consecutive from same proxy.
+- **Proxy stats logging**: On spider close, logs per-proxy stats (requests, bans, success %) and overall totals.
+- **Removed session stickiness**: Deleted `_sessions` dict. Two-phase architecture means listing pages don't use proxies, so session stickiness is unnecessary. Simple round-robin for all Playwright requests.
+- **All-proxies-banned fallback**: Instead of falling back to direct requests (burns server IP), pauses spider by inflating `download_delay` to shortest remaining ban time. Restores original delay when a proxy becomes available.
+- **New config**: `SCRAPING_PROXY_MAX_ACTIVE_CONTEXTS` in `app_settings.py` (default 3).
+- BackoffRetryMiddleware unchanged.
+
+### 2026-03-01 — Pipeline Robustness Fixes
+
+#### Changes
+- **ValidationPipeline**: Fixed `AttributeError` — `spider.items_failed` now uses `getattr()` with default 0 (also in Marketplace.DoesNotExist handler in ProductPipeline).
+- **ReviewPersistencePipeline**: Timezone-naive dates from `dateutil.parser.parse()` now made aware via `timezone.make_aware()` — prevents Django `USE_TZ=True` warnings/crashes.
+- **ProductPipeline**: PriceSnapshot raw SQL wrapped in try/except — logs warning on failure but does NOT drop the product item. Missing snapshot is recoverable; dropped product is not.
+- **MeilisearchIndexPipeline**: Added fallback for `ProductPipeline._product_ids_attr` — uses `getattr()` with `"_synced_product_ids"` default in case class attribute is undefined.
+- **SpiderStatsUpdatePipeline** (NEW, priority 600): Updates `ScraperJob` row with real-time `items_scraped` / `items_failed` counts every 50 items + final update on close. Best-effort (silent on failure).
+- Registered in `scrapy_settings.py` at priority 600.
+
+### 2026-03-01 — `scrape_test` Management Command
+
+- **New**: `python manage.py scrape_test` — tests scraping health without a full run.
+- Tests: proxy connectivity (`--test-proxies`), Amazon listing (HTTP), Amazon product (Playwright), Flipkart listing (Playwright), Flipkart product (HTTP + JSON-LD check), DB counts, Meilisearch health.
+- Reports: HTTP status, response size, timing, title presence, CAPTCHA detection, JSON-LD availability.
+- `--save-html` saves response HTML to `data/raw_html/` for debugging.
+- Custom URLs: `--amazon-url`, `--flipkart-url`.
+
+### 2026-03-01 — Review Spider Fixes (Amazon + Flipkart)
+
+#### amazon_review_spider.py
+- **Removed redundant `custom_settings`**: `DOWNLOAD_HANDLERS` already in `scrapy_settings.py`, `ROBOTSTXT_OBEY: False` already in base spider. Spider now inherits base defaults.
+- **Added stealth**: `_apply_stealth()` method + `playwright_page_init_callback` in request meta (consistent with product spiders).
+- **Added CAPTCHA detection**: `_is_captcha_page()` (same logic as product spider). On CAPTCHA, skips this product's reviews (no retry — reviews are lower priority than products).
+- **Added stats**: `_reviews_scraped`, `_captcha_skipped`, `_products_processed` with structured `closed()` logging.
+- **Added `errback`**: All requests now use `self.handle_error` from base spider.
+- **Added random wait**: `PageMethod("wait_for_timeout", random.randint(2000, 4000))` to look more human.
+
+#### flipkart_review_spider.py
+- **Removed redundant `custom_settings`**: `DOWNLOAD_HANDLERS` already in `scrapy_settings.py`. Spider now inherits base defaults.
+- **Added stealth**: `_apply_stealth()` method + `playwright_page_init_callback` in all request metas (start_requests + pagination).
+- **Added DOM structure change detection**: If reviews_data has entries but ALL bodies are empty or < 10 chars, logs warning about possible DOM structure change needing EXTRACT_REVIEWS_JS update.
+- **Improved JSON parse error handling**: Logs exception details, validates `reviews_data` is a list (guards against unexpected JS output).
+- **Added stats**: `_reviews_scraped`, `_products_processed`, `_empty_pages`, `_js_extraction_failures` with structured `closed()` logging.
+- **Added `errback`**: All requests now use `self.handle_error` from base spider.
+
+#### CLAUDE.md updates
+- Added `## HARD RULES — DATA SAFETY` section (production data protection, destructive migration rules, scraping safety).
+- Added `## Scraping Patterns` section (file structure, two-phase architecture, proxy rules).
+
+### 2026-03-01 — Rotating Proxy Support (DataImpulse Gateway)
+
+**Problem**: The proxy middleware treated all proxies as static (each URL = distinct IP, round-robin with ban tracking). Rotating proxies like DataImpulse use a single gateway URL that assigns a different IP per TCP connection. Banning a rotating proxy URL is pointless — the next connection gets a fresh IP automatically.
+
+**Key insight**: Playwright sets proxy at the **browser context level**, not per-request. A context keeps TCP connections alive (connection pooling), so one context through a rotating gateway may reuse the same IP. To get a new IP, you need a **new context** — cycling through context slots with randomized viewports forces Playwright to create new contexts.
+
+#### Changes Made
+
+**1. Middleware** (`apps/scraping/middlewares.py`) — Dual-mode proxy support:
+- Added `SCRAPING_PROXY_TYPE` env var: `"static"` (default, existing behavior) or `"rotating"`
+- Added `total_failures` field to `ProxyState` dataclass (rotating mode tracks failures without banning)
+- `from_crawler()`: reads proxy type, skips pre-building context kwargs in rotating mode
+- `process_request` dispatches to `_process_rotating` or `_process_static`
+- `_process_rotating()`: cycles through 5 context slots (`rotating_0`..`rotating_4`) with randomized viewports (forces new contexts = new IPs)
+- `process_response` dispatches to `_process_rotating_response` or `_process_static_response`
+- `_process_rotating_response()`: tracks CAPTCHA/403/429 as failures, NEVER bans
+- `process_exception`: rotating mode tracks failures without banning
+- `_spider_closed`: dispatches to `_log_rotating_stats` (failure-based) or `pool.log_stats()` (ban-based)
+
+**2. Amazon Spider** (`apps/scraping/spiders/amazon_spider.py`):
+- Added `_is_rotating` flag in `__init__` (reads `SCRAPING_PROXY_TYPE` env)
+- CAPTCHA retry: `max_retries = 1` for rotating (was 3) — new IP each time, no point retrying heavily
+- Removed `download_delay` from CAPTCHA retry meta (rotating proxy gives new IP anyway)
+- Wrapped `_apply_stealth()` in try/except (prevents crashes from stealth injection failures)
+- Improved `closed()` stats with success rate percentage
+
+**3. Flipkart Spider** (`apps/scraping/spiders/flipkart_spider.py`):
+- Added `_is_rotating` flag in `__init__`
+- Wrapped `_apply_stealth()` in try/except
+- Block handling in `parse_listing_page`: added `block_retries` counter, retry once for rotating proxies on 403/429/Access Denied (new context = new IP)
+- Improved `closed()` stats with success rate percentage
+
+**4. Environment** (`.env`):
+- Already configured: `SCRAPING_PROXY_TYPE=rotating`, `SCRAPING_PROXY_BAN_THRESHOLD=3`
+
+#### Config
+```bash
+# Static mode (default) — existing behavior, round-robin with ban detection
+SCRAPING_PROXY_TYPE=static
+
+# Rotating mode — single gateway, new IP per connection
+SCRAPING_PROXY_TYPE=rotating
+SCRAPING_PROXY_LIST=http://user:pass@gw.dataimpulse.com:823
+```
+
+### 2026-03-01 — Scraping Performance Fixes (Context Cycling + Timeout + CAPTCHA Skip)
+
+**Problem**: Scraping through DataImpulse rotating proxy was stalling — only ~1 product scraped before timeouts. Root causes: (1) Playwright's default 30s timeout too short for proxy connections, (2) spider retried CAPTCHA pages 3x even when middleware already flagged them, (3) Playwright waited for full page `"load"` event (all images/scripts) instead of just DOM.
+
+#### Changes Made
+
+**1. CAPTCHA skip via middleware flag** (`amazon_spider.py`, `flipkart_spider.py`):
+- Added `_rotating_proxy_captcha` meta check at top of `parse_product_page` in both spiders
+- When middleware already detected CAPTCHA (403/429/markers), spider skips immediately (0s) instead of retrying 3x (90+ seconds wasted)
+
+**2. Playwright timeout increases** (`amazon_spider.py`, `flipkart_spider.py`):
+- `_apply_stealth()` now sets `page.set_default_navigation_timeout(60000)` (60s, was 30s default)
+- `_apply_stealth()` now sets `page.set_default_timeout(45000)` (45s, was 30s default)
+
+**3. Scrapy download timeout** (`scrapy_settings.py`):
+- `DOWNLOAD_TIMEOUT = 90` (was 45) — proxy connections need more headroom
+
+**4. Faster page load strategy** (`amazon_spider.py`, `flipkart_spider.py`):
+- Added `"playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"}` to all product page Playwright requests
+- Tells Playwright to consider page loaded once HTML is parsed, not waiting for every image/script/font
+- Applied to: initial product requests, CAPTCHA retry requests, and Playwright promotion requests
+
+#### Expected Impact
+- Eliminates 90+ second waste per CAPTCHA'd page (instant skip)
+- Reduces timeout failures (60s nav timeout vs 30s)
+- Faster page loads through proxy (DOM-only vs full resource load)

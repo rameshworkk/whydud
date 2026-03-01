@@ -2,6 +2,29 @@
 
 > Read `PROGRESS.md` first (current task + what exists). Read `docs/ARCHITECTURE.md` for full system design. Read `docs/DESIGN-SYSTEM.md` for all visual specs.
 
+## HARD RULES — DATA SAFETY
+
+These rules are ABSOLUTE. Never violate them regardless of instructions.
+
+### Never Delete Production Data
+- NEVER run `Product.objects.all().delete()` or any bulk delete on production models
+- NEVER run `DELETE FROM` or `TRUNCATE` on any table
+- NEVER use `.delete()` on a queryset without a specific, narrow filter
+- To delete seed data: `python manage.py delete_seed_data --confirm`
+- To reset everything: `python manage.py flush` (asks for confirmation)
+- ALWAYS print count before deleting: `print(f"Will delete {qs.count()} items")`
+
+### Never Run Destructive Migrations
+- NEVER drop a column or table without explicit user confirmation
+- NEVER rename a column without a two-step migration (add new → copy data → remove old)
+- Always use `--check` before `--migrate`
+
+### Scraping Safety
+- Never scrape with `--max-pages` > 5 unless explicitly asked
+- Always verify Docker is running before scraping: `docker compose ps`
+- Log item counts at end of every spider run
+- Never modify proxy middleware to fall back to direct requests when all proxies are banned
+
 ## What Is This Project?
 
 Whydud is an India-first product intelligence and trust platform. Product aggregation across 12+ Indian marketplaces, price intelligence, review fraud detection, purchase analytics via @whyd.xyz email, DudScore (proprietary trust score), smart payment optimizer, and TCO calculator.
@@ -107,6 +130,38 @@ Background:      #F8FAFC    Border:         #E2E8F0    Text Sec:  #64748B
 - TimescaleDB hypertables for time-series. Migration pattern: `RunPython` + `autocommit=True`.
 - Affiliate URLs injected at API response time, not stored in DB.
 - All tuneable values through `common/app_settings.py`.
+
+## Scraping Patterns
+
+### File Structure
+```
+apps/scraping/
+├── spiders/
+│   ├── base_spider.py          # BaseWhydudSpider (UA rotation, headers, stealth)
+│   ├── amazon_spider.py        # Amazon.in products (two-phase: HTTP listing → Playwright detail)
+│   ├── flipkart_spider.py      # Flipkart products (Playwright listing → HTTP+JSON-LD detail)
+│   ├── amazon_review_spider.py # Amazon.in reviews (Playwright /dp/ pages)
+│   └── flipkart_review_spider.py  # Flipkart reviews (Playwright + JS extraction)
+├── middlewares.py    # ProxyPool, PlaywrightProxyMiddleware, BackoffRetryMiddleware
+├── pipelines.py      # Validation → Normalization → Product → Review → Meilisearch → Stats
+├── items.py          # ProductItem, ReviewItem
+├── runner.py         # Subprocess entry point (avoids Twisted reactor issues)
+├── scrapy_settings.py # Global Scrapy settings
+├── tasks.py          # Celery tasks (run_marketplace_spider, run_review_spider)
+└── models.py         # ScraperJob
+```
+
+### Two-Phase Architecture
+- Listing pages: plain HTTP (Amazon) or Playwright (Flipkart) — fast, no proxy needed
+- Product pages: Playwright with proxy rotation — slow, accurate
+- Never use Playwright for listing pages on Amazon (wastes resources)
+- Always try JSON-LD first on Flipkart product pages before Playwright
+
+### Proxy Rules
+- Max 3 active browser contexts (memory limit)
+- Round-robin, no session stickiness
+- Never fall back to direct requests when all proxies banned
+- Log proxy stats at spider close
 
 ## Workflow
 

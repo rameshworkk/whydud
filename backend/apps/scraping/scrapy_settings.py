@@ -19,13 +19,18 @@ ITEM_PIPELINES = {
     "apps.scraping.pipelines.ProductPipeline": 400,
     "apps.scraping.pipelines.ReviewPersistencePipeline": 450,
     "apps.scraping.pipelines.MeilisearchIndexPipeline": 500,
+    "apps.scraping.pipelines.SpiderStatsUpdatePipeline": 600,
 }
 
 # ---------------------------------------------------------------------------
 # Download & request settings
 # ---------------------------------------------------------------------------
 LOG_LEVEL = "INFO"
-DOWNLOAD_TIMEOUT = 45          # generous timeout for Playwright pages
+MEMUSAGE_ENABLED = True
+MEMUSAGE_LIMIT_MB = 2048       # kill spider if using > 2GB RAM
+MEMUSAGE_WARNING_MB = 1536     # warn at 1.5GB
+
+DOWNLOAD_TIMEOUT = 90          # proxy connections need more time (DataImpulse adds latency)
 DOWNLOAD_MAXSIZE = 10485760    # 10MB max response
 RETRY_TIMES = 2
 RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
@@ -45,15 +50,15 @@ DOWNLOADER_MIDDLEWARES = {
 AUTOTHROTTLE_ENABLED = True
 AUTOTHROTTLE_START_DELAY = 3       # start at 3s, scales up dynamically
 AUTOTHROTTLE_MAX_DELAY = 30        # back off up to 30s when server is stressed
-AUTOTHROTTLE_TARGET_CONCURRENCY = 2.0   # aim for 2 concurrent requests
+AUTOTHROTTLE_TARGET_CONCURRENCY = 1.5   # aim for 1.5 concurrent requests — be gentler
 
 # ---------------------------------------------------------------------------
 # Playwright (for JS-rendered pages)
 # ---------------------------------------------------------------------------
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 DOWNLOAD_HANDLERS = {
-    "https": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
-    "http": "apps.scraping.playwright_handler.StealthPlaywrightHandler",
+    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
 }
 PLAYWRIGHT_BROWSER_TYPE = "chromium"
 PLAYWRIGHT_LAUNCH_OPTIONS = {
@@ -69,6 +74,7 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
     ],
 }
 PLAYWRIGHT_MAX_PAGES_PER_CONTEXT = 4
+PLAYWRIGHT_MAX_CONTEXTS = 3            # limit memory — each context ≈ 150MB RAM
 
 # Randomize viewport per spider run — reduces fingerprinting consistency.
 _VIEWPORT_CHOICES = [

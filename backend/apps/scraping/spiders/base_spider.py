@@ -102,35 +102,9 @@ class BaseWhydudSpider(scrapy.Spider):
         "DOWNLOAD_DELAY": 3,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
         "CONCURRENT_REQUESTS": 4,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
-        "ROBOTSTXT_OBEY": True,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 3,
+        "ROBOTSTXT_OBEY": False,
         "COOKIES_ENABLED": True,
-        "PLAYWRIGHT_BROWSER_TYPE": "chromium",
-        "PLAYWRIGHT_MAX_PAGES_PER_CONTEXT": 4,
-        "PLAYWRIGHT_LAUNCH_OPTIONS": {
-            "args": [
-                "--disable-blink-features=AutomationControlled",
-                "--disable-dev-shm-usage",
-                "--no-sandbox",
-                "--disable-infobars",
-                "--disable-extensions",
-                "--disable-gpu",
-                "--lang=en-IN",
-                "--window-size=1366,768",
-            ],
-        },
-        # AutoThrottle — will ramp UP delay if server is stressed
-        "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 3,
-        "AUTOTHROTTLE_MAX_DELAY": 30,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0,
-        # Disable default UA middleware (we rotate manually) + proxy rotation.
-        "DOWNLOADER_MIDDLEWARES": {
-            "scrapy.downloadermiddlewares.useragent.UserAgentMiddleware": None,
-            "scrapy.downloadermiddlewares.retry.RetryMiddleware": None,
-            "apps.scraping.middlewares.BackoffRetryMiddleware": 350,
-            "apps.scraping.middlewares.PlaywrightProxyMiddleware": 400,
-        },
     }
 
     def __init__(self, *args, **kwargs) -> None:

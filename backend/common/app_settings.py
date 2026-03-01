@@ -187,6 +187,16 @@ class ScrapingConfig:
         return float(_get("SCRAPING_PROXY_BAN_MAX_COOLDOWN", 600.0))
 
     @classmethod
+    def proxy_ban_threshold(cls) -> int:
+        """Consecutive 403s before banning a proxy. Higher for rotating proxies."""
+        return int(_get("SCRAPING_PROXY_BAN_THRESHOLD", 1))
+
+    @classmethod
+    def proxy_max_active_contexts(cls) -> int:
+        """Max simultaneous browser contexts. Prevents memory bombs on small VPS."""
+        return int(_get("SCRAPING_PROXY_MAX_ACTIVE_CONTEXTS", 3))
+
+    @classmethod
     def proxy_enabled(cls) -> bool:
         """Whether proxy rotation is enabled (True if proxy list is non-empty)."""
         return len(cls.proxy_list()) > 0

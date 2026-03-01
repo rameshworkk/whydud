@@ -2906,5 +2906,26 @@ IP-whitelisted access only. VPN required for remote access.
 
 ---
 
+# 01-03-2025 Scraping Architecure Changes
+Architecture Change: Two-Phase Scraping
+PHASE 1 — Listing Discovery (NO Playwright, plain HTTP)
+  → Hit Amazon/Flipkart search pages with plain HTTP + headers
+  → Extract product URLs and ASINs/FPIDs
+  → Store in a ProductURL queue (new model or in-memory set)
+  → Fast: 0.5s per page, 50 pages = 25 seconds
+
+PHASE 2 — Product Detail (Playwright, with proxies)
+  → Pick URLs from the queue, one at a time
+  → Render with Playwright + stealth + proxy
+  → Extract all product data
+  → Slow but accurate: 5-8s per product, needs proxy rotation
+  → CAPTCHA retry with different proxy
+
+Why this works:
+  - Listing pages are cheap (no JS needed) → scrape fast with no proxy
+  - Product pages are expensive (JS + anti-bot) → scrape slow with proxy
+  - If listing gets blocked, retry with proxy. If product gets blocked, swap proxy.
+  - You can scrape 200 listing pages in 2 minutes, then spend 30 minutes on 200 product pages.
+
 
 **This architecture document is the single source of truth for all development.**
