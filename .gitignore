@@ -66,5 +66,5 @@ htmlcov/
 # ---- Scraped HTML ----
 backend/data/
 
-# ---- Postgres replication ----
+# ---- Postgres replication (old SQL with hardcoded password — replaced by .sh) ----
 docker/postgres/init-replication.sql

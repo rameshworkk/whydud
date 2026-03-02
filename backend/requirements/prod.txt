@@ -3,5 +3,8 @@
 # WSGI server
 gunicorn==23.0.0
 
+# Static files (serves Django admin CSS/JS from Gunicorn)
+whitenoise==6.11.0
+
 # Monitoring
 sentry-sdk[django]==2.12.0

@@ -54,8 +54,11 @@ FROM deps AS production
 
 COPY backend/ .
 
-# Collect static files
-RUN python manage.py collectstatic --no-input --settings=whydud.settings.prod || true
+# Collect static files (Django admin, DRF browsable API, etc.)
+# DJANGO_SECRET_KEY is needed for settings import; a dummy value is fine at build time.
+# DATABASE_URL is not needed — collectstatic doesn't touch the database.
+RUN DJANGO_SECRET_KEY=build-only-collectstatic-key \
+    python manage.py collectstatic --no-input --settings=whydud.settings.prod
 
 # Non-root user
 RUN useradd --system --no-create-home whydud

@@ -133,7 +133,6 @@ services:
       meilisearch:
         condition: service_healthy
     volumes:
-      - static_files:/app/staticfiles
       - media_files:/app/media
     deploy:
       resources:
@@ -205,7 +204,6 @@ volumes:
   meilisearch_data:
   caddy_data:
   caddy_config:
-  static_files:
   media_files:
 
 networks:
