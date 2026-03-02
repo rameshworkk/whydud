@@ -16,6 +16,8 @@ def _create_dudscore_history_hypertable(apps, schema_editor):
     raw_conn.autocommit = True
     try:
         with raw_conn.cursor() as cur:
+            # Ensure TimescaleDB extension exists (idempotent).
+            cur.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS scoring.dudscore_history (
                     time             TIMESTAMPTZ NOT NULL,

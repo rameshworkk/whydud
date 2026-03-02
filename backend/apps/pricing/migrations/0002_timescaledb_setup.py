@@ -18,6 +18,10 @@ def _create_price_table_and_hypertable(apps, schema_editor):
     raw_conn.autocommit = True
     try:
         with raw_conn.cursor() as cur:
+            # Ensure extensions exist (init.sql only runs on first volume
+            # init — these are idempotent and cover re-deploys).
+            cur.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
+            cur.execute('CREATE EXTENSION IF NOT EXISTS "pgcrypto";')
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS price_snapshots (
                     time            TIMESTAMPTZ NOT NULL,

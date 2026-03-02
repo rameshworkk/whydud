@@ -1476,3 +1476,35 @@ Next.js 15 requires any component using `useSearchParams()` to be wrapped in a `
 The `auth/callback/page.tsx` already had the correct pattern.
 
 **Also**: `docker-compose.replica.yml` added to repo root for the replica node deployment (8 GB / 4 CPU Contabo VPS). Services: postgres (replica), redis, meilisearch, caddy, backend, frontend, celery-scraping. Write routing via `DATABASE_WRITE_URL` points to primary (10.0.0.1) over WireGuard.
+
+### 2026-03-02 — Fix: Production deployment — 7 critical blockers resolved
+
+**Problem**: Backend container crashed on startup with `ModuleNotFoundError: apps.admin_tools` and multiple config issues prevented the site from working behind Cloudflare.
+
+**Root causes found (audit of entire deployment stack):**
+
+1. **Django couldn't connect to PostgreSQL** — Compose set `DATABASE_URL` but `prod.py` only read individual `POSTGRES_HOST` env vars (defaulted to `localhost`, wrong inside Docker)
+2. **Missing `CSRF_TRUSTED_ORIGINS`** in prod settings — all POST requests behind Cloudflare got 403
+3. **Missing `CORS_ALLOWED_ORIGINS`** for `whydud.com` — browser API calls blocked
+4. **No database router** for replica write routing to primary via WireGuard
+5. **`init-replication.sql` was gitignored** — Docker mount failed on server after `git pull` (file didn't exist)
+6. **Caddyfile missing routes** for `/accounts/*`, `/oauth/*`, `/static/*` — Google OAuth and Django admin unreachable
+7. **`collectstatic` failed silently** (`|| true`) — Django admin had no CSS/JS
+8. **`static_files` Docker volume** mounted over `/app/staticfiles`, shadowing files collected into the image
+
+**Fixes applied:**
+
+| File | Change |
+|---|---|
+| `backend/whydud/settings/prod.py` | Parse `DATABASE_URL`/`DATABASE_WRITE_URL`, add `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`, WhiteNoise middleware |
+| `backend/whydud/db_router.py` | New file — routes reads to local DB, writes to primary on replica node |
+| `backend/requirements/prod.txt` | Added `whitenoise==6.11.0` |
+| `docker/Dockerfiles/backend.Dockerfile` | Fixed `collectstatic` with build-time `DJANGO_SECRET_KEY` (removed `|| true`) |
+| `docker/Caddyfile.cloudflare` | Added `/accounts/*`, `/oauth/*`, `/static/*` routes; log to stdout |
+| `docker-compose.primary.yml` | Replaced gitignored `.sql` with `.sh` replication script, added `REPLICATOR_PASSWORD` env var, removed `static_files` volume |
+| `docker-compose.replica.yml` | Removed `static_files` volume |
+| `docker/postgres/init-replication.sh` | New file — creates replicator user from env var (no hardcoded password) |
+| `.env.example` | New file — template with all required production env vars |
+| `deploy.sh` | New file — deployment script with pre-flight checks, staged startup, migration support |
+
+**Commit**: `e7400c4`
