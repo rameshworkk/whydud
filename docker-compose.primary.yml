@@ -99,6 +99,7 @@ services:
       - "443:443"
     volumes:
       - ./docker/Caddyfile.cloudflare:/etc/caddy/Caddyfile:ro
+      - ./docker/certs:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     deploy:

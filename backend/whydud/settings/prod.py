@@ -12,6 +12,10 @@ ALLOWED_HOSTS = [
         "DJANGO_ALLOWED_HOSTS", "whydud.com,www.whydud.com"
     ).split(",")
     if h.strip()
+] + [
+    # Internal Docker hostnames — Next.js SSR calls backend via container name
+    "backend",
+    "localhost",
 ]
 
 # Gunicorn serves behind Caddy, so trust X-Forwarded-For
