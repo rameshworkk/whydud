@@ -5,6 +5,7 @@ django-cors-headers==4.9.0
 
 # Auth
 django-allauth==65.14.3
+PyJWT==2.10.1
 
 # Database
 psycopg[binary]==3.3.3
@@ -14,7 +15,7 @@ celery[redis]==5.6.2
 django-celery-beat==2.8.1
 django-celery-results==2.6.0
 flower==2.0.1
-redis==7.1.0
+redis==5.2.1
 
 # Search
 meilisearch==0.40.0
