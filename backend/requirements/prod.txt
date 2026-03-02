@@ -1,7 +1,7 @@
 -r base.txt
 
 # WSGI server
-gunicorn==22.0.0
+gunicorn==23.0.0
 
 # Monitoring
 sentry-sdk[django]==2.12.0
