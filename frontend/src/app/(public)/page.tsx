@@ -18,6 +18,9 @@ import { productsApi, dealsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils/format";
 import type { ProductSummary, Deal } from "@/types";
 
+// Dynamic rendering — page fetches live product/deal data, cannot be statically generated
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Whydud — Discover Product Truth. Shop Smarter.",
   description:

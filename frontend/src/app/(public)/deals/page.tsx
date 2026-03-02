@@ -4,6 +4,7 @@ import { Footer } from "@/components/layout/Footer";
 import { DealCard } from "@/components/deals/DealCard";
 import { dealsApi } from "@/lib/api/products";
 
+export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Blockbuster Deals" };
 
 export default async function DealsPage() {
