@@ -17,6 +17,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/replica.conf:/etc/postgresql/postgresql.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     deploy:
       resources:
         limits:
@@ -182,7 +184,8 @@ services:
     env_file: ../.env
     environment:
       DJANGO_SETTINGS_MODULE: whydud.settings.prod
-      DATABASE_URL: postgres://${POSTGRES_USER:-whydud}:${POSTGRES_PASSWORD}@10.0.0.1:5432/${POSTGRES_DB:-whydud}
+      DATABASE_URL: postgres://${POSTGRES_USER:-whydud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whydud}
+      DATABASE_WRITE_URL: postgres://${POSTGRES_USER:-whydud}:${POSTGRES_PASSWORD}@10.0.0.1:5432/${POSTGRES_DB:-whydud}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@10.0.0.1:6379/0
       CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@10.0.0.1:6379/1
