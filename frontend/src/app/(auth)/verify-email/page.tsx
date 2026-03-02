@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { authApi } from "@/lib/api/auth";
 
 type Status = "verifying" | "success" | "error" | "missing";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const uid = searchParams.get("uid") ?? "";
   const token = searchParams.get("token") ?? "";
@@ -108,5 +108,20 @@ export default function VerifyEmailPage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-center py-4">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-[#F97316] border-r-transparent mb-3" />
+          <p className="text-sm text-slate-500">Loading...</p>
+        </div>
+      }
+    >
+      <VerifyEmailContent />
+    </Suspense>
   );
 }
