@@ -1414,3 +1414,48 @@ SCRAPING_PROXY_LIST=http://user:pass@gw.dataimpulse.com:823
 - Eliminates 90+ second waste per CAPTCHA'd page (instant skip)
 - Reduces timeout failures (60s nav timeout vs 30s)
 - Faster page loads through proxy (DOM-only vs full resource load)
+
+### 2026-03-02 — Critical: .gitignore corruption fix + 41 missing files committed
+
+**Problem**: Production Docker build (`next build`) was failing with import errors — `RecentlyViewedSection`, `RecentlyViewedTracker`, `ShareButton`, `CrossPlatformPricePanel`, `ReviewSidebar` not found. These component files existed locally but were never committed to git.
+
+**Root Cause**: Commit `429d9ec` ("vsix files removed") appended `*.vsix` to `.gitignore` in **UTF-16LE encoding** (null bytes between each character). Git interpreted the pattern as just `*` — a wildcard matching everything. This silently prevented **all new files** from being staged via `git add` from that point forward. Files already tracked were unaffected, but every new file created after that commit was invisible to git.
+
+#### What Was Fixed
+
+**1. `.gitignore` rewritten** — replaced corrupted UTF-16LE `*.vsix` entry with proper UTF-8. Added `backend/data/` to ignore scraped HTML cache.
+
+**2. 14 frontend files committed** (were missing from git, causing build failure):
+- Components: `recently-viewed-section.tsx`, `recently-viewed-tracker.tsx`, `share-button.tsx`, `cross-platform-price-panel.tsx`, `review-sidebar.tsx`
+- Hook: `use-recently-viewed.ts`
+- Pages: `about`, `contact`, `privacy`, `terms`, `cookies`, `affiliate-disclosure`, `product/[slug]/review`, `reviews/new`
+
+**3. 27 backend files committed** (were missing from git):
+- Entire `admin_tools` app (6 files)
+- Scraping: `middlewares.py`, `middlewares1.py`, `playwright_handler.py`, `amazon_review_spider.py`, `flipkart_review_spider.py`, `scrape_test` management command
+- Business logic: `deals/detection.py`, `pricing/click_tracking.py`, `rewards/engine.py`, `scoring/components.py`, `reviews/fraud_detection.py`
+- Accounts: `subscription.py`, `urls/subscription.py`, migrations `0006`, `0007`
+- Config: `whydud/flowerconfig.py`, `products/management/commands/assign_categories.py`, `seed_marketplaces.py`
+
+#### Other Issues Noted (not fixed yet)
+- **130MB VSIX file in git history** — `.git` is 134MB. Needs `git filter-repo` or BFG to purge from history.
+- **Orphan/dangling commits** (`4a6a4c3`, `d9b3704`, `a5edfe3`) — earlier VSIX cleanup attempt on an abandoned branch. Harmless but adds noise.
+- **Two author emails** in commit history (`ramesh4nani@gmail.com` vs `ramesh.workk@gmail.com`).
+
+**Commit**: `5575997`
+
+### 2026-03-02 — Fix: Static generation timeout during Docker build
+
+**Problem**: After fixing the missing files, `next build` still failed — homepage (`/`) timed out during static page generation (3 attempts × 60s each = 330s). The homepage is an `async` server component that makes 4 API calls (products, deals, 2× trending). During Docker build, no backend is running, so `fetch()` to `http://localhost:8000` hangs indefinitely until Next.js kills the page generation.
+
+**Fix**: Added `export const dynamic = "force-dynamic"` to:
+- `(public)/page.tsx` (homepage) — 4 async API calls
+- `(public)/deals/page.tsx` — 1 async API call
+
+This tells Next.js to render these pages on each request instead of at build time. Correct behavior since they show live data (trending products, deals).
+
+Other async pages (`search`, `compare`, `product/[slug]`, `seller/[slug]`, `categories/[slug]`, `discussions/[id]`) already have dynamic segments or `searchParams` so Next.js won't statically generate them.
+
+**Deploy note**: Run `docker compose build --no-cache` (or at minimum `--no-cache` on the frontend service) to bust the Docker layer cache from the previous failed build.
+
+**Commit**: `ea53e01`
