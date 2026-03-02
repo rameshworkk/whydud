@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ============================================================
 # Whydud — REPLICA Node (8 GB / 4 CPU)
 # PostgreSQL REPLICA + App Stack + Scraping

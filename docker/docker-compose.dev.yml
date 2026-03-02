@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Whydud — Dev Infrastructure Only
 # Run Django and Next.js locally, this just provides PostgreSQL, Redis, Meilisearch
 

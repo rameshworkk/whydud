@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Required for Docker deployment — produces a self-contained server at .next/standalone
+  output: "standalone",
   // Django requires trailing slashes; without this Next.js strips them (308)
   // before the rewrite fires, causing a redirect loop with Django's APPEND_SLASH.
   skipTrailingSlashRedirect: true,

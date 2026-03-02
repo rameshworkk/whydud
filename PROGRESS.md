@@ -1459,3 +1459,20 @@ Other async pages (`search`, `compare`, `product/[slug]`, `seller/[slug]`, `cate
 **Deploy note**: Run `docker compose build --no-cache` (or at minimum `--no-cache` on the frontend service) to bust the Docker layer cache from the previous failed build.
 
 **Commit**: `ea53e01`
+
+### 2026-03-02 — Fix: useSearchParams Suspense boundaries + replica compose
+
+**Problem**: `docker compose -f docker-compose.replica.yml build` failed on the replica server. The frontend build (`next build`) crashed during static page generation with:
+```
+useSearchParams() should be wrapped in a suspense boundary at page "/verify-email"
+```
+Next.js 15 requires any component using `useSearchParams()` to be wrapped in a `<Suspense>` boundary for static generation to work.
+
+**Fix**: Wrapped `useSearchParams()` usage in `<Suspense>` boundaries on 3 auth pages:
+- `frontend/src/app/(auth)/verify-email/page.tsx` — extracted `VerifyEmailContent`, wrapped in Suspense
+- `frontend/src/app/(auth)/login/page.tsx` — extracted `LoginContent`, wrapped in Suspense
+- `frontend/src/app/(auth)/reset-password/page.tsx` — extracted `ResetPasswordContent`, wrapped in Suspense
+
+The `auth/callback/page.tsx` already had the correct pattern.
+
+**Also**: `docker-compose.replica.yml` added to repo root for the replica node deployment (8 GB / 4 CPU Contabo VPS). Services: postgres (replica), redis, meilisearch, caddy, backend, frontend, celery-scraping. Write routing via `DATABASE_WRITE_URL` points to primary (10.0.0.1) over WireGuard.
