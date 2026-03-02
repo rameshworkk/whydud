@@ -65,3 +65,6 @@ htmlcov/
 
 # ---- Scraped HTML ----
 backend/data/
+
+#postgres
+echo "docker/postgres/init-replication.sql" >> .gitignore

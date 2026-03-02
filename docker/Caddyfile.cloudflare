@@ -1,0 +1,36 @@
+# Whydud — Caddy config (behind Cloudflare proxy)
+# Cloudflare handles SSL termination, Caddy serves HTTP
+
+:80 {
+    # Django backend: API + admin + webhooks
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /admin/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /webhooks/* {
+        reverse_proxy backend:8000
+    }
+
+    # Next.js frontend: everything else
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    # Security headers
+    header {
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/whydud.log
+        format json
+    }
+}

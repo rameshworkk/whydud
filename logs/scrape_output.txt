@@ -1,0 +1,1012 @@
+PS C:\Users\rames\Downloads\whydud\platform\whydud\backend> python -m apps.scraping.runner amazon_in --urls "https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031" --max-pages 20
+Scrapy 2.14.1 started (bot: whydud_scraper)
+2026-03-01 06:23:00 [scrapy.utils.log] INFO: Scrapy 2.14.1 started (bot: whydud_scraper)
+Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+2026-03-01 06:23:00 [scrapy.utils.log] INFO: Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+Using CrawlerProcess
+Enabled addons:
+[]
+2026-03-01 06:23:00 [scrapy.addons] INFO: Enabled addons:
+[]
+Using selector: SelectSelector
+Using reactor: twisted.internet.asyncioreactor.AsyncioSelectorReactor
+Using asyncio event loop: asyncio.windows_events._WindowsSelectorEventLoop
+Telnet Password: 2204f207d1b4e212
+2026-03-01 06:23:00 [scrapy.extensions.telnet] INFO: Telnet Password: 2204f207d1b4e212
+Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats']
+2026-03-01 06:23:00 [scrapy.middleware] INFO: Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats']
+Overridden settings:
+{'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS': 4,
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 2,
+ 'DOWNLOAD_TIMEOUT': 30,
+ 'LOG_LEVEL': 'INFO',
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'RETRY_TIMES': 3,
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+2026-03-01 06:23:00 [scrapy.crawler] INFO: Overridden settings:
+{'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS': 4,
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 2,
+ 'DOWNLOAD_TIMEOUT': 30,
+ 'LOG_LEVEL': 'INFO',
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'RETRY_TIMES': 3,
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+Using proactor: IocpProactor
+Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>
+2026-03-01 06:23:00 [scrapy-playwright] INFO: Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>     
+Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+2026-03-01 06:23:00 [scrapy.middleware] INFO: Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+2026-03-01 06:23:00 [scrapy.middleware] INFO: Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.ReviewValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.ReviewPersistencePipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline']
+2026-03-01 06:23:00 [scrapy.middleware] INFO: Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.ReviewValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.ReviewPersistencePipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline']
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewPersistencePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewPersistencePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+Spider opened
+2026-03-01 06:23:00 [scrapy.core.engine] INFO: Spider opened
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+2026-03-01 06:23:00 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+ProductPipeline: Django initialised
+Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)
+Telnet console listening on 127.0.0.1:6023
+Starting download handler
+Starting download handler
+Starting category (20 pages): https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031
+Crawled (200) <GET https://www.amazon.in/robots.txt> (referer: None)
+Launching browser chromium
+Browser chromium launched
+Crawled (200) <GET https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031> (referer: None) ['playwright']
+Found 33 results on https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031
+Crawled (200) <GET https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&xpid=hVEUKWTIzCXHO&qid=1772326385&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+Found 33 results on https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326385&xpid=hVEUKWTIzCXHO&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/Samsung-Sapphire-Storage-Upgrades-Lag-Free/dp/B0FN7WCV5Y/ref=sr_1_30?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLHORSQ_PRcNg-Et4ZAU-ViXZ7SjuxUIiWWevdbaKKuLtHqpRM6NYeHnfK4AYKhSXZyf2QOEWWeWUlcrfGAKpokDQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77dFBPKKa19FQyP8dkczDxNp2B50HrT6RutYQJqV80ByTg4QHP_QQ4Ed0XBWyNER5HukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.fnQ_ZTo6BmviAw-8pm2OPrWLxkzGqKero9WKzwf6Meg&dib_tag=se&keywords=smartphones&qid=1772326385&s=electronics&sr=1-30> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+No title found for ASIN B0FN7WCV5Y
+Crawled (200) <GET https://www.amazon.in/realme-P4X-Smartphone-Dimensity-Waterproof/dp/B0G3X99DLF/ref=sr_1_29?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLHORSQ_PRcNg-Et4ZAU-ViXZ7SjuxUIiWWevdbaKKuLtHqpRM6NYeHnfK4AYKhSXZyf2QOEWWeWUlcrfGAKpokDQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77dFBPKKa19FQyP8dkczDxNp2B50HrT6RutYQJqV80ByTg4QHP_QQ4Ed0XBWyNER5HukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.fnQ_ZTo6BmviAw-8pm2OPrWLxkzGqKero9WKzwf6Meg&dib_tag=se&keywords=smartphones&qid=1772326385&s=electronics&sr=1-29> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+No title found for ASIN B0G3X99DLF
+Crawled (200) <GET https://www.amazon.in/Samsung-MediaTek-Dimensity-Charging-Upgrades/dp/B0DX655V11/ref=sr_1_28?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLHORSQ_PRcNg-Et4ZAU-ViXZ7SjuxUIiWWevdbaKKuLtHqpRM6NYeHnfK4AYKhSXZyf2QOEWWeWUlcrfGAKpokDQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77dFBPKKa19FQyP8dkczDxNp2B50HrT6RutYQJqV80ByTg4QHP_QQ4Ed0XBWyNER5HukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.fnQ_ZTo6BmviAw-8pm2OPrWLxkzGqKero9WKzwf6Meg&dib_tag=se&keywords=smartphones&qid=1772326385&s=electronics&sr=1-28> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+No title found for ASIN B0DX655V11
+Crawled (200) <GET https://www.amazon.in/Lava-Bold-N1-Pro-Stealth/dp/B0F1Z259NF/ref=sr_1_27?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLHORSQ_PRcNg-Et4ZAU-ViXZ7SjuxUIiWWevdbaKKuLtHqpRM6NYeHnfK4AYKhSXZyf2QOEWWeWUlcrfGAKpokDQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77dFBPKKa19FQyP8dkczDxNp2B50HrT6RutYQJqV80ByTg4QHP_QQ4Ed0XBWyNER5HukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.fnQ_ZTo6BmviAw-8pm2OPrWLxkzGqKero9WKzwf6Meg&dib_tag=se&keywords=smartphones&qid=1772326385&s=electronics&sr=1-27> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+No title found for ASIN B0F1Z259NF
+Retrying <GET https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=3&qid=1772326388&xpid=hVEUKWTIzCXHO&ref=sr_pg_2> (failed 1 times): 503 Service Unavailable
+Crawled (200) <GET https://www.amazon.in/Samsung-Galaxy-Snapdragon-Onyx-Black/dp/B0GGH5KMM2/ref=sr_1_54?dib=eyJ2IjoiMSJ9.Ly7aV2GVkBGHtD9D798sCYcNtPqDtPPR_QNzBwwZOFA_LbgEAJx_dXxZPqGasDwcMF-m-MBPCjXLEhtnd_tm6ufqj4x_n6ro2tQK5sdLpZQYOJ_Vvk4geB3-3NU8O9j7sSdBS0mw2eECE9AP1xUVDTeB6PbzJteEOslp--2uIR5nt5qkVEZHZHZJvnGaudzgjF0lggzvRrah0rOpQOEqgwkjNhN7Uiy-Eql1RqIbxWHFvme3NpQzxXcWxl0YPFZOFUSVQkFMAQvAHlsNwjXEhMfVZ65OpL_usNE3zsRdoaQ.DU_p-SVbBuv4_ktPpD_uq1IGyAhLALgh5cRBc75ay-Y&dib_tag=se&keywords=smartphones&qid=1772326388&s=electronics&sr=1-54&xpid=hVEUKWTIzCXHO> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326385&xpid=hVEUKWTIzCXHO&ref=sr_pg_1) ['playwright']   
+No title found for ASIN B0GGH5KMM2
+Crawled (200) <GET https://www.amazon.in/Majestic-Storage-Additional-Exchange-Charger/dp/B07WHRQ5D8/ref=sr_1_53?dib=eyJ2IjoiMSJ9.Ly7aV2GVkBGHtD9D798sCYcNtPqDtPPR_QNzBwwZOFA_LbgEAJx_dXxZPqGasDwcMF-m-MBPCjXLEhtnd_tm6ufqj4x_n6ro2tQK5sdLpZQYOJ_Vvk4geB3-3NU8O9j7sSdBS0mw2eECE9AP1xUVDTeB6PbzJteEOslp--2uIR5nt5qkVEZHZHZJvnGaudzgjF0lggzvRrah0rOpQOEqgwkjNhN7Uiy-Eql1RqIbxWHFvme3NpQzxXcWxl0YPFZOFUSVQkFMAQvAHlsNwjXEhMfVZ65OpL_usNE3zsRdoaQ.DU_p-SVbBuv4_ktPpD_uq1IGyAhLALgh5cRBc75ay-Y&dib_tag=se&keywords=smartphones&qid=1772326388&s=electronics&sr=1-53&xpid=hVEUKWTIzCXHO> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326385&xpid=hVEUKWTIzCXHO&ref=sr_pg_1) ['playwright']
+No title found for ASIN B07WHRQ5D8
+Received SIGINT, shutting down gracefully. Send again to force 
+Launching browser chromium
+Closing spider (shutdown)
+Request failed: https://www.amazon.in/Redmi-Segments-7000mAhA-Snapdragon-Charging/dp/B0FJFVBSF4/ref=sr_1_52?dib=eyJ2IjoiMSJ9.Ly7aV2GVkBGHtD9D798sCYcNtPqDtPPR_QNzBwwZOFA_LbgEAJx_dXxZPqGasDwcMF-m-MBPCjXLEhtnd_tm6ufqj4x_n6ro2tQK5sdLpZQYOJ_Vvk4geB3-3NU8O9j7sSdBS0mw2eECE9AP1xUVDTeB6PbzJteEOslp--2uIR5nt5qkVEZHZHZJvnGaudzgjF0lggzvRrah0rOpQOEqgwkjNhN7Uiy-Eql1RqIbxWHFvme3NpQzxXcWxl0YPFZOFUSVQkFMAQvAHlsNwjXEhMfVZ65OpL_usNE3zsRdoaQ.DU_p-SVbBuv4_ktPpD_uq1IGyAhLALgh5cRBc75ay-Y&dib_tag=se&keywords=smartphones&qid=1772326388&s=electronics&sr=1-52&xpid=hVEUKWTIzCXHO — BrowserType.launch: Connection closed while reading from the driver
+Launching browser chromium
+Request failed: https://www.amazon.in/Motorola-Fusion-Pantone-Slipstream-Storage/dp/B0G2CJJLWX/ref=sr_1_51?dib=eyJ2IjoiMSJ9.Ly7aV2GVkBGHtD9D798sCYcNtPqDtPPR_QNzBwwZOFA_LbgEAJx_dXxZPqGasDwcMF-m-MBPCjXLEhtnd_tm6ufqj4x_n6ro2tQK5sdLpZQYOJ_Vvk4geB3-3NU8O9j7sSdBS0mw2eECE9AP1xUVDTeB6PbzJteEOslp--2uIR5nt5qkVEZHZHZJvnGaudzgjF0lggzvRrah0rOpQOEqgwkjNhN7Uiy-Eql1RqIbxWHFvme3NpQzxXcWxl0YPFZOFUSVQkFMAQvAHlsNwjXEhMfVZ65OpL_usNE3zsRdoaQ.DU_p-SVbBuv4_ktPpD_uq1IGyAhLALgh5cRBc75ay-Y&dib_tag=se&keywords=smartphones&qid=1772326388&s=electronics&sr=1-51&xpid=hVEUKWTIzCXHO — BrowserType.launch: Connection closed while reading from the driver
+Launching browser chromium
+Request failed: https://www.amazon.in/realme-Long-Lasting-Resistance-Military-Grade-Durability/dp/B0F9TT7Z5Q/ref=sr_1_50?dib=eyJ2IjoiMSJ9.Ly7aV2GVkBGHtD9D798sCYcNtPqDtPPR_QNzBwwZOFA_LbgEAJx_dXxZPqGasDwcMF-m-MBPCjXLEhtnd_tm6ufqj4x_n6ro2tQK5sdLpZQYOJ_Vvk4geB3-3NU8O9j7sSdBS0mw2eECE9AP1xUVDTeB6PbzJteEOslp--2uIR5nt5qkVEZHZHZJvnGaudzgjF0lggzvRrah0rOpQOEqgwkjNhN7Uiy-Eql1RqIbxWHFvme3NpQzxXcWxl0YPFZOFUSVQkFMAQvAHlsNwjXEhMfVZ65OpL_usNE3zsRdoaQ.DU_p-SVbBuv4_ktPpD_uq1IGyAhLALgh5cRBc75ay-Y&dib_tag=se&keywords=smartphones&qid=1772326388&s=electronics&sr=1-50&xpid=hVEUKWTIzCXHO — BrowserType.launch: Connection closed while reading from the driver
+Launching browser chromium
+Request failed: https://www.amazon.in/Mobile-Phone-T4x-Marine-Blue_128G/dp/B0F194NC2H/ref=sr_1_49?dib=eyJ2IjoiMSJ9.Ly7aV2GVkBGHtD9D798sCYcNtPqDtPPR_QNzBwwZOFA_LbgEAJx_dXxZPqGasDwcMF-m-MBPCjXLEhtnd_tm6ufqj4x_n6ro2tQK5sdLpZQYOJ_Vvk4geB3-3NU8O9j7sSdBS0mw2eECE9AP1xUVDTeB6PbzJteEOslp--2uIR5nt5qkVEZHZHZJvnGaudzgjF0lggzvRrah0rOpQOEqgwkjNhN7Uiy-Eql1RqIbxWHFvme3NpQzxXcWxl0YPFZOFUSVQkFMAQvAHlsNwjXEhMfVZ65OpL_usNE3zsRdoaQ.DU_p-SVbBuv4_ktPpD_uq1IGyAhLALgh5cRBc75ay-Y&dib_tag=se&keywords=smartphones&qid=1772326388&s=electronics&sr=1-49&xpid=hVEUKWTIzCXHO — BrowserType.launch: Connection closed while reading from the driver
+Dumping Scrapy stats:
+{'downloader/exception_count': 4,
+ 'downloader/exception_type_count/builtins.Exception': 4,
+ 'downloader/request_bytes': 13324,
+ 'downloader/request_count': 14,
+ 'downloader/request_method_count/GET': 14,
+ 'downloader/response_bytes': 3911300,
+ 'downloader/response_count': 10,
+ 'downloader/response_status_count/200': 9,
+ 'downloader/response_status_count/503': 1,
+ 'elapsed_time_seconds': 34.818297,
+ 'finish_reason': 'shutdown',
+ 'finish_time': datetime.datetime(2026, 3, 1, 0, 53, 35, 435952, tzinfo=datetime.timezone.utc),
+ 'items_per_minute': 0.0,
+ 'log_count/ERROR': 4,
+ 'log_count/INFO': 15,
+ 'log_count/WARNING': 6,
+ 'playwright/browser_count': 1,
+ 'playwright/context_count': 1,
+ 'playwright/context_count/max_concurrent': 1,
+ 'playwright/context_count/persistent/False': 1,
+ 'playwright/context_count/remote/False': 1,
+ 'playwright/page_count': 9,
+ 'playwright/page_count/closed': 9,
+ 'playwright/page_count/max_concurrent': 2,
+ 'playwright/request_count': 376,
+ 'playwright/request_count/method/GET': 364,
+ 'playwright/request_count/method/HEAD': 8,
+ 'playwright/request_count/method/POST': 4,
+ 'playwright/request_count/navigation': 15,
+ 'playwright/request_count/resource_type/document': 15,
+ 'playwright/request_count/resource_type/fetch': 15,
+ 'playwright/request_count/resource_type/font': 29,
+ 'playwright/request_count/resource_type/image': 174,
+ 'playwright/request_count/resource_type/media': 9,
+ 'playwright/request_count/resource_type/other': 2,
+ 'playwright/request_count/resource_type/ping': 3,
+ 'playwright/request_count/resource_type/script': 85,
+ 'playwright/request_count/resource_type/stylesheet': 36,
+ 'playwright/request_count/resource_type/xhr': 8,
+ 'playwright/response_count': 366,
+ 'playwright/response_count/method/GET': 357,
+ 'playwright/response_count/method/HEAD': 8,
+ 'playwright/response_count/method/POST': 1,
+ 'playwright/response_count/resource_type/document': 15,
+ 'playwright/response_count/resource_type/fetch': 15,
+ 'playwright/response_count/resource_type/font': 29,
+ 'playwright/response_count/resource_type/image': 172,
+ 'playwright/response_count/resource_type/media': 9,
+ 'playwright/response_count/resource_type/other': 2,
+ 'playwright/response_count/resource_type/ping': 1,
+ 'playwright/response_count/resource_type/script': 82,
+ 'playwright/response_count/resource_type/stylesheet': 36,
+ 'playwright/response_count/resource_type/xhr': 5,
+ 'request_depth_max': 2,
+ 'response_received_count': 9,
+ 'responses_per_minute': 15.882352941176471,
+ 'retry/count': 1,
+ 'retry/reason_count/503 Service Unavailable': 1,
+ 'robotstxt/request_count': 1,
+ 'robotstxt/response_count': 1,
+ 'robotstxt/response_status_count/200': 1,
+ 'scheduler/dequeued': 13,
+ 'scheduler/dequeued/memory': 13,
+ 'scheduler/enqueued': 52,
+ 'scheduler/enqueued/memory': 52,
+ 'start_time': datetime.datetime(2026, 3, 1, 0, 53, 0, 617655, tzinfo=datetime.timezone.utc)}
+Spider closed (shutdown)
+Closing download handler
+Closing download handler
+Task was destroyed but it is pending!
+task: <Task pending name='Task-1' coro=<_ThreadedLoopAdapter._process_queue() running at C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy_playwright\_utils.py:153> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_chain_future.<locals>._call_set_state() at C:\Python314\Lib\asyncio\futures.py:400]>
+Exception ignored while closing generator <coroutine object _ThreadedLoopAdapter._process_queue at 0x000001DC5212F760>:
+Traceback (most recent call last):
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy_playwright\_utils.py", line 153, in _process_queue
+  File "C:\Python314\Lib\asyncio\queues.py", line 188, in get
+  File "C:\Python314\Lib\asyncio\base_events.py", line 827, in call_soon
+  File "C:\Python314\Lib\asyncio\base_events.py", line 550, in _check_closed
+RuntimeError: Event loop is closed
+Task was destroyed but it is pending!
+task: <Task pending name='Task-2808' coro=<Queue.join() running at C:\Python314\Lib\asyncio\queues.py:239> cb=[_chain_future.<locals>._call_set_state() at C:\Python314\Lib\asyncio\futures.py:400]>
+<sys>:0: RuntimeWarning: coroutine 'Queue.join' was never awaited
+PS C:\Users\rames\Downloads\whydud\platform\whydud\backend> 
+
+# new output
+
+PS C:\Users\rames\Downloads\whydud\platform\whydud\backend> python -m apps.scraping.runner amazon_in --urls "https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031" --max-pages 20
+Scrapy 2.14.1 started (bot: whydud_scraper)
+2026-03-01 06:28:07 [scrapy.utils.log] INFO: Scrapy 2.14.1 started (bot: whydud_scraper)
+Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+2026-03-01 06:28:07 [scrapy.utils.log] INFO: Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+Using CrawlerProcess
+Enabled addons:
+[]
+2026-03-01 06:28:07 [scrapy.addons] INFO: Enabled addons:
+[]
+Using selector: SelectSelector
+Using reactor: twisted.internet.asyncioreactor.AsyncioSelectorReactor
+Using asyncio event loop: asyncio.windows_events._WindowsSelectorEventLoop
+Telnet Password: 36bffcd6c3ee997f
+2026-03-01 06:28:07 [scrapy.extensions.telnet] INFO: Telnet Password: 36bffcd6c3ee997f
+Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats']
+2026-03-01 06:28:07 [scrapy.middleware] INFO: Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats']
+Overridden settings:
+{'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS': 4,
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 2,
+ 'DOWNLOAD_TIMEOUT': 30,
+ 'LOG_LEVEL': 'INFO',
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'RETRY_TIMES': 3,
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+2026-03-01 06:28:07 [scrapy.crawler] INFO: Overridden settings:
+{'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS': 4,
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 2,
+ 'DOWNLOAD_TIMEOUT': 30,
+ 'LOG_LEVEL': 'INFO',
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'RETRY_TIMES': 3,
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+Using proactor: IocpProactor
+Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>
+2026-03-01 06:28:07 [scrapy-playwright] INFO: Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>     
+Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+2026-03-01 06:28:07 [scrapy.middleware] INFO: Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+2026-03-01 06:28:07 [scrapy.middleware] INFO: Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.ReviewValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.ReviewPersistencePipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline']
+2026-03-01 06:28:07 [scrapy.middleware] INFO: Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.ReviewValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.ReviewPersistencePipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline']
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewPersistencePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewPersistencePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+Spider opened
+2026-03-01 06:28:07 [scrapy.core.engine] INFO: Spider opened
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+2026-03-01 06:28:07 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+ProductPipeline: Django initialised
+Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)
+Telnet console listening on 127.0.0.1:6023
+Starting download handler
+Starting download handler
+Starting category (20 pages): https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031
+Crawled (200) <GET https://www.amazon.in/robots.txt> (referer: None)
+Launching browser chromium
+Browser chromium launched
+Crawled (200) <GET https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031> (referer: None) ['playwright']
+Found 30 results on https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031
+Crawled (200) <GET https://www.amazon.in/Lava-Bold-N1-Pro-Stealth/dp/B0F1Z259NF/ref=sr_1_28?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLXqczN-zxAjguVm5Y1-qFcBQu3eNeiTItDf3z4a3oFJGJyWExr19y69DhqN0dggaZshAEAYzWlAljsQoHe0rvmjQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77gdjps7SV9OO8N6d-g561j9yeeQvfV-FLYd82dN8mEHCf4trTNKApTyPHn5hMEDWdukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.kzKcOKLGptJXEaubVgig3DzeY0AexWq2vBCh8iqVvPs&dib_tag=se&keywords=smartphones&qid=1772326692&s=electronics&sr=1-28> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+No title found for ASIN B0F1Z259NF
+Crawled (200) <GET https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&xpid=AVJkJbgs5au3F&qid=1772326692&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+Found 30 results on https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326692&xpid=AVJkJbgs5au3F&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/Google-Pixel-Obsidian-256-RAM/dp/B0F6CY1S9Z/ref=sr_1_27?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLXqczN-zxAjguVm5Y1-qFcBQu3eNeiTItDf3z4a3oFJGJyWExr19y69DhqN0dggaZshAEAYzWlAljsQoHe0rvmjQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77gdjps7SV9OO8N6d-g561j9yeeQvfV-FLYd82dN8mEHCf4trTNKApTyPHn5hMEDWdukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.kzKcOKLGptJXEaubVgig3DzeY0AexWq2vBCh8iqVvPs&dib_tag=se&keywords=smartphones&qid=1772326692&s=electronics&sr=1-27> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+No title found for ASIN B0F6CY1S9Z
+Crawled (200) <GET https://www.amazon.in/Samsung-MediaTek-Dimensity-Charging-Upgrades/dp/B0DX655V11/ref=sr_1_25?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLXqczN-zxAjguVm5Y1-qFcBQu3eNeiTItDf3z4a3oFJGJyWExr19y69DhqN0dggaZshAEAYzWlAljsQoHe0rvmjQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77gdjps7SV9OO8N6d-g561j9yeeQvfV-FLYd82dN8mEHCf4trTNKApTyPHn5hMEDWdukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.kzKcOKLGptJXEaubVgig3DzeY0AexWq2vBCh8iqVvPs&dib_tag=se&keywords=smartphones&qid=1772326692&s=electronics&sr=1-25> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+No title found for ASIN B0DX655V11
+Crawled (200) <GET https://www.amazon.in/Samsung-Sapphire-Storage-Upgrades-Lag-Free/dp/B0FN7WCV5Y/ref=sr_1_26?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLXqczN-zxAjguVm5Y1-qFcBQu3eNeiTItDf3z4a3oFJGJyWExr19y69DhqN0dggaZshAEAYzWlAljsQoHe0rvmjQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77gdjps7SV9OO8N6d-g561j9yeeQvfV-FLYd82dN8mEHCf4trTNKApTyPHn5hMEDWdukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.kzKcOKLGptJXEaubVgig3DzeY0AexWq2vBCh8iqVvPs&dib_tag=se&keywords=smartphones&qid=1772326692&s=electronics&sr=1-26> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+Matched 'Samsung Galaxy M17 5G Mobile (Sapphire Black, 6GB RAM, 128GB' → product samsung-galaxy-m17-5g-mobile-moonlight-s (confidence=0.85, method=brand_model)
+Created listing: B0FN7WCV5Y on amazon_in
+Scraped from <200 https://www.amazon.in/Samsung-Sapphire-Storage-Upgrades-Lag-Free/dp/B0FN7WCV5Y/ref=sr_1_26?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLXqczN-zxAjguVm5Y1-qFcBQu3eNeiTItDf3z4a3oFJGJyWExr19y69DhqN0dggaZshAEAYzWlAljsQoHe0rvmjQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77gdjps7SV9OO8N6d-g561j9yeeQvfV-FLYd82dN8mEHCf4trTNKApTyPHn5hMEDWdukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.kzKcOKLGptJXEaubVgig3DzeY0AexWq2vBCh8iqVvPs&dib_tag=se&keywords=smartphones&qid=1772326692&s=electronics&sr=1-26>
+{'about_bullets': ['Monster Camera - 50MP OIS (F1.8) Main Wide Angle Camera + '
+                   '5MP (F2.2) Ultra Wide Angle Camera + 2MP Macro Angle '
+                   'Camera, 13MP (F2.0) Selfie Camera, Video Maximum '
+                   'Resolution of FHD (1920 x 1080) at 30fps.',
+                   "Monster Durability and Design - Segment's Slimmest "
+                   'smartphone with 7.5mm stunning design. Be worry free with '
+                   "Segment's best durability with Gorilla Glass Victus and "
+                   'IP54 Rating.',
+                   'AI Monster – Make your search intelligent with Circle to '
+                   'Search with Google and Gemini Live. Powerful Exynos 1330 '
+                   'Processor, Android 15 Operating System having One UI 7.0 '
+                   'platform, 2.4GHz, 2GHz Clock Speed with Octa-Core '
+                   'Processor, All 5G bands.',
+                   'Monster Display - Captivating your viewing experience with '
+                   '6.7 inches Super AMOLED Display, FHD+ Resolution with 1080 '
+                   'x 2340 Pixels and 90Hz Refresh Rate, Lag free gaming.',
+                   'Monster Upgrades and Convenience - Segment best 6 years '
+                   'Security and OS Upgrades. Monster battery - Get a massive '
+                   '5000mAh Battery with C-Type Fast Charging (25W Charging '
+                   'Support) for an uninterrupted mobile experience. Samsung '
+                   'Wallet with Tap and Pay and Knox Security.'],
+ 'brand': 'Samsung',
+ 'category_slug': 'smartphones',
+ 'external_id': 'B0FN7WCV5Y',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/71t5CaisTqL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41bm49W4YIL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/51o2dP23fhL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/514Ad2QcCSL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/414UJYRQIYL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/51RtrKHpjGL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/418lPg2DmiL._SX38_SY50_CR,0,0,38,50_.jpg'],
+ 'in_stock': True,
+ 'marketplace_slug': 'amazon_in',
+ 'mrp': Decimal('1799900'),
+ 'offer_details': [],
+ 'price': Decimal('1549900.00'),
+ 'rating': Decimal('4.1'),
+ 'raw_html_path': None,
+ 'review_count': None,
+ 'seller_name': 'Darshita Etel',
+ 'seller_rating': None,
+ 'specs': {},
+ 'title': 'Samsung Galaxy M17 5G Mobile (Sapphire Black, 6GB RAM, 128GB '
+          'Storage) | 50MP OIS Triple Camera | Gorilla Glass Victus | IP54 | 6 '
+          'Gen OS Upgrades | AI | Gemini Live | Lag-Free Gaming | Without '
+          'Charger',
+ 'url': 'https://www.amazon.in/dp/B0FN7WCV5Y'}
+Crawled (200) <GET https://www.amazon.in/iQOO-Ultramarine-Dimensity-Military-Grade-Durability/dp/B0F2T5S162/ref=sr_1_24?dib=eyJ2IjoiMSJ9.6LE4tDO75u5iiqVPn7uMYg2D5N-MwSotBMScit5NxvMWQxL_WNUYfVP_ZHPpcDkLXqczN-zxAjguVm5Y1-qFcBQu3eNeiTItDf3z4a3oFJGJyWExr19y69DhqN0dggaZshAEAYzWlAljsQoHe0rvmjQdXHb9SjdajCefP4fR6TGeYzK52O1yUFJ7ZkfiDr77gdjps7SV9OO8N6d-g561j9yeeQvfV-FLYd82dN8mEHCf4trTNKApTyPHn5hMEDWdukTU2TS_6uqx7eVoPjPYXcmpXK12uE2KXq1PbckEbnI.kzKcOKLGptJXEaubVgig3DzeY0AexWq2vBCh8iqVvPs&dib_tag=se&keywords=smartphones&qid=1772326692&s=electronics&sr=1-24> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+No title found for ASIN B0F2T5S162
+Retrying <GET https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=3&qid=1772326695&xpid=AVJkJbgs5au3F&ref=sr_pg_2> (failed 1 times): 503 Service Unavailable
+Crawled (200) <GET https://www.amazon.in/Motorola-G06-Tapestry-64GB-Storage/dp/B0FVWCT477/ref=sr_1_52?dib=eyJ2IjoiMSJ9.ujP8vWuf1wfITNTx8l7S27_dQwjJEqqCuy8QM2VFUn32LyANK-eWfmMB7meXxdLGjqdsmRkBhKGP_hHuCZ8x-a2N-AYbbnnf3k3eKu3XOw9KXpgY2ToGqKWz2g53uIJQFeCEN1u44SBARnkeRSxRm-uVNA13scvngn5TUwQj5Qkfu5t5L62xHmqo__aFemAQQyaVc4SUkqwfbaUOlscbYBaHdN28s2sXnpwO9Fc2whi7E_L-iDjaup3k1cAbdBWKWhWaQckalFAqboZwa0ji16QfEk8ph6Pq8mLMC1tfcQo.6BI5nA1aBmYjcnsBYq0ZCL5RrpiDsFtgjPIF0twiT1Y&dib_tag=se&keywords=smartphones&qid=1772326695&s=electronics&sr=1-52&xpid=AVJkJbgs5au3F> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326692&xpid=AVJkJbgs5au3F&ref=sr_pg_1) ['playwright']     
+No title found for ASIN B0FVWCT477
+Crawled (200) <GET https://www.amazon.in/realme-Long-Lasting-Resistance-Military-Grade-Durability/dp/B0F9TT7Z5Q/ref=sr_1_51?dib=eyJ2IjoiMSJ9.ujP8vWuf1wfITNTx8l7S27_dQwjJEqqCuy8QM2VFUn32LyANK-eWfmMB7meXxdLGjqdsmRkBhKGP_hHuCZ8x-a2N-AYbbnnf3k3eKu3XOw9KXpgY2ToGqKWz2g53uIJQFeCEN1u44SBARnkeRSxRm-uVNA13scvngn5TUwQj5Qkfu5t5L62xHmqo__aFemAQQyaVc4SUkqwfbaUOlscbYBaHdN28s2sXnpwO9Fc2whi7E_L-iDjaup3k1cAbdBWKWhWaQckalFAqboZwa0ji16QfEk8ph6Pq8mLMC1tfcQo.6BI5nA1aBmYjcnsBYq0ZCL5RrpiDsFtgjPIF0twiT1Y&dib_tag=se&keywords=smartphones&qid=1772326695&s=electronics&sr=1-51&xpid=AVJkJbgs5au3F> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326692&xpid=AVJkJbgs5au3F&ref=sr_pg_1) ['playwright']
+No title found for ASIN B0F9TT7Z5Q
+Crawled (200) <GET https://www.amazon.in/Lava-Crystal-Storage-Fingerprint-Phone-Cover/dp/B0FP59YVRG/ref=sr_1_50?dib=eyJ2IjoiMSJ9.ujP8vWuf1wfITNTx8l7S27_dQwjJEqqCuy8QM2VFUn32LyANK-eWfmMB7meXxdLGjqdsmRkBhKGP_hHuCZ8x-a2N-AYbbnnf3k3eKu3XOw9KXpgY2ToGqKWz2g53uIJQFeCEN1u44SBARnkeRSxRm-uVNA13scvngn5TUwQj5Qkfu5t5L62xHmqo__aFemAQQyaVc4SUkqwfbaUOlscbYBaHdN28s2sXnpwO9Fc2whi7E_L-iDjaup3k1cAbdBWKWhWaQckalFAqboZwa0ji16QfEk8ph6Pq8mLMC1tfcQo.6BI5nA1aBmYjcnsBYq0ZCL5RrpiDsFtgjPIF0twiT1Y&dib_tag=se&keywords=smartphones&qid=1772326695&s=electronics&sr=1-50&xpid=AVJkJbgs5au3F> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326692&xpid=AVJkJbgs5au3F&ref=sr_pg_1) ['playwright']
+No title found for ASIN B0FP59YVRG
+Crawled (200) <GET https://www.amazon.in/Samsung-Slimmest-Enhanced-Nightography-Processor/dp/B0F43WXC8K/ref=sr_1_49?dib=eyJ2IjoiMSJ9.ujP8vWuf1wfITNTx8l7S27_dQwjJEqqCuy8QM2VFUn32LyANK-eWfmMB7meXxdLGjqdsmRkBhKGP_hHuCZ8x-a2N-AYbbnnf3k3eKu3XOw9KXpgY2ToGqKWz2g53uIJQFeCEN1u44SBARnkeRSxRm-uVNA13scvngn5TUwQj5Qkfu5t5L62xHmqo__aFemAQQyaVc4SUkqwfbaUOlscbYBaHdN28s2sXnpwO9Fc2whi7E_L-iDjaup3k1cAbdBWKWhWaQckalFAqboZwa0ji16QfEk8ph6Pq8mLMC1tfcQo.6BI5nA1aBmYjcnsBYq0ZCL5RrpiDsFtgjPIF0twiT1Y&dib_tag=se&keywords=smartphones&qid=1772326695&s=electronics&sr=1-49&xpid=AVJkJbgs5au3F> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326692&xpid=AVJkJbgs5au3F&ref=sr_pg_1) ['playwright']
+No title found for ASIN B0F43WXC8K
+Crawled (200) <GET https://www.amazon.in/Mobile-Phone-T4x-Marine-Blue_128G/dp/B0F194NC2H/ref=sr_1_48?dib=eyJ2IjoiMSJ9.ujP8vWuf1wfITNTx8l7S27_dQwjJEqqCuy8QM2VFUn32LyANK-eWfmMB7meXxdLGjqdsmRkBhKGP_hHuCZ8x-a2N-AYbbnnf3k3eKu3XOw9KXpgY2ToGqKWz2g53uIJQFeCEN1u44SBARnkeRSxRm-uVNA13scvngn5TUwQj5Qkfu5t5L62xHmqo__aFemAQQyaVc4SUkqwfbaUOlscbYBaHdN28s2sXnpwO9Fc2whi7E_L-iDjaup3k1cAbdBWKWhWaQckalFAqboZwa0ji16QfEk8ph6Pq8mLMC1tfcQo.6BI5nA1aBmYjcnsBYq0ZCL5RrpiDsFtgjPIF0twiT1Y&dib_tag=se&keywords=smartphones&qid=1772326695&s=electronics&sr=1-48&xpid=AVJkJbgs5au3F> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326692&xpid=AVJkJbgs5au3F&ref=sr_pg_1) ['playwright']      
+No title found for ASIN B0F194NC2H
+Crawled (200) <GET https://www.amazon.in/Oppo-K13-5G-Prism-Storage/dp/B0F8W2D943/ref=sr_1_46?dib=eyJ2IjoiMSJ9.ujP8vWuf1wfITNTx8l7S27_dQwjJEqqCuy8QM2VFUn32LyANK-eWfmMB7meXxdLGjqdsmRkBhKGP_hHuCZ8x-a2N-AYbbnnf3k3eKu3XOw9KXpgY2ToGqKWz2g53uIJQFeCEN1u44SBARnkeRSxRm-uVNA13scvngn5TUwQj5Qkfu5t5L62xHmqo__aFemAQQyaVc4SUkqwfbaUOlscbYBaHdN28s2sXnpwO9Fc2whi7E_L-iDjaup3k1cAbdBWKWhWaQckalFAqboZwa0ji16QfEk8ph6Pq8mLMC1tfcQo.6BI5nA1aBmYjcnsBYq0ZCL5RrpiDsFtgjPIF0twiT1Y&dib_tag=se&keywords=smartphones&qid=1772326695&s=electronics&sr=1-46&xpid=AVJkJbgs5au3F> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326692&xpid=AVJkJbgs5au3F&ref=sr_pg_1) ['playwright']
+No title found for ASIN B0F8W2D943
+Crawled (200) <GET https://www.amazon.in/Redmi-Segments-7000mAhA-Snapdragon-Charging/dp/B0FJFVBSF4/ref=sr_1_47?dib=eyJ2IjoiMSJ9.ujP8vWuf1wfITNTx8l7S27_dQwjJEqqCuy8QM2VFUn32LyANK-eWfmMB7meXxdLGjqdsmRkBhKGP_hHuCZ8x-a2N-AYbbnnf3k3eKu3XOw9KXpgY2ToGqKWz2g53uIJQFeCEN1u44SBARnkeRSxRm-uVNA13scvngn5TUwQj5Qkfu5t5L62xHmqo__aFemAQQyaVc4SUkqwfbaUOlscbYBaHdN28s2sXnpwO9Fc2whi7E_L-iDjaup3k1cAbdBWKWhWaQckalFAqboZwa0ji16QfEk8ph6Pq8mLMC1tfcQo.6BI5nA1aBmYjcnsBYq0ZCL5RrpiDsFtgjPIF0twiT1Y&dib_tag=se&keywords=smartphones&qid=1772326695&s=electronics&sr=1-47&xpid=AVJkJbgs5au3F> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772326692&xpid=AVJkJbgs5au3F&ref=sr_pg_1) ['playwright']
+Matched 'REDMI 15 5G Frosted White 8GB + 256GB | Segment's Largest 70' → product redmi-15-5g-frosted-white-8gb-128gb-segm (confidence=0.95, method=brand_model_variant)
+Created listing: B0FJFVBSF4 on amazon_in
+Scraped from <200 https://www.amazon.in/Redmi-Segments-7000mAhA-Snapdragon-Charging/dp/B0FJFVBSF4/ref=sr_1_47?dib=eyJ2IjoiMSJ9.ujP8vWuf1wfITNTx8l7S27_dQwjJEqqCuy8QM2VFUn32LyANK-eWfmMB7meXxdLGjqdsmRkBhKGP_hHuCZ8x-a2N-AYbbnnf3k3eKu3XOw9KXpgY2ToGqKWz2g53uIJQFeCEN1u44SBARnkeRSxRm-uVNA13scvngn5TUwQj5Qkfu5t5L62xHmqo__aFemAQQyaVc4SUkqwfbaUOlscbYBaHdN28s2sXnpwO9Fc2whi7E_L-iDjaup3k1cAbdBWKWhWaQckalFAqboZwa0ji16QfEk8ph6Pq8mLMC1tfcQo.6BI5nA1aBmYjcnsBYq0ZCL5RrpiDsFtgjPIF0twiT1Y&dib_tag=se&keywords=smartphones&qid=1772326695&s=electronics&sr=1-47&xpid=AVJkJbgs5au3F&th=1>
+{'about_bullets': ['Massive 7000mAh Battery',
+                   '33W Charging, 18W Reverse Charging',
+                   'Powerful Qualcomm Snapdragon 6s Gen 3 Processor',
+                   '17.53cm(6.9) FHD+(1080x2400) Display with up to 144Hz '
+                   'Refresh Rate',
+                   'Aerospace-grade metal camera deco with 50MP AI Dual '
+                   'Camera'],
+ 'brand': 'Redmi',
+ 'category_slug': 'smartphones',
+ 'external_id': 'B0FJFVBSF4',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/71v4+LA3M6L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41-iXcIEcZL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/51hu7idp0fL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/41ZPUWQlfvL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/5138jIsoOgL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/41xkbBUMbLL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/41izgJ1OnOL._SX38_SY50_CR,0,0,38,50_.jpg'],
+ 'in_stock': True,
+ 'marketplace_slug': 'amazon_in',
+ 'mrp': Decimal('1999900'),
+ 'offer_details': [],
+ 'price': Decimal('1849900.00'),
+ 'rating': Decimal('4.1'),
+ 'raw_html_path': None,
+ 'review_count': None,
+ 'seller_name': 'Darshita Mobiles',
+ 'seller_rating': None,
+ 'specs': {},
+ 'title': "REDMI 15 5G Frosted White 8GB + 256GB | Segment's Largest 7000mAhA "
+          "Battery | Segment's Largest Display 17.53cm(6.9) Up to 144Hz | "
+          'Snapdragon 6s Gen 3 | 18W Reverse Charging | 50MP AI Dual Camera',
+ 'url': 'https://www.amazon.in/dp/B0FJFVBSF4'}
+Crawled (200) <GET https://www.amazon.in/realme-Segments-Dimensity-HyperGlow-Waterproof/dp/B0F1D9LCK3/ref=sr_1_45?dib=eyJ2IjoiMSJ9.ujP8vWuf1w
+
+
+Output-
+
+PS C:\Users\rames\Downloads\whydud\platform\whydud\backend> python -m apps.scraping.runner amazon_in --urls "https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031" --max-pages 20
+Scrapy 2.14.1 started (bot: whydud_scraper)
+2026-03-01 06:32:25 [scrapy.utils.log] INFO: Scrapy 2.14.1 started (bot: whydud_scraper)
+Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+2026-03-01 06:32:25 [scrapy.utils.log] INFO: Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+Using CrawlerProcess
+Enabled addons:
+[]
+2026-03-01 06:32:25 [scrapy.addons] INFO: Enabled addons:
+[]
+Using selector: SelectSelector
+Using reactor: twisted.internet.asyncioreactor.AsyncioSelectorReactor
+Using asyncio event loop: asyncio.windows_events._WindowsSelectorEventLoop
+Telnet Password: 430312e7fc5a68a7
+2026-03-01 06:32:25 [scrapy.extensions.telnet] INFO: Telnet Password: 430312e7fc5a68a7
+Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats']
+2026-03-01 06:32:25 [scrapy.middleware] INFO: Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats']
+Overridden settings:
+{'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS': 4,
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 2,
+ 'DOWNLOAD_TIMEOUT': 30,
+ 'LOG_LEVEL': 'INFO',
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'RETRY_TIMES': 3,
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+2026-03-01 06:32:25 [scrapy.crawler] INFO: Overridden settings:
+{'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS': 4,
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 2,
+ 'DOWNLOAD_TIMEOUT': 30,
+ 'LOG_LEVEL': 'INFO',
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'RETRY_TIMES': 3,
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+Using proactor: IocpProactor
+Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>
+2026-03-01 06:32:25 [scrapy-playwright] INFO: Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>     
+Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+2026-03-01 06:32:25 [scrapy.middleware] INFO: Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+2026-03-01 06:32:25 [scrapy.middleware] INFO: Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.ReviewValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.ReviewPersistencePipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline']
+2026-03-01 06:32:25 [scrapy.middleware] INFO: Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.ReviewValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.ReviewPersistencePipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline']
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewPersistencePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewPersistencePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+Spider opened
+2026-03-01 06:32:25 [scrapy.core.engine] INFO: Spider opened
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+2026-03-01 06:32:25 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+ProductPipeline: Django initialised
+Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)
+Telnet console listening on 127.0.0.1:6023
+Starting download handler
+Starting download handler
+Starting category (20 pages): https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031
+Crawled (200) <GET https://www.amazon.in/robots.txt> (referer: None)
+Launching browser chromium
+Browser chromium launched
+Retrying <GET https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031> (failed 1 times): 503 Service Unavailable
+Retrying <GET https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031> (failed 2 times): 503 Service Unavailable
+Retrying <GET https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031> (failed 3 times): 503 Service Unavailable
+Gave up retrying <GET https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031> (failed 4 times): 503 Service Unavailable
+Crawled (503) <GET https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031> (referer: None) ['playwright']
+Request failed: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031 — Ignoring non-200 response
+Closing spider (finished)
+Dumping Scrapy stats:
+{'downloader/request_bytes': 1635,
+ 'downloader/request_count': 5,
+ 'downloader/request_method_count/GET': 5,
+ 'downloader/response_bytes': 15951,
+ 'downloader/response_count': 5,
+ 'downloader/response_status_count/200': 1,
+ 'downloader/response_status_count/503': 4,
+ 'elapsed_time_seconds': 10.079559,
+ 'finish_reason': 'finished',
+ 'finish_time': datetime.datetime(2026, 3, 1, 1, 2, 35, 473048, tzinfo=datetime.timezone.utc),
+ 'items_per_minute': 0.0,
+ 'log_count/ERROR': 2,
+ 'log_count/INFO': 8,
+ 'playwright/browser_count': 1,
+ 'playwright/context_count': 1,
+ 'playwright/context_count/max_concurrent': 1,
+ 'playwright/context_count/persistent/False': 1,
+ 'playwright/context_count/remote/False': 1,
+ 'playwright/page_count': 4,
+ 'playwright/page_count/closed': 4,
+ 'playwright/page_count/max_concurrent': 1,
+ 'playwright/request_count': 12,
+ 'playwright/request_count/method/GET': 12,
+ 'playwright/request_count/navigation': 4,
+ 'playwright/request_count/resource_type/document': 4,
+ 'playwright/request_count/resource_type/image': 8,
+ 'playwright/response_count': 12,
+ 'playwright/response_count/method/GET': 12,
+ 'playwright/response_count/resource_type/document': 4,
+ 'playwright/response_count/resource_type/image': 8,
+ 'response_received_count': 2,
+ 'responses_per_minute': 12.0,
+ 'retry/count': 3,
+ 'retry/max_reached': 1,
+ 'retry/reason_count/503 Service Unavailable': 3,
+ 'robotstxt/request_count': 1,
+ 'robotstxt/response_count': 1,
+ 'robotstxt/response_status_count/200': 1,
+ 'scheduler/dequeued': 4,
+ 'scheduler/dequeued/memory': 4,
+ 'scheduler/enqueued': 4,
+ 'scheduler/enqueued/memory': 4,
+ 'start_time': datetime.datetime(2026, 3, 1, 1, 2, 25, 393489, tzinfo=datetime.timezone.utc)}
+Spider closed (finished)
+Closing download handler
+Closing download handler
+Closing browser
+Task was destroyed but it is pending!
+task: <Task pending name='Task-1' coro=<_ThreadedLoopAdapter._process_queue() running at C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy_playwright\_utils.py:153> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_chain_future.<locals>._call_set_state() at C:\Python314\Lib\asyncio\futures.py:400]>
+Exception ignored while closing generator <coroutine object _ThreadedLoopAdapter._process_queue at 0x000002387C2CF760>:
+Traceback (most recent call last):
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy_playwright\_utils.py", line 153, in _process_queue
+  File "C:\Python314\Lib\asyncio\queues.py", line 188, in get
+  File "C:\Python314\Lib\asyncio\base_events.py", line 827, in call_soon
+  File "C:\Python314\Lib\asyncio\base_events.py", line 550, in _check_closed
+RuntimeError: Event loop is closed
+Task was destroyed but it is pending!
+task: <Task pending name='Task-217' coro=<Queue.join() running at C:\Python314\Lib\asyncio\queues.py:239> cb=[_chain_future.<locals>._call_set_state() at C:\Python314\Lib\asyncio\futures.py:400]>
+<sys>:0: RuntimeWarning: coroutine 'Queue.join' was never awaited
+PS C:\Users\rames\Downloads\whydud\platform\whydud\backend> 
+
+Created listing: B0F9TSLK2L on amazon_in
+Scraped from <200 https://www.amazon.in/dp/B0F9TSLK2L?th=1>
+{'about_bullets': ['Massive 6000mAh Battery: Power through your day with a '
+                   'long-lasting battery designed for extended performance.',
+                   'MediaTek Dimensity 6300 5G: Enjoy fast and reliable 5G '
+                   'connectivity with a power-efficient processor.',
+                   'Ultra-Slim 7.94mm Design: Sleek and stylish profile that’s '
+                   'comfortable to hold and easy to carry.',
+                   'Smart AI Assist: Experience intelligent features that '
+                   'enhance your daily smartphone usage.',
+                   'IP64 Water & Dust Resistance: Built to endure everyday '
+                   'splashes and dust with certified durability.',
+                   'Get flagship-grade clarity and fluidity with a 120Hz '
+                   'refresh rate and immersive punch-hole screen.',
+                   'Camera Specification: 32MP rear + Flicker lens, 8MP front '
+                   'camera.'],
+ 'brand': 'Realme',
+ 'category_slug': 'smartphones',
+ 'external_id': 'B0F9TSLK2L',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/71R6-3GIe2L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41+mu9LE1LL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/51iWGc6cJnL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/41OG5bQd4NL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/41TzYpkh9jL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/51fpBq8wzDL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/51ghvWvR1LL._SX38_SY50_CR,0,0,38,50_.jpg'],
+ 'in_stock': True,
+ 'marketplace_slug': 'amazon_in',
+ 'mrp': Decimal('1399900'),
+ 'offer_details': [],
+ 'price': Decimal('1199900.00'),
+ 'rating': Decimal('4.2'),
+ 'raw_html_path': None,
+ 'review_count': None,
+ 'seller_name': 'Darshita Etel',
+ 'seller_rating': None,
+ 'specs': {},
+ 'title': 'realme NARZO 80 Lite 5G (Onyx Black, 4GB+128GB) | 6000mAh '
+          'Long-Lasting Battery | MediaTek Dimensity 6300 5G | AI Assist | '
+          'IP64 Rated Water & Dust Resistance | Military-Grade Durability',
+ 'url': 'https://www.amazon.in/dp/B0F9TSLK2L'}
+Crawled (200) <GET https://www.amazon.in/dp/B0DLW44CGS> (referer: https://www.google.com/) ['playwright']
+CAPTCHA persisted after 2 retries: https://www.amazon.in/dp/B0DLW44CGS
+Crawled (200) <GET https://www.amazon.in/dp/B0F3XB7T5Q> (referer: https://www.google.com/) ['playwright']
+CAPTCHA detected for ASIN B0F3XB7T5Q, retry #2
+Crawled 51 pages (at 9 pages/min), scraped 18 items (at 3 items/min)
+Gave up retrying <GET https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&xpid=r8b-sZssfgihx&qid=1772329435&ref=sr_pg_1> (failed 4 times): 503 Service Unavailable
+Crawled (503) <GET https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&xpid=r8b-sZssfgihx&qid=1772329435&ref=sr_pg_1> (referer: https://www.google.co.in/) ['playwright']
+Request failed: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&xpid=r8b-sZssfgihx&qid=1772329435&ref=sr_pg_1 — Ignoring non-200 response
+Crawled (200) <GET https://www.amazon.in/dp/B0F3XB7T5Q> (referer: https://www.google.co.in/) ['playwright']
+CAPTCHA persisted after 2 retries: https://www.amazon.in/dp/B0F3XB7T5Q
+Closing spider (finished)
+MeilisearchIndexPipeline: syncing 11 products from amazon_in
+Dumping Scrapy stats:
+{'downloader/request_bytes': 34322,
+ 'downloader/request_count': 56,
+ 'downloader/request_method_count/GET': 56,
+ 'downloader/response_bytes': 37872500,
+ 'downloader/response_count': 56,
+ 'downloader/response_status_count/200': 51,
+ 'downloader/response_status_count/202': 1,
+ 'downloader/response_status_count/503': 4,
+ 'elapsed_time_seconds': 371.858897,
+ 'finish_reason': 'finished',
+ 'finish_time': datetime.datetime(2026, 3, 1, 1, 49, 52, 778693, tzinfo=datetime.timezone.utc),
+ 'item_scraped_count': 18,
+ 'items_per_minute': 2.911051212938005,
+ 'log_count/ERROR': 2,
+ 'log_count/INFO': 37,
+ 'log_count/WARNING': 31,
+ 'playwright/browser_count': 1,
+ 'playwright/context_count': 1,
+ 'playwright/context_count/max_concurrent': 1,
+ 'playwright/context_count/persistent/False': 1,
+ 'playwright/context_count/remote/False': 1,
+ 'playwright/page_count': 55,
+ 'playwright/page_count/closed': 55,
+ 'playwright/page_count/max_concurrent': 1,
+ 'playwright/request_count': 3491,
+ 'playwright/request_count/method/GET': 3324,
+ 'playwright/request_count/method/HEAD': 22,
+ 'playwright/request_count/method/POST': 145,
+ 'playwright/request_count/navigation': 95,
+ 'playwright/request_count/resource_type/document': 95,
+ 'playwright/request_count/resource_type/fetch': 12,
+ 'playwright/request_count/resource_type/font': 95,
+ 'playwright/request_count/resource_type/image': 1261,
+ 'playwright/request_count/resource_type/media': 3,
+ 'playwright/request_count/resource_type/other': 1,
+ 'playwright/request_count/resource_type/ping': 69,
+ 'playwright/request_count/resource_type/script': 1018,
+ 'playwright/request_count/resource_type/stylesheet': 674,
+ 'playwright/request_count/resource_type/xhr': 263,
+ 'playwright/response_count': 3417,
+ 'playwright/response_count/method/GET': 3269,
+ 'playwright/response_count/method/HEAD': 22,
+ 'playwright/response_count/method/POST': 126,
+ 'playwright/response_count/resource_type/document': 95,
+ 'playwright/response_count/resource_type/fetch': 11,
+ 'playwright/response_count/resource_type/font': 95,
+ 'playwright/response_count/resource_type/image': 1207,
+ 'playwright/response_count/resource_type/media': 3,
+ 'playwright/response_count/resource_type/other': 1,
+ 'playwright/response_count/resource_type/ping': 57,
+ 'playwright/response_count/resource_type/script': 1018,
+ 'playwright/response_count/resource_type/stylesheet': 674,
+ 'playwright/response_count/resource_type/xhr': 256,
+ 'request_depth_max': 3,
+ 'response_received_count': 53,
+ 'responses_per_minute': 8.571428571428571,
+ 'retry/count': 3,
+ 'retry/max_reached': 1,
+ 'retry/reason_count/503 Service Unavailable': 3,
+ 'robotstxt/request_count': 1,
+ 'robotstxt/response_count': 1,
+ 'robotstxt/response_status_count/200': 1,
+ 'scheduler/dequeued': 55,
+ 'scheduler/dequeued/memory': 55,
+ 'scheduler/enqueued': 55,
+ 'scheduler/enqueued/memory': 55,
+ 'start_time': datetime.datetime(2026, 3, 1, 1, 43, 40, 919796, tzinfo=datetime.timezone.utc)}
+Spider closed (finished)
+Closing download handler
+Closing download handler
+Closing browser
+Task was destroyed but it is pending!
+task: <Task pending name='Task-1' coro=<_ThreadedLoopAdapter._process_queue() running at C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy_playwright\_utils.py:153> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_chain_future.<locals>._call_set_state() at C:\Python314\Lib\asyncio\futures.py:400]>
+Exception ignored while closing generator <coroutine object _ThreadedLoopAdapter._process_queue at 0x0000020C62BF7760>:
+Traceback (most recent call last):
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy_playwright\_utils.py", line 153, in _process_queue
+  File "C:\Python314\Lib\asyncio\queues.py", line 188, in get
+  File "C:\Python314\Lib\asyncio\base_events.py", line 827, in call_soon
+  File "C:\Python314\Lib\asyncio\base_events.py", line 550, in _check_closed
+RuntimeError: Event loop is closed
+Task was destroyed but it is pending!
+task: <Task pending name='Task-18747' coro=<Queue.join() running at C:\Python314\Lib\asyncio\queues.py:239> cb=[_chain_future.<locals>._call_set_state() at C:\Python314\Lib\asyncio\futures.py:400]>
+<sys>:0: RuntimeWarning: coroutine 'Queue.join' was never awaited

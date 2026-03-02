@@ -1,0 +1,698 @@
+C:\Users\rames\Downloads\whydud\platform\whydud\backend> python manage.py scrape_test --test-proxies                      
+ 
+=== Whydud Scraping Health Check ===
+
+[1] Proxy Connectivity
+  Testing 1 proxies...
+  proxy_0: OK — IP: 49.156.100.238 (3.6s)
+
+[2] Amazon Listing (HTTP)
+  Amazon listing (HTTP): HTTP 200 | 1349KB | 2.0s | title=NO | json-ld=no | captcha=clean
+
+[3] Amazon Product (Playwright)
+  Amazon product (Playwright): HTTP 404 | 2KB | 6.2s | title=yes | json-ld=no | captcha=clean
+
+[4] Flipkart Listing (Playwright)
+  Flipkart listing (Playwright): HTTP 200 | 570KB | 3.8s | title=NO | json-ld=no | captcha=clean
+
+[5] Flipkart Product (HTTP)
+  Flipkart product (HTTP): FAILED — HTTPSConnectionPool(host='www.flipkart.com', port=443): Read timed out. (read timeout=15) (15.4s)
+
+[6] Database
+  Marketplaces: 13, Products: 885, Listings: 1202, Reviews: 0
+
+[7] Meilisearch
+  Meilisearch: OK — status=available
+
+=== Done ===
+PS C:\Users\rames\Downloads\whydud\platform\whydud\backend> python -m apps.scraping.runner amazon_in --max-pages 1 --save-html
+Scrapy 2.14.1 started (bot: whydud_scraper)
+2026-03-01 19:35:53 [scrapy.utils.log] INFO: Scrapy 2.14.1 started (bot: whydud_scraper)
+Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+2026-03-01 19:35:53 [scrapy.utils.log] INFO: Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+Using CrawlerProcess
+Enabled addons:
+[]
+2026-03-01 19:35:53 [scrapy.addons] INFO: Enabled addons:
+[]
+Using selector: SelectSelector
+Using reactor: twisted.internet.asyncioreactor.AsyncioSelectorReactor
+Using asyncio event loop: asyncio.windows_events._WindowsSelectorEventLoop
+Telnet Password: a85742f82a4281f8
+2026-03-01 19:35:53 [scrapy.extensions.telnet] INFO: Telnet Password: a85742f82a4281f8
+Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats',
+ 'scrapy.extensions.throttle.AutoThrottle']
+2026-03-01 19:35:53 [scrapy.middleware] INFO: Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats',
+ 'scrapy.extensions.throttle.AutoThrottle']
+Overridden settings:
+{'AUTOTHROTTLE_ENABLED': True,
+ 'AUTOTHROTTLE_MAX_DELAY': 30,
+ 'AUTOTHROTTLE_START_DELAY': 3,
+ 'AUTOTHROTTLE_TARGET_CONCURRENCY': 1.5,
+ 'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS': 4,
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 3,
+ 'DOWNLOAD_MAXSIZE': 10485760,
+ 'DOWNLOAD_TIMEOUT': 45,
+ 'LOG_LEVEL': 'INFO',
+ 'MEMUSAGE_LIMIT_MB': 2048,
+ 'MEMUSAGE_WARNING_MB': 1536,
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+2026-03-01 19:35:53 [scrapy.crawler] INFO: Overridden settings:
+{'AUTOTHROTTLE_ENABLED': True,
+ 'AUTOTHROTTLE_MAX_DELAY': 30,
+ 'AUTOTHROTTLE_START_DELAY': 3,
+ 'AUTOTHROTTLE_TARGET_CONCURRENCY': 1.5,
+ 'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS': 4,
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 3,
+ 'DOWNLOAD_MAXSIZE': 10485760,
+ 'DOWNLOAD_TIMEOUT': 45,
+ 'LOG_LEVEL': 'INFO',
+ 'MEMUSAGE_LIMIT_MB': 2048,
+ 'MEMUSAGE_WARNING_MB': 1536,
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+Using proactor: IocpProactor
+Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>
+2026-03-01 19:35:53 [scrapy-playwright] INFO: Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>
+ProxyPool loaded 1 proxies from env
+2026-03-01 19:35:53 [apps.scraping.middlewares] INFO: ProxyPool loaded 1 proxies from env
+PlaywrightProxyMiddleware: 1 proxies loaded, 1 active contexts (max 3)
+2026-03-01 19:35:53 [apps.scraping.middlewares] INFO: PlaywrightProxyMiddleware: 1 proxies loaded, 1 active contexts (max 3) 
+Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'apps.scraping.middlewares.BackoffRetryMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'apps.scraping.middlewares.PlaywrightProxyMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+2026-03-01 19:35:53 [scrapy.middleware] INFO: Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'apps.scraping.middlewares.BackoffRetryMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'apps.scraping.middlewares.PlaywrightProxyMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:47: ScrapyDeprecationWarning: BackoffRetryMiddleware.process_response() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_response)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:47: ScrapyDeprecationWarning: BackoffRetryMiddleware.process_response() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_response)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:50: ScrapyDeprecationWarning: BackoffRetryMiddleware.process_exception() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_exception)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:50: ScrapyDeprecationWarning: BackoffRetryMiddleware.process_exception() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_exception)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:44: ScrapyDeprecationWarning: PlaywrightProxyMiddleware.process_request() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_request)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:44: ScrapyDeprecationWarning: PlaywrightProxyMiddleware.process_request() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_request)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:47: ScrapyDeprecationWarning: PlaywrightProxyMiddleware.process_response() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_response)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:47: ScrapyDeprecationWarning: PlaywrightProxyMiddleware.process_response() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_response)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:50: ScrapyDeprecationWarning: PlaywrightProxyMiddleware.process_exception() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_exception)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\downloader\middleware.py:50: ScrapyDeprecationWarning: PlaywrightProxyMiddleware.process_exception() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(mw.process_exception)
+
+Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+2026-03-01 19:35:53 [scrapy.middleware] INFO: Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.ReviewValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.ReviewPersistencePipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline',
+ 'apps.scraping.pipelines.SpiderStatsUpdatePipeline']
+2026-03-01 19:35:53 [scrapy.middleware] INFO: Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.ReviewValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.ReviewPersistencePipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline',
+ 'apps.scraping.pipelines.SpiderStatsUpdatePipeline']
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewPersistencePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ReviewPersistencePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: SpiderStatsUpdatePipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: SpiderStatsUpdatePipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: SpiderStatsUpdatePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: SpiderStatsUpdatePipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+Spider opened
+2026-03-01 19:35:53 [scrapy.core.engine] INFO: Spider opened
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+2026-03-01 19:35:53 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+ProductPipeline: Django initialised
+Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)
+Telnet console listening on 127.0.0.1:6023
+Starting download handler
+Starting download handler
+Launching 1 startup context(s)
+Launching 1 startup context(s)
+Launching browser chromium
+Launching browser chromium
+Browser chromium launched
+Browser chromium launched
+Startup context(s) launched
+Startup context(s) launched
+Quick mode: using first 10 categories (max_pages=1)
+Queuing category (1 pages): https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031
+Queuing category (1 pages): https://www.amazon.in/s?k=computer+mouse&rh=n%3A1375433031
+Queuing category (1 pages): https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031
+Queuing category (1 pages): https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375433031
+Queuing category (1 pages): https://www.amazon.in/s?k=tablets&rh=n%3A1375458031
+Queuing category (1 pages): https://www.amazon.in/s?k=phone+cases+covers&rh=n%3A4363159031
+Queuing category (1 pages): https://www.amazon.in/s?k=laptops&rh=n%3A1375424031
+Queuing category (1 pages): https://www.amazon.in/s?k=monitors&rh=n%3A1375425031
+Queuing category (1 pages): https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031
+Queuing category (1 pages): https://www.amazon.in/s?k=power+banks&rh=n%3A6612025031
+Queued 10 categories (plain HTTP)
+C:\Users\rames\Downloads\whydud\platform\whydud\backend\apps\scraping\middlewares.py:595: ScrapyDeprecationWarning: Passing a 'spider' argument to RetryMiddleware.process_response() is deprecated and the argument will be removed in a future Scrapy version.
+  result = super().process_response(request, response, spider)
+
+Crawled (200) <GET https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031> (referer: None)
+Found 22 results on https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031
+Retrying <GET https://www.amazon.in/s?k=computer+mouse&rh=n%3A1375433031> (failed 1 times): 503 Service Unavailable
+Backoff retry #1: 7.9s delay for https://www.amazon.in/s?k=computer+mouse&rh=n%3A1375433031
+Crawled (200) <GET https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031> (referer: None)
+Found 22 results on https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031
+Redirecting (301) to <GET https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375431031> from <GET https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375433031>
+Crawled (200) <GET https://www.amazon.in/s?k=tablets&rh=n%3A1375458031> (referer: None)
+Found 30 results on https://www.amazon.in/s?k=tablets&rh=n%3A1375458031
+Crawled (200) <GET https://www.amazon.in/Samsung-C-Type-Super-Fast-Charger-Adapter/dp/B0FHQK7HJJ/ref=sr_1_20?dib=eyJ2IjoiMSJ9.rAySWQ4V1fd6Vt8mdYUYEtIX8_xlAzX_Aw1pPwtZcW82kFcxbP0X71a7V7hy40fjl1Jw9z0xvDUjPMGV4prtHfYVMp0DGqTLz-SPPDe4rfhGePBCM4Wesy0JlnX3HUvZUGCZ_u1Hi8IEJZkf6ehDSDAGZvMQUymXSpXkIRuKxuVXpkWevlNQcYIsZdonQXbZzr0BXxAfB6-g3XCkXaVHw85cSpojFR3eHVps_3gRIBs.29dOZDb6C3Q544bPS53iZmY8jDR4a85rrSFFO0HdHJA&dib_tag=se&keywords=mobile+chargers&qid=1772373954&sr=8-20> (referer: https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031) ['playwright']
+Created new canonical product: 45w-c-type-super-fast-charger-adapter-compatible-for-samsung-galaxy-s25s25-pluss25-ultras24232221-ultraplusfe-a56note-20s10-5g98m16-safm-series-usb-c-pd-30-charging-adapter (category=Smartphones)
+Created listing: B0FHQK7HJJ on amazon-in
+Scraped from <200 https://www.amazon.in/Samsung-C-Type-Super-Fast-Charger-Adapter/dp/B0FHQK7HJJ/ref=sr_1_20?dib=eyJ2IjoiMSJ9.rAySWQ4V1fd6Vt8mdYUYEtIX8_xlAzX_Aw1pPwtZcW82kFcxbP0X71a7V7hy40fjl1Jw9z0xvDUjPMGV4prtHfYVMp0DGqTLz-SPPDe4rfhGePBCM4Wesy0JlnX3HUvZUGCZ_u1Hi8IEJZkf6ehDSDAGZvMQUymXSpXkIRuKxuVXpkWevlNQcYIsZdonQXbZzr0BXxAfB6-g3XCkXaVHw85cSpojFR3eHVps_3gRIBs.29dOZDb6C3Q544bPS53iZmY8jDR4a85rrSFFO0HdHJA&dib_tag=se&keywords=mobile%2Bchargers&qid=1772373954&sr=8-20&th=1>
+{'about_bullets': ['45W Super Fast Charging: Experience lightning-speed '
+                   'charging with 45W Power Delivery 3.0, ensuring your '
+                   'devices are powered up in minutes, not hours.',
+                   'Broad Device Compatibility: Optimized for Samsung Galaxy '
+                   'S24, S23, S22, S21, S20 (Ultra/Plus/FE), Note 20/10 '
+                   'series, plus other USB-C devices.',
+                   'Power Delivery 3.0 Certified: Guarantees stable, safe, and '
+                   'efficient charging with intelligent power distribution for '
+                   'your smartphones, tablets, and more.',
+                   'Universal USB-C Interface: One charger for all—connect '
+                   'seamlessly to any USB-C enabled phone, tablet, or '
+                   'accessory with high-speed performance.',
+                   'Sleek & Durable Design: Crafted in a premium matte white '
+                   'finish for a clean, modern look that complements your '
+                   'workspace or travel kit.'],
+ 'brand': 'Punnkk',
+ 'breadcrumbs': ['Electronics',
+                 'Mobiles & Accessories',
+                 'Mobile Accessories',
+                 'Chargers',
+                 'Wall Chargers'],
+ 'category_slug': 'smartphones',
+ 'country_of_origin': '\u200eIndia',
+ 'delivery_info': 'Tuesday, 3 March',
+ 'description': 'Experience ultra-fast charging with the 45W Super Fast '
+                'Charger, powered by PD 3.0 technology. Compatible with '
+                'Samsung Galaxy S24/S23/S22/S21/S20 series, Note 20/10, and '
+                'all USB-C devices. Delivers safe, efficient, and intelligent '
+                'power distribution. Featuring a sleek, durable matte white '
+                'design—perfect for home, office, or travel.',
+ 'dimensions': '\u200e7 x 4.6 x 2.6 cm; 150 g',
+ 'external_id': 'B0FHQK7HJJ',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/51C4F+6fGFL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/315moCIqcYL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/215U0Kv1wPL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/21Rcj0ComSL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/31suUXmoLgL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/21au56MbZjL._SX38_SY50_CR,0,0,38,50_.jpg',
+            'https://m.media-amazon.com/images/I/41BPZSdO-5L._SX38_SY50_CR,0,0,38,50_.jpg'],
+ 'in_stock': True,
+ 'manufacturer': '9711711185, Myra Digital India Pvt Ltd',
+ 'marketplace_slug': 'amazon-in',
+ 'model_number': '\u200e45W-PD Black without Cable',
+ 'mrp': Decimal('199900'),
+ 'offer_details': [],
+ 'price': Decimal('59800.00'),
+ 'rating': Decimal('4.1'),
+ 'raw_html_path': 'data\\raw_html\\amazon_B0FHQK7HJJ_20260301_140635.html',
+ 'return_policy': None,
+ 'review_count': None,
+ 'seller_name': 'Cocoblu Retail',
+ 'seller_rating': None,
+ 'specs': {'ASIN': 'B0FHQK7HJJ',
+           'Colour': '\u200eBlack',
+           'Connectivity technologies': '\u200eUSB',
+           'Country of Origin': '\u200eIndia',
+           'Date First Available': '16 July 2025',
+           'Generic Name': 'Mobile Charger',
+           'Item Dimensions LxWxH': '7 x 4.6 x 2.6 Centimeters',
+           'Item Weight': '\u200e150 g',
+           'Item model number': '\u200e45W-PD Black without Cable',
+           'Manufacturer': '9711711185, Myra Digital India Pvt Ltd',
+           'Net Quantity': '1.0 Count',
+           'Other display features': '\u200eWireless',
+           'Packer': 'Punnkk Electronics punnkkelectronics@gmail.com',
+           'Product Dimensions': '\u200e7 x 4.6 x 2.6 cm; 150 g',
+           'Special features': '\u200eFast Charging, Lightweight Design, Short '
+                               'Circuit Protection, Travel',
+           'Whats in the box': '\u200eOnly Adapter'},
+ 'title': '45W C-Type Super-Fast Charger Adapter compatible for Samsung Galaxy '
+          'S25/S25 Plus/S25 Ultra/S24/23/22/21 (Ultra/Plus/FE) A56/Note 20/S10 '
+          '5G/9/8/M16 (S/A/F/M Series) USB C PD 3.0 Charging Adapter',
+ 'url': 'https://www.amazon.in/dp/B0FHQK7HJJ',
+ 'variant_options': [],
+ 'warranty': None,
+ 'weight': '\u200e150 g'}
+Crawled (200) <GET https://www.amazon.in/Portronics-Adapto-Charger-Adapter-Samsung/dp/B09HN3BMD8/ref=sr_1_19_in_f3_0o_fs?dib=eyJ2IjoiMSJ9.rAySWQ4V1fd6Vt8mdYUYEtIX8_xlAzX_Aw1pPwtZcW82kFcxbP0X71a7V7hy40fjl1Jw9z0xvDUjPMGV4prtHfYVMp0DGqTLz-SPPDe4rfhGePBCM4Wesy0JlnX3HUvZUGCZ_u1Hi8IEJZkf6ehDSDAGZvMQUymXSpXkIRuKxuVXpkWevlNQcYIsZdonQXbZzr0BXxAfB6-g3XCkXaVHw85cSpojFR3eHVps_3gRIBs.29dOZDb6C3Q544bPS53iZmY8jDR4a85rrSFFO0HdHJA&dib_tag=se&keywords=mobile+chargers&qid=1772373954&sr=8-19> (referer: https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031) ['playwright']
+Scraped from <200 https://www.amazon.in/Portronics-Adapto-Charger-Adapter-Samsung/dp/B09HN3BMD8/ref=sr_1_19_in_f3_0o_fs?dib=eyJ2IjoiMSJ9.rAySWQ4V1fd6Vt8mdYUYEtIX8_xlAzX_Aw1pPwtZcW82kFcxbP0X71a7V7hy40fjl1Jw9z0xvDUjPMGV4prtHfYVMp0DGqTLz-SPPDe4rfhGePBCM4Wesy0JlnX3HUvZUGCZ_u1Hi8IEJZkf6ehDSDAGZvMQUymXSpXkIRuKxuVXpkWevlNQcYIsZdonQXbZzr0BXxAfB6-g3XCkXaVHw85cSpojFR3eHVps_3gRIBs.29dOZDb6C3Q544bPS53iZmY8jDR4a85rrSFFO0HdHJA&dib_tag=se&keywords=mobile+chargers&qid=1772373954&sr=8-19>
+{'about_bullets': ['【Portronics Adapto 66】2.4A 12w Dual USB Port 5V/2.4A Wall '
+                   'Charger,Comes with 1M Micro USB Cable, USB Wall Charger '
+                   'Adapter for iPhone 11/Xs/XS Max/XR/X/8/7/6/Plus, iPad '
+                   'Pro/Air 2/Mini 3/Mini 4, Samsung S4/S5, and More.',
+                   '【Dual Port USB Wall Charger Adapter】This USB Charger with '
+                   'dual ports allow you to charge 2 devices at the same time '
+                   'with the total output of 2.4A current. Single port allows '
+                   'Max 2.4A current when connecting only one device. Much '
+                   'more convenient and save your time effectively.',
+                   '【Safe Charging】With the intelligent chip inside, dual USB '
+                   "wall charger matches the current as your device's need "
+                   'automatically. Over-current, over-voltage and '
+                   'short-circuit protection also effectively protect your '
+                   'smartphones from damage.',
+                   '【Multi-Protection】 Internal protection mechanisms offers '
+                   'multiple Protection against short-circuit, '
+                   'over-temperature, over-current, over-voltage and more.',
+                   '【Wide Compatibility】Wall charger works for all phones with '
+                   'USB-A Cables - iPhone 12/12 Mini/12 Pro/12 Pro Max/11/ 11 '
+                   'Pro/XR/X/Xs/8/8 Plus/7Plus/7/6/6S/5, iPad Air, iPad mini, '
+                   'iPad Pro, Samsung Galaxy '
+                   'M30s/A30s/A50s/A10s/A10e/M40/A20e/A10/S10+/S10/S10e/S9/S9+/S8/S8+/Note '
+                   '9/8, Google Pixel, HTC, BLU, Xiaomi, LG '
+                   'Q70/K30/K20/K40S/K50S/G7/G6/G5, Blackberry, Nokia, '
+                   'Motorola, Sony, Huawei, and any other USB outlet devices.'],
+ 'brand': 'Portronics',
+ 'breadcrumbs': ['Electronics',
+                 'Mobiles & Accessories',
+                 'Mobile Accessories',
+                 'Chargers',
+                 'Wall Chargers'],
+ 'category_slug': 'smartphones',
+ 'country_of_origin': '\u200eIndia',
+ 'delivery_info': 'Tuesday, 3 March',
+ 'description': '',
+ 'dimensions': '\u200e6.3 x 4.2 x 2.4 cm; 42 g',
+ 'external_id': 'B09HN3BMD8',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/41UhCI6+p7L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/31uxpTfYtCL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41VKG7y1aBL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41yUv5TjJcL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/51KM+W5GAIL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41XvpnQ5A3L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41Qx8mPj2PL._SL1500_.jpg'],
+ 'in_stock': True,
+ 'manufacturer': '\u200ePortronics',
+ 'marketplace_slug': 'amazon-in',
+ 'model_number': '\u200ePOR-1066B',
+ 'mrp': Decimal('49900'),
+ 'offer_details': [],
+ 'price': Decimal('34900.00'),
+ 'rating': Decimal('4.0'),
+ 'raw_html_path': 'data\\raw_html\\amazon_B09HN3BMD8_20260301_140637.html',
+ 'return_policy': None,
+ 'review_count': None,
+ 'seller_name': 'Clicktech Retail Private Ltd',
+ 'seller_rating': None,
+ 'specs': {'ASIN': 'B09HN3BMD8',
+           'Batteries Included': '\u200eNo',
+           'Batteries Required': '\u200eNo',
+           'Brand': '\u200ePortronics',
+           'Compatible Devices': '\u200eCellular Phones, Powerbanks, MP3 '
+                                 'Players, Headphones, Cameras, Tablets',
+           'Connector Type': '\u200eUSB',
+           'Country of Origin': '\u200eIndia',
+           'Date First Available': '19 October 2020',
+           'Generic Name': 'Charging Cable',
+           'Importer': 'Portronics Digital Pvt Ltd, B-76, 1st & 2nd Floor, '
+                       'Wazirpur Industrial Area, New Delhi-110052',
+           'Includes Rechargeable Battery': '\u200eNo',
+           'Item Dimensions LxWxH': '6.3 x 4.2 x 2.4 Centimeters',
+           'Item Weight': '\u200e42 g',
+           'Item model number': '\u200ePOR-1066B',
+           'Manufacturer': '\u200ePortronics',
+           'Material': '\u200ePlastic',
+           'Model': '\u200ePOR-1066B',
+           'Model Name': '\u200eADAPTO 66',
+           'Mounting Hardware': '\u200e1N Adapter, Charging Cable and User '
+                                'Manual',
+           'Net Quantity': '1.00 Count',
+           'Number of Ports': '\u200e2',
+           'Number of items': '\u200e1',
+           'Packer': 'Portronics Digital Pvt Ltd, B-76, 1st & 2nd Floor, '
+                     'Wazirpur Industrial Area, New Delhi-110052',
+           'Power Source': '\u200eCorded Electric',
+           'Product Dimensions': '\u200e6.3 x 4.2 x 2.4 cm; 42 g',
+           'Special Features': '\u200eLightweight Design',
+           'Total USB ports': '\u200e2',
+           'Type of cable or wire': '\u200eUSB',
+           'Wattage': '\u200e12 Watts'},
+ 'title': 'Portronics Adapto 66 2.4A 12w Dual USB Port 5V/2.4A Wall '
+          'Charger,Comes with 1M Micro USB Cable, USB Wall Charger Adapter for '
+          'Smartphone (Black)',
+ 'url': 'https://www.amazon.in/dp/B09HN3BMD8',
+ 'variant_options': [],
+ 'warranty': None,
+ 'weight': '\u200e42 g'}
+Crawled (200) <GET https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375431031> (referer: None)
+Found 24 results on https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375431031
+Crawled 6 pages (at 6 pages/min), scraped 2 items (at 2 items/min)
+Crawled (200) <GET https://www.amazon.in/Enlinea-Ola-S1-Air-Protector/dp/B0C9Q581ZW/ref=sr_1_20?dib=eyJ2IjoiMSJ9.P_9ofdCADphGAvpVY2e1bhUH6HLaFpOHz63Wj_Rz2M2scInSzwz5v3JhrF9KZPkgsbXwJInnhfOqrxIxT2wEuHJB1saUkAizRnaggeIrzAN9jMadebH18fl7cgkmcn0J6UAS8A7QvtUAe2hKWpw_AQWIsZazNq2EadroEuEjiMYxJ0CTy1W943kNLdaeukQh5MeveFpdoDbBLyVD__dGz-XPxGsWhrsb8v4EN_f7A_Y.4DGpDpYdOVRpFY6Es2p7mE9xM471mpSO9GNApbglKL4&dib_tag=se&keywords=screen+protectors&qid=1772373961&sr=8-20> (referer: https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031) ['playwright']
+Scraped from <200 https://www.amazon.in/Enlinea-Ola-S1-Air-Protector/dp/B0C9Q581ZW/ref=sr_1_20?dib=eyJ2IjoiMSJ9.P_9ofdCADphGAvpVY2e1bhUH6HLaFpOHz63Wj_Rz2M2scInSzwz5v3JhrF9KZPkgsbXwJInnhfOqrxIxT2wEuHJB1saUkAizRnaggeIrzAN9jMadebH18fl7cgkmcn0J6UAS8A7QvtUAe2hKWpw_AQWIsZazNq2EadroEuEjiMYxJ0CTy1W943kNLdaeukQh5MeveFpdoDbBLyVD__dGz-XPxGsWhrsb8v4EN_f7A_Y.4DGpDpYdOVRpFY6Es2p7mE9xM471mpSO9GNApbglKL4&dib_tag=se&keywords=screen%2Bprotectors&qid=1772373961&sr=8-20&th=1>
+{'about_bullets': ['Enlinea Ola screen protector provides excellent protection '
+                   'against scratches and impacts.',
+                   'The screen protector offers edge-to-edge full-screen '
+                   'coverage for Ola S1 Pro.',
+                   'It has a flexible PET material that ensures drop '
+                   'resistance and flexibility.',
+                   'The oleophobic coating reduces fingerprints and smudges on '
+                   'the screen.',
+                   'The screen protector maintains high-definition clarity and '
+                   'vibrant image quality.',
+                   'The package includes one screen protector, cleaning cloth, '
+                   'wet wipe, and guide sticker for easy installation.'],
+ 'brand': 'Enlinea',
+ 'breadcrumbs': ['Electronics',
+                 'Mobiles & Accessories',
+                 'Mobile Accessories',
+                 'Maintenance, Upkeep & Repairs',
+                 'Screen Protectors'],
+ 'category_slug': 'smartphones',
+ 'country_of_origin': None,
+ 'delivery_info': 'Friday, 6 March',
+ 'description': '',
+ 'dimensions': None,
+ 'external_id': 'B0C9Q581ZW',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/61U7B2-XZ9L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41MURMO4L9L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/51RrvMYgKGL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41GWKfKR2ML._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41hT4U4NWzL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41sji6jI9pL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41hWEIphDCL._SL1500_.jpg'],
+ 'in_stock': True,
+ 'manufacturer': None,
+ 'marketplace_slug': 'amazon-in',
+ 'model_number': None,
+ 'mrp': Decimal('99900'),
+ 'offer_details': [],
+ 'price': Decimal('14900.00'),
+ 'rating': Decimal('3.8'),
+ 'raw_html_path': 'data\\raw_html\\amazon_B0C9Q581ZW_20260301_140657.html',
+ 'return_policy': None,
+ 'review_count': None,
+ 'seller_name': 'FCS® Accessories',
+ 'seller_rating': None,
+ 'specs': {},
+ 'title': 'Enlinea TPU Screen Guard For Ola S1 Air Glossy Clear Screen '
+          'Protector | 9H Anti Shock 0.33Mm Edge To Edge Coverage (Ola S1 Air, '
+          'Glossy)',
+ 'url': 'https://www.amazon.in/dp/B0C9Q581ZW',
+ 'variant_options': [],
+ 'warranty': None,
+ 'weight': None}
+Proxy proxy_0 banned for 28s — CAPTCHA detected in 200 response (failures: 2)
+Crawled (200) <GET https://www.amazon.in/realme-10-9Inch-Eyecomfort-Mediatek-Connectivity/dp/B0DHQTQYNR/ref=sr_1_28?dib=eyJ2IjoiMSJ9.EzCF-rU5tEUKiBL_coMiy7VU5wXLxc6CoNn68oIi-Ci4zMgx1ntT2GDIjAzHA182DOKaTNuO0C9c1uM44pzOymuTty31vCuf5DBwuz92Y3tbD3JpJLI_feaGEiil688bbYUfMqQFslu8xoP9ufoRtMurZu6BEjSsju6HcvTjQv2ABklRvqdBhGuvy3S3wMgGa_ZODo4xDy2RGT2-lXURTRVZsvKP5YcaK3MTEWH2ogTaVwNZjFoFdoNum5KzD_uY2DT1oWhgTrWOiRF5HiXquo82nHxJAjfQu0I0u6LWiCw.y_xkJ80-OqLjeVaqrPJIau70K_vCyzz_8hUPhdWrKQ8&dib_tag=se&keywords=tablets&qid=1772373968&s=computers&sr=1-28> (referer: https://www.amazon.in/s?k=tablets&rh=n%3A1375458031) ['playwright']       
+All proxies banned, shortest ban expires in 28s — pausing spider
+CAPTCHA detected on https://www.amazon.in/realme-10-9Inch-Eyecomfort-Mediatek-Connectivity/dp/B0DHQTQYNR/ref=sr_1_28?dib=eyJ2IjoiMSJ9.EzCF-rU5tEUKiBL_coMiy7VU5wXLxc6CoNn68oIi-Ci4zMgx1ntT2GDIjAzHA182DOKaTNuO0C9c1uM44pzOymuTty31vCuf5DBwuz92Y3tbD3JpJLI_feaGEiil688bbYUfMqQFslu8xoP9ufoRtMurZu6BEjSsju6HcvTjQv2ABklRvqdBhGuvy3S3wMgGa_ZODo4xDy2RGT2-lXURTRVZsvKP5YcaK3MTEWH2ogTaVwNZjFoFdoNum5KzD_uY2DT1oWhgTrWOiRF5HiXquo82nHxJAjfQu0I0u6LWiCw.y_xkJ80-OqLjeVaqrPJIau70K_vCyzz_8hUPhdWrKQ8&dib_tag=se&keywords=tablets&qid=1772373968&s=computers&sr=1-28 — retry 1/3
+All proxies banned, shortest ban expires in 27s — pausing spider
+All proxies banned, shortest ban expires in 26s — pausing spider
+All proxies banned, shortest ban expires in 25s — pausing spider
+All proxies banned, shortest ban expires in 24s — pausing spider
+All proxies banned, shortest ban expires in 23s — pausing spider
+All proxies banned, shortest ban expires in 17s — pausing spider
+All proxies banned, shortest ban expires in 16s — pausing spider
+All proxies banned, shortest ban expires in 15s — pausing spider
+All proxies banned, shortest ban expires in 14s — pausing spider
+Proxy proxy_0 banned for 116s — CAPTCHA detected in 200 response (failures: 4)
+Crawled (200) <GET https://www.amazon.in/Samsung-Display-Storage-Refresh-Speakers/dp/B0G1C52H7J/ref=sr_1_27?dib=eyJ2IjoiMSJ9.EzCF-rU5tEUKiBL_coMiy7VU5wXLxc6CoNn68oIi-Ci4zMgx1ntT2GDIjAzHA182DOKaTNuO0C9c1uM44pzOymuTty31vCuf5DBwuz92Y3tbD3JpJLI_feaGEiil688bbYUfMqQFslu8xoP9ufoRtMurZu6BEjSsju6HcvTjQv2ABklRvqdBhGuvy3S3wMgGa_ZODo4xDy2RGT2-lXURTRVZsvKP5YcaK3MTEWH2ogTaVwNZjFoFdoNum5KzD_uY2DT1oWhgTrWOiRF5HiXquo82nHxJAjfQu0I0u6LWiCw.y_xkJ80-OqLjeVaqrPJIau70K_vCyzz_8hUPhdWrKQ8&dib_tag=se&keywords=tablets&qid=1772373968&s=computers&sr=1-27> (referer: https://www.amazon.in/s?k=tablets&rh=n%3A1375458031) ['playwright']
+CAPTCHA detected on https://www.amazon.in/Samsung-Display-Storage-Refresh-Speakers/dp/B0G1C52H7J/ref=sr_1_27?dib=eyJ2IjoiMSJ9.EzCF-rU5tEUKiBL_coMiy7VU5wXLxc6CoNn68oIi-Ci4zMgx1ntT2GDIjAzHA182DOKaTNuO0C9c1uM44pzOymuTty31vCuf5DBwuz92Y3tbD3JpJLI_feaGEiil688bbYUfMqQFslu8xoP9ufoRtMurZu6BEjSsju6HcvTjQv2ABklRvqdBhGuvy3S3wMgGa_ZODo4xDy2RGT2-lXURTRVZsvKP5YcaK3MTEWH2ogTaVwNZjFoFdoNum5KzD_uY2DT1oWhgTrWOiRF5HiXquo82nHxJAjfQu0I0u6LWiCw.y_xkJ80-OqLjeVaqrPJIau70K_vCyzz_8hUPhdWrKQ8&dib_tag=se&keywords=tablets&qid=1772373968&s=computers&sr=1-27 — retry 1/3
+All proxies banned, shortest ban expires in 116s — pausing spider
+All proxies banned, shortest ban expires in 115s — pausing spider
+All proxies banned, shortest ban expires in 114s — pausing spider
+All proxies banned, shortest ban expires in 113s — pausing spider
+All proxies banned, shortest ban expires in 112s — pausing spider
+Crawled (200) <GET https://www.amazon.in/s?k=computer+keyboards&page=2&xpid=aDmokKqDCIhbC&qid=1772373996&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375431031)
+All proxies banned, shortest ban expires in 111s — pausing spider
+Found 22 results on https://www.amazon.in/s?k=computer+keyboards&page=2&xpid=aDmokKqDCIhbC&qid=1772373996&ref=sr_pg_1
+All proxies banned, shortest ban expires in 110s — pausing spider
+Crawled (200) <GET https://www.amazon.in/Samsung-Galaxy-Display-Storage-Tablet/dp/B0FQJQ8NYZ/ref=sr_1_26?dib=eyJ2IjoiMSJ9.EzCF-rU5tEUKiBL_coMiy7VU5wXLxc6CoNn68oIi-Ci4zMgx1ntT2GDIjAzHA182DOKaTNuO0C9c1uM44pzOymuTty31vCuf5DBwuz92Y3tbD3JpJLI_feaGEiil688bbYUfMqQFslu8xoP9ufoRtMurZu6BEjSsju6HcvTjQv2ABklRvqdBhGuvy3S3wMgGa_ZODo4xDy2RGT2-lXURTRVZsvKP5YcaK3MTEWH2ogTaVwNZjFoFdoNum5KzD_uY2DT1oWhgTrWOiRF5HiXquo82nHxJAjfQu0I0u6LWiCw.y_xkJ80-OqLjeVaqrPJIau70K_vCyzz_8hUPhdWrKQ8&dib_tag=se&keywords=tablets&qid=1772373968&s=computers&sr=1-26> (referer: https://www.amazon.in/s?k=tablets&rh=n%3A1375458031) ['playwright']
+Created new canonical product: samsung-galaxy-tab-a11-2205-cm-87-inch-tft-lcd-display-8-gb-ram-128-gb-storage-wi-fi-tablet-silver (category=Tablets)
+Created listing: B0FQJQ8NYZ on amazon-in
+Scraped from <200 https://www.amazon.in/Samsung-Galaxy-Display-Storage-Tablet/dp/B0FQJQ8NYZ/ref=sr_1_26?dib=eyJ2IjoiMSJ9.EzCF-rU5tEUKiBL_coMiy7VU5wXLxc6CoNn68oIi-Ci4zMgx1ntT2GDIjAzHA182DOKaTNuO0C9c1uM44pzOymuTty31vCuf5DBwuz92Y3tbD3JpJLI_feaGEiil688bbYUfMqQFslu8xoP9ufoRtMurZu6BEjSsju6HcvTjQv2ABklRvqdBhGuvy3S3wMgGa_ZODo4xDy2RGT2-lXURTRVZsvKP5YcaK3MTEWH2ogTaVwNZjFoFdoNum5KzD_uY2DT1oWhgTrWOiRF5HiXquo82nHxJAjfQu0I0u6LWiCw.y_xkJ80-OqLjeVaqrPJIau70K_vCyzz_8hUPhdWrKQ8&dib_tag=se&keywords=tablets&qid=1772373968&s=computers&sr=1-26&th=1>
+{'about_bullets': ['Iconic Premium Design and Clean Silhouette: Available in '
+                   'classic Gray and Silver, the Galaxy Tab A11 blends well '
+                   'with your everyday style.',
+                   'Optimized for entertainment: 90Hz refresh rate. Bright and '
+                   'clear display even under direct sunlight.',
+                   'Rich Audio Experience: Galaxy Tab A11 features '
+                   'Dolby-engineered Dual Speakers. 3.5 mm audio jack',
+                   'Enhanced Clarity and Lifelike details: 5 MP front camera '
+                   'for sharper, clearer video calls',
+                   'Ample Memory & Storage Capacity: Up to 8 GB memory & 128 '
+                   'GB storage. Expandable memory up to 2TB with a microSD '
+                   'card.'],
+ 'brand': 'Samsung',
+ 'breadcrumbs': ['Computers & Accessories', 'Tablets'],
+ 'category_slug': 'tablets',
+ 'country_of_origin': None,
+ 'delivery_info': 'Thursday, 5 March',
+ 'description': '',
+ 'dimensions': None,
+ 'external_id': 'B0FQJQ8NYZ',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/71VZQr2TaEL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/416MwLRW7-L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/51fR-ctewVL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/3158P2KjsOL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41vpAiS1j-L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/410Xv45LWPL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41vYRZNK1+L._SL1500_.jpg'],
+ 'in_stock': True,
+ 'manufacturer': None,
+ 'marketplace_slug': 'amazon-in',
+ 'model_number': None,
+ 'mrp': Decimal('2299900'),
+ 'offer_details': [],
+ 'price': Decimal('1799900.00'),
+ 'rating': Decimal('4.1'),
+ 'raw_html_path': 'data\\raw_html\\amazon_B0FQJQ8NYZ_20260301_140725.html',
+ 'return_policy': None,
+ 'review_count': None,
+ 'seller_name': 'Clicktech Retail Private Ltd',
+ 'seller_rating': None,
+ 'specs': {},
+ 'title': 'Samsung Galaxy Tab A11, 22.05 cm (8.7 inch) TFT LCD Display, 8 GB '
+          'RAM, 128 GB Storage, Wi-Fi Tablet, Silver',
+ 'url': 'https://www.amazon.in/dp/B0FQJQ8NYZ',
+ 'variant_options': [],
+ 'warranty': None,
+ 'weight': None}
+All proxies banned, shortest ban expires in 109s — pausing spider
+All proxies banned, shortest ban expires in 108s — pausing spider
+All proxies banned, shortest ban expires in 107s — pausing spider
+All proxies banned, shortest ban expires in 106s — pausing spider
+All proxies banned, shortest ban expires in 105s — pausing spider
+All proxies banned, shortest ban expires in 104s — pausing spider
+All proxies banned, shortest ban expires in 103s — pausing spider
+All proxies banned, shortest ban expires in 102s — pausing spider
+Crawled (200) <GET https://www.amazon.in/s?k=computer+keyboards&page=3&qid=1772374043&xpid=aDmokKqDCIhbC&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=computer+keyboards&page=2&xpid=aDmokKqDCIhbC&qid=1772373996&ref=sr_pg_1)
+Found 22 results on https://www.amazon.in/s?k=computer+keyboards&page=3&qid=1772374043&xpid=aDmokKqDCIhbC&ref=sr_pg_2
+All proxies banned, shortest ban expires in 101s — pausing spider
+All proxies banned, shortest ban expires in 100s — pausing spider
+All proxies banned, shortest ban expires in 99s — pausing spider
+All proxies banned, shortest ban expires in 98s — pausing spider
+All proxies banned, shortest ban expires in 97s — pausing spider
+All proxies banned, shortest ban expires in 96s — pausing spider
+All proxies banned, shortest ban expires in 95s — pausing spider
+All proxies banned, shortest ban expires in 94s — pausing spider
+All proxies banned, shortest ban expires in 93s — pausing spider
+All proxies banned, shortest ban expires in 92s — pausing spider
+All proxies banned, shortest ban expires in 91s — pausing spider
+All proxies banned, shortest ban expires in 90s — pausing spider
+All proxies banned, shortest ban expires in 89s — pausing spider
+All proxies banned, shortest ban expires in 88s — pausing spider
+All proxies banned, shortest ban expires in 87s — pausing spider
+All proxies banned, shortest ban expires in 86s — pausing spider
+All proxies banned, shortest ban expires in 85s — pausing spider
+All proxies banned, shortest ban expires in 84s — pausing spider
+All proxies banned, shortest ban expires in 83s — pausing spider
+All proxies banned, shortest ban expires in 82s — pausing spider
+Crawled 12 pages (at 6 pages/min), scraped 4 items (at 2 items/min)
+All proxies banned, shortest ban expires in 81s — pausing spider
+All proxies banned, shortest ban expires in 80s — pausing spider
+All proxies banned, shortest ban expires in 79s — pausing spider
+All proxies banned, shortest ban expires in 78s — pausing spider
+All proxies banned, shortest ban expires in 77s — pausing spider
+All proxies banned, shortest ban expires in 123s — pausing spider
+Proxy proxy_0 banned for 404s — CAPTCHA detected in 200 response (failures: 6)
+Crawled (200) <GET https://www.amazon.in/Essentials-Universal-Protector-Transparent-Spill-Resistant/dp/B0F327RFGT/ref=sr_1_23?dib=eyJ2IjoiMSJ9.3XzQq9jbAH-HIHgUc-MVIH0aXRTJ6PMFVdE3VnXDV6a7XhHGIMIoDPf89S7GXVh-NctVfiOmDf6cKaDUh1GfVYEqBtlKolAnhNv3ChWvgIH9qQYvHaMvJ0ZsQAudgaqd0gmsn1QD8D-RyESfsTsMdiuMOfQnAzurDiTuTcbfztsE-iLDoP-Px9WbXyqS3A4uatA8nFx9F0m5YDFu2UQ0ZDTz6YLBNqRZX7njGeRzrJm9vbQGlZEV-mRZOM_Xq-Bp6A-062t96aLoVYjwSLr6Rr0Fce4usHqISfZdUGDzYf0.UPPR6QQTzkPAZzVuWueBsvSpz4QyNwprXES9qO3m7HY&dib_tag=se&keywords=computer+keyboards&qid=1772373996&s=computers&sr=1-23> (referer: https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375431031) ['playwright']
+CAPTCHA detected on https://www.amazon.in/Essentials-Universal-Protector-Transparent-Spill-Resistant/dp/B0F327RFGT/ref=sr_1_23?dib=eyJ2IjoiMSJ9.3XzQq9jbAH-HIHgUc-MVIH0aXRTJ6PMFVdE3VnXDV6a7XhHGIMIoDPf89S7GXVh-NctVfiOmDf6cKaDUh1GfVYEqBtlKolAnhNv3ChWvgIH9qQYvHaMvJ0ZsQAudgaqd0gmsn1QD8D-RyESfsTsMdiuMOfQnAzurDiTuTcbfztsE-iLDoP-Px9WbXyqS3A4uatA8nFx9F0m5YDFu2UQ0ZDTz6YLBNqRZX7njGeRzrJm9vbQGlZEV-mRZOM_Xq-Bp6A-062t96aLoVYjwSLr6Rr0Fce4usHqISfZdUGDzYf0.UPPR6QQTzkPAZzVuWueBsvSpz4QyNwprXES9qO3m7HY&dib_tag=se&keywords=computer+keyboards&qid=1772373996&s=computers&sr=1-23 — retry 1/3
+All proxies banned, shortest ban expires in 404s — pausing spider
+All proxies banned, shortest ban expires in 403s — pausing spider
+All proxies banned, shortest ban expires in 402s — pausing spider
+All proxies banned, shortest ban expires in 401s — pausing spider
+All proxies banned, shortest ban expires in 400s — pausing spider
+All proxies banned, shortest ban expires in 399s — pausing spider
+All proxies banned, shortest ban expires in 398s — pausing spider
+Crawled (200) <GET https://www.amazon.in/s?k=computer+keyboards&page=4&qid=1772374052&xpid=aDmokKqDCIhbC&ref=sr_pg_3> (referer: https://www.amazon.in/s?k=computer+keyboards&page=3&qid=1772374043&xpid=aDmokKqDCIhbC&ref=sr_pg_2)
+Found 22 results on https://www.amazon.in/s?k=computer+keyboards&page=4&qid=1772374052&xpid=aDmokKqDCIhbC&ref=sr_pg_3
+Proxy proxy_0 banned for 714s — CAPTCHA detected in 200 response (failures: 8)
+Crawled (200) <GET https://www.amazon.in/Portronics-Multimedia-Wireless-Keyboard-Technology/dp/B0BHYJ8CVF/ref=sr_1_36?dib=eyJ2IjoiMSJ9.9aPyn5esZV7iL3h9IRByLiNxVYsWUyjRXkK3By1C4Qd5iL87fTRYHZeuPYBMGIs2BXZIUngLQVV1V97qZPVpUp6cSiqEGn0YmRDO8WnhlkMaaqHqZLh3Y7LjS8bPXPDECOvFVBgeP2ypcPebCvEaFF7IfnkYPxiMoruNC8BBrsf6XcxCIai4kc4vqZVyy5ohRalQ6CG19PkVz6bORA9QDy94DgUCh4TbDwXVum1dhkk.5gxeuUysH0mQTEv6qR0sbsLrQZw7k_hmN528aTBS2aE&dib_tag=se&keywords=computer+keyboards&qid=1772374043&sr=8-36&xpid=aDmokKqDCIhbC> (referer: https://www.amazon.in/s?k=computer+keyboards&page=2&xpid=aDmokKqDCIhbC&qid=1772373996&ref=sr_pg_1) ['playwright']     
+All proxies banned, shortest ban expires in 714s — pausing spider
+CAPTCHA detected on https://www.amazon.in/Portronics-Multimedia-Wireless-Keyboard-Technology/dp/B0BHYJ8CVF/ref=sr_1_36?dib=eyJ2IjoiMSJ9.9aPyn5esZV7iL3h9IRByLiNxVYsWUyjRXkK3By1C4Qd5iL87fTRYHZeuPYBMGIs2BXZIUngLQVV1V97qZPVpUp6cSiqEGn0YmRDO8WnhlkMaaqHqZLh3Y7LjS8bPXPDECOvFVBgeP2ypcPebCvEaFF7IfnkYPxiMoruNC8BBrsf6XcxCIai4kc4vqZVyy5ohRalQ6CG19PkVz6bORA9QDy94DgUCh4TbDwXVum1dhkk.5gxeuUysH0mQTEv6qR0sbsLrQZw7k_hmN528aTBS2aE&dib_tag=se&keywords=computer+keyboards&qid=1772374043&sr=8-36&xpid=aDmokKqDCIhbC — retry 1/3
+All proxies banned, shortest ban expires in 713s — pausing spider
+All proxies banned, shortest ban expires in 712s — pausing spider
+All proxies banned, shortest ban expires in 711s — pausing spider
+Crawled (200) <GET https://www.amazon.in/s?k=computer+keyboards&page=5&qid=1772374177&xpid=aDmokKqDCIhbC&ref=sr_pg_4> (referer: https://www.amazon.in/s?k=computer+keyboards&page=4&qid=1772374052&xpid=aDmokKqDCIhbC&ref=sr_pg_3)
+Found 19 results on https://www.amazon.in/s?k=computer+keyboards&page=5&qid=1772374177&xpid=aDmokKqDCIhbC&ref=sr_pg_4
+All proxies banned, shortest ban expires in 710s — pausing spider
+All proxies banned, shortest ban expires in 709s — pausing spider
+All proxies banned, shortest ban expires in 708s — pausing spider
+All proxies banned, shortest ban expires in 707s — pausing spider
+All proxies banned, shortest ban expires in 706s — pausing spider
+All proxies banned, shortest ban expires in 705s — pausing spider
+All proxies banned, shortest ban expires in 704s — pausing spider
+All proxies banned, shortest ban expires in 703s — pausing spider
+All proxies banned, shortest ban expires in 702s — pausing spider
+All proxies banned, shortest ban expires in 701s — pausing spider
+All proxies banned, shortest ban expires in 700s — pausing spider
+All proxies banned, shortest ban expires in 699s — pausing spider
+Crawled 18 pages (at 6 pages/min), scraped 4 items (at 0 items/min)
+All proxies banned, shortest ban expires in 698s — pausing spider
+All proxies banned, shortest ban expires in 697s — pausing spider
+All proxies banned, shortest ban expires in 696s — pausing spider
+All proxies banned, shortest ban expires in 695s — pausing spider
+All proxies banned, shortest ban expires in 694s — pausing spider

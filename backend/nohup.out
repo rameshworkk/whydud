@@ -1,0 +1,646 @@
+Scrapy 2.14.1 started (bot: whydud_scraper)
+2026-02-27 05:33:30 [scrapy.utils.log] INFO: Scrapy 2.14.1 started (bot: whydud_scraper)
+Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+2026-02-27 05:33:30 [scrapy.utils.log] INFO: Versions:
+{'lxml': '6.0.2',
+ 'libxml2': '2.11.9',
+ 'cssselect': '1.4.0',
+ 'parsel': '1.11.0',
+ 'w3lib': '2.4.0',
+ 'Twisted': '25.5.0',
+ 'Python': '3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 '
+           '64 bit (AMD64)]',
+ 'pyOpenSSL': '25.3.0 (OpenSSL 3.5.5 27 Jan 2026)',
+ 'cryptography': '46.0.5',
+ 'Platform': 'Windows-11-10.0.26200-SP0'}
+Using CrawlerProcess
+Enabled addons:
+[]
+2026-02-27 05:33:30 [scrapy.addons] INFO: Enabled addons:
+[]
+Using selector: SelectSelector
+Using reactor: twisted.internet.asyncioreactor.AsyncioSelectorReactor
+Using asyncio event loop: asyncio.windows_events._WindowsSelectorEventLoop
+Telnet Password: aedac517918a8d26
+2026-02-27 05:33:30 [scrapy.extensions.telnet] INFO: Telnet Password: aedac517918a8d26
+Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats']
+2026-02-27 05:33:30 [scrapy.middleware] INFO: Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.logcount.LogCount',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.logstats.LogStats']
+Overridden settings:
+{'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 2,
+ 'DOWNLOAD_TIMEOUT': 30,
+ 'LOG_LEVEL': 'INFO',
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'RETRY_TIMES': 3,
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+2026-02-27 05:33:30 [scrapy.crawler] INFO: Overridden settings:
+{'BOT_NAME': 'whydud_scraper',
+ 'CONCURRENT_REQUESTS_PER_DOMAIN': 2,
+ 'DOWNLOAD_DELAY': 2,
+ 'DOWNLOAD_TIMEOUT': 30,
+ 'LOG_LEVEL': 'INFO',
+ 'NEWSPIDER_MODULE': 'apps.scraping.spiders',
+ 'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 429],
+ 'RETRY_TIMES': 3,
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['apps.scraping.spiders']}
+Using proactor: IocpProactor
+Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>
+2026-02-27 05:33:30 [scrapy-playwright] INFO: Started loop on separate thread: <ProactorEventLoop running=True closed=False debug=False>
+Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+2026-02-27 05:33:31 [scrapy.middleware] INFO: Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+2026-02-27 05:33:31 [scrapy.middleware] INFO: Enabled spider middlewares:
+['scrapy.spidermiddlewares.start.StartSpiderMiddleware',
+ 'scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline']
+2026-02-27 05:33:31 [scrapy.middleware] INFO: Enabled item pipelines:
+['apps.scraping.pipelines.ValidationPipeline',
+ 'apps.scraping.pipelines.NormalizationPipeline',
+ 'apps.scraping.pipelines.ProductPipeline',
+ 'apps.scraping.pipelines.MeilisearchIndexPipeline']
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-02-27 05:33:31 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ValidationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-02-27 05:33:31 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: NormalizationPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+2026-02-27 05:33:31 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:41: ScrapyDeprecationWarning: ProductPipeline.open_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.open_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-02-27 05:33:31 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: ProductPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+2026-02-27 05:33:31 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:44: ScrapyDeprecationWarning: MeilisearchIndexPipeline.close_spider() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.close_spider)
+
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+2026-02-27 05:33:31 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py:47: ScrapyDeprecationWarning: MeilisearchIndexPipeline.process_item() requires a spider argument, this is deprecated and the argument will not be passed in future Scrapy versions. If you need to access the spider instance you can save the crawler instance passed to from_crawler() and use its spider attribute.
+  self._check_mw_method_spider_arg(pipe.process_item)
+
+Spider opened
+2026-02-27 05:33:31 [scrapy.core.engine] INFO: Spider opened
+C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+2026-02-27 05:33:31 [py.warnings] WARNING: C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\spidermw.py:490: ScrapyDeprecationWarning: apps.scraping.spiders.amazon_spider.AmazonIndiaSpider defines the deprecated start_requests() method. start_requests() has been deprecated in favor of a new method, start(), to support asynchronous code execution. start_requests() will stop being called in a future version of Scrapy. If you use Scrapy 2.13 or higher only, replace start_requests() with start(); note that start() is a coroutine (async def). If you need to maintain compatibility with lower Scrapy versions, when overriding start_requests() in a spider class, override start() as well; you can use super() to reuse the inherited start() implementation without copy-pasting. See the release notes of Scrapy 2.13 for details: https://docs.scrapy.org/en/2.13/news.html
+  warn(
+
+ProductPipeline: Django initialised
+Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)
+Telnet console listening on 127.0.0.1:6023
+Starting download handler
+Starting category (10 pages): https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031
+Starting category (5 pages): https://www.amazon.in/s?k=phone+cases+covers&rh=n%3A4363159031
+Starting category (5 pages): https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031
+Starting category (10 pages): https://www.amazon.in/s?k=power+banks&rh=n%3A6612025031
+Starting category (5 pages): https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031
+Starting category (10 pages): https://www.amazon.in/s?k=laptops&rh=n%3A1375424031
+Starting category (10 pages): https://www.amazon.in/s?k=tablets&rh=n%3A1375458031
+Starting category (10 pages): https://www.amazon.in/s?k=monitors&rh=n%3A1375425031
+Starting category (5 pages): https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375433031
+Starting category (5 pages): https://www.amazon.in/s?k=computer+mouse&rh=n%3A1375433031
+Starting category (5 pages): https://www.amazon.in/s?k=printers&rh=n%3A1375434031
+Starting category (5 pages): https://www.amazon.in/s?k=routers&rh=n%3A1389401031
+Starting category (5 pages): https://www.amazon.in/s?k=external+hard+drives&rh=n%3A1375430031
+Starting category (5 pages): https://www.amazon.in/s?k=pen+drives&rh=n%3A1375430031
+Starting category (5 pages): https://www.amazon.in/s?k=graphics+cards&rh=n%3A1375424031
+Starting category (5 pages): https://www.amazon.in/s?k=webcams&rh=n%3A1389175031
+Starting category (10 pages): https://www.amazon.in/s?k=headphones&rh=n%3A1388921031
+Starting category (10 pages): https://www.amazon.in/s?k=earbuds+tws&rh=n%3A1388921031
+Starting category (10 pages): https://www.amazon.in/s?k=bluetooth+speakers&rh=n%3A1388888031
+Starting category (5 pages): https://www.amazon.in/s?k=soundbars&rh=n%3A3401801031
+Starting category (5 pages): https://www.amazon.in/s?k=microphones&rh=n%3A3677700031
+Starting category (10 pages): https://www.amazon.in/s?k=smartwatches&rh=n%3A6284375031
+Starting category (5 pages): https://www.amazon.in/s?k=fitness+bands&rh=n%3A6284375031
+Starting category (10 pages): https://www.amazon.in/s?k=cameras&rh=n%3A1389175031
+Starting category (5 pages): https://www.amazon.in/s?k=camera+lenses&rh=n%3A1389177031
+Starting category (5 pages): https://www.amazon.in/s?k=camera+tripods&rh=n%3A1389181031
+Starting category (5 pages): https://www.amazon.in/s?k=action+cameras&rh=n%3A1389175031
+Starting category (10 pages): https://www.amazon.in/s?k=televisions&rh=n%3A1389396031
+Starting category (5 pages): https://www.amazon.in/s?k=projectors&rh=n%3A1389396031
+Starting category (5 pages): https://www.amazon.in/s?k=streaming+devices&rh=n%3A1389396031
+Starting category (5 pages): https://www.amazon.in/s?k=tv+wall+mounts&rh=n%3A1389396031
+Starting category (10 pages): https://www.amazon.in/s?k=refrigerators&rh=n%3A1380369031
+Starting category (10 pages): https://www.amazon.in/s?k=washing+machines&rh=n%3A1380365031
+Starting category (10 pages): https://www.amazon.in/s?k=air+conditioners&rh=n%3A1380369031
+Starting category (5 pages): https://www.amazon.in/s?k=microwave+ovens&rh=n%3A1380367031
+Starting category (5 pages): https://www.amazon.in/s?k=dishwashers&rh=n%3A1380271031
+Starting category (5 pages): https://www.amazon.in/s?k=water+heaters+geysers&rh=n%3A4369221031
+Starting category (5 pages): https://www.amazon.in/s?k=chimneys&rh=n%3A4369280031
+Starting category (10 pages): https://www.amazon.in/s?k=air+purifiers&rh=n%3A5131299031
+Starting category (10 pages): https://www.amazon.in/s?k=water+purifiers&rh=n%3A5131300031
+Starting category (5 pages): https://www.amazon.in/s?k=vacuum+cleaners&rh=n%3A1380263031
+Starting category (5 pages): https://www.amazon.in/s?k=robot+vacuum+cleaners&rh=n%3A1380263031
+Starting category (5 pages): https://www.amazon.in/s?k=mixer+grinders&rh=n%3A1380263031
+Starting category (5 pages): https://www.amazon.in/s?k=induction+cooktops&rh=n%3A1380536031
+Starting category (5 pages): https://www.amazon.in/s?k=electric+kettles&rh=n%3A1380536031
+Starting category (5 pages): https://www.amazon.in/s?k=air+fryers&rh=n%3A1380536031
+Starting category (5 pages): https://www.amazon.in/s?k=coffee+machines&rh=n%3A1380536031
+Starting category (5 pages): https://www.amazon.in/s?k=irons+steamers&rh=n%3A1380267031
+Starting category (5 pages): https://www.amazon.in/s?k=fans&rh=n%3A1380365031
+Starting category (5 pages): https://www.amazon.in/s?k=room+heaters&rh=n%3A1380365031
+Starting category (10 pages): https://www.amazon.in/s?k=trimmers&rh=n%3A1374407031
+Starting category (5 pages): https://www.amazon.in/s?k=electric+shavers&rh=n%3A1374407031
+Starting category (5 pages): https://www.amazon.in/s?k=hair+dryers&rh=n%3A1374410031
+Starting category (5 pages): https://www.amazon.in/s?k=hair+straighteners&rh=n%3A1374410031
+Starting category (5 pages): https://www.amazon.in/s?k=electric+toothbrushes&rh=n%3A1374413031
+Starting category (5 pages): https://www.amazon.in/s?k=treadmills&rh=n%3A1961623031
+Starting category (5 pages): https://www.amazon.in/s?k=exercise+bikes&rh=n%3A1961623031
+Starting category (5 pages): https://www.amazon.in/s?k=dumbbells+weights&rh=n%3A1961624031
+Starting category (5 pages): https://www.amazon.in/s?k=yoga+mats&rh=n%3A1961624031
+Starting category (10 pages): https://www.amazon.in/s?k=mattresses&rh=n%3A1380279031
+Starting category (10 pages): https://www.amazon.in/s?k=office+chairs&rh=n%3A3553048031
+Starting category (5 pages): https://www.amazon.in/s?k=study+tables&rh=n%3A3553048031
+Starting category (5 pages): https://www.amazon.in/s?k=beds&rh=n%3A3553048031
+Starting category (5 pages): https://www.amazon.in/s?k=sofas&rh=n%3A3553048031
+Starting category (5 pages): https://www.amazon.in/s?k=shoe+racks&rh=n%3A3553048031
+Starting category (5 pages): https://www.amazon.in/s?k=smart+plugs&rh=n%3A1389401031
+Starting category (5 pages): https://www.amazon.in/s?k=smart+bulbs&rh=n%3A1389401031
+Starting category (10 pages): https://www.amazon.in/s?k=security+cameras&rh=n%3A1389175031
+Starting category (5 pages): https://www.amazon.in/s?k=smart+door+locks&rh=n%3A1389401031
+Starting category (5 pages): https://www.amazon.in/s?k=video+doorbells&rh=n%3A1389401031
+Starting category (10 pages): https://www.amazon.in/s?k=gaming+laptops&rh=n%3A1375424031
+Starting category (5 pages): https://www.amazon.in/s?k=gaming+monitors&rh=n%3A1375425031
+Starting category (5 pages): https://www.amazon.in/s?k=gaming+headsets&rh=n%3A1388921031
+Starting category (5 pages): https://www.amazon.in/s?k=gaming+controllers&rh=n%3A976460031
+Starting category (5 pages): https://www.amazon.in/s?k=gaming+chairs&rh=n%3A3553048031
+Starting category (5 pages): https://www.amazon.in/s?k=ssd+internal&rh=n%3A1375430031
+Starting category (5 pages): https://www.amazon.in/s?k=memory+cards&rh=n%3A1375430031
+Starting category (5 pages): https://www.amazon.in/s?k=wifi+mesh+systems&rh=n%3A1389401031
+Starting category (5 pages): https://www.amazon.in/s?k=nas+storage&rh=n%3A1375430031
+Starting category (5 pages): https://www.amazon.in/s?k=baby+strollers&rh=n%3A1571274031
+Starting category (5 pages): https://www.amazon.in/s?k=car+seats+baby&rh=n%3A1571274031
+Starting category (5 pages): https://www.amazon.in/s?k=baby+monitors&rh=n%3A1571274031
+Starting category (5 pages): https://www.amazon.in/s?k=dash+cameras&rh=n%3A4772060031
+Starting category (5 pages): https://www.amazon.in/s?k=car+chargers&rh=n%3A4772060031
+Starting category (5 pages): https://www.amazon.in/s?k=car+air+purifiers&rh=n%3A4772060031
+Starting category (5 pages): https://www.amazon.in/s?k=tyre+inflators&rh=n%3A4772060031
+Starting category (5 pages): https://www.amazon.in/s?k=guitars&rh=n%3A3677697031
+Starting category (5 pages): https://www.amazon.in/s?k=keyboards+pianos&rh=n%3A3677697031
+Starting category (5 pages): https://www.amazon.in/s?k=laptop+bags+backpacks&rh=n%3A2454169031
+Starting category (5 pages): https://www.amazon.in/s?k=suitcases+trolley&rh=n%3A2454169031
+Crawled (200) <GET https://www.amazon.in/robots.txt> (referer: None)
+Launching browser chromium
+Browser chromium launched
+Crawled (200) <GET https://www.amazon.in/s?k=phone+cases+covers&rh=n%3A4363159031> (referer: None) ['playwright']
+Found 26 results on https://www.amazon.in/s?k=phone+cases+covers&rh=n%3A4363159031
+Crawled (200) <GET https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031> (referer: None) ['playwright']
+Found 33 results on https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031
+Crawled (200) <GET https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031> (referer: None) ['playwright']
+Found 22 results on https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031
+Crawled (200) <GET https://www.amazon.in/s?k=power+banks&rh=n%3A6612025031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=power+banks&rh=n%3A6612025031
+Crawled (200) <GET https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031> (referer: None) ['playwright']
+Found 16 results on https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031
+Crawled (200) <GET https://www.amazon.in/s?k=laptops&rh=n%3A1375424031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=laptops&rh=n%3A1375424031
+Crawled (200) <GET https://www.amazon.in/s?k=tablets&rh=n%3A1375458031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=tablets&rh=n%3A1375458031
+Crawled (200) <GET https://www.amazon.in/s?k=monitors&rh=n%3A1375425031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=monitors&rh=n%3A1375425031
+Crawled (200) <GET https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375433031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375431031
+Crawled (200) <GET https://www.amazon.in/s?k=computer+mouse&rh=n%3A1375433031> (referer: None) ['playwright']
+Found 25 results on https://www.amazon.in/s?k=computer+mouse&rh=n%3A1375431031
+Crawled (200) <GET https://www.amazon.in/s?k=printers&rh=n%3A1375434031> (referer: None) ['playwright']
+Found 26 results on https://www.amazon.in/s?k=printers&rh=n%3A1375431031
+Crawled (200) <GET https://www.amazon.in/s?k=routers&rh=n%3A1389401031> (referer: None) ['playwright']
+Found 30 results on https://www.amazon.in/s?k=routers&rh=n%3A1389401031
+Crawled (200) <GET https://www.amazon.in/s?k=external+hard+drives&rh=n%3A1375430031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=external+hard+drives&rh=n%3A1375430031
+Crawled (200) <GET https://www.amazon.in/s?k=pen+drives&rh=n%3A1375430031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=pen+drives&rh=n%3A1375430031
+Crawled (200) <GET https://www.amazon.in/s?k=graphics+cards&rh=n%3A1375424031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=graphics+cards&rh=n%3A1375424031
+Crawled (200) <GET https://www.amazon.in/s?k=webcams&rh=n%3A1389175031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=webcams&rh=n%3A1389175031
+Crawled (200) <GET https://www.amazon.in/s?k=headphones&rh=n%3A1388921031> (referer: None) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=headphones&rh=n%3A1388921031
+Crawled (200) <GET https://www.amazon.in/RIGGEAR-Shockproof-Clear-Compatible-Transparent/dp/B0G52VMQSP/ref=sr_1_24?dib=eyJ2IjoiMSJ9.IcaG05WTaDj6yecWnOJxJjhZFmjnkqcyQ_n5fRb8C9808U_Exek4QOHr5fM2vHP-afLxdAaq-mceMq7P0IFjVWceS62MFy9PVxlztpfjjrQ8N6t3Na__mPIq5fmoX5yfn2OeIiNqhD3bNzgHqzwaFndZ0nwuVZ-WDHTHRNZCgkZagQ3W3jtMLv8dn0Z2vU-jWPnbyxmR2KJINz8l2IwmDuqPixhwnEkRh9QHIuMlACzh6yPwycjz56FlljJ4m7VC4mZnc3WPPqA5X9a8AVs5Y9ZagMz8s-VCMiMAfw0Wf_8.0tCHdCEZQ3ozxq7nCkpCMx6OAw2VJkmntDI2TaIATPk&dib_tag=se&keywords=phone+cases+covers&qid=1772150617&s=electronics&sr=1-24-catcorr> (referer: https://www.amazon.in/s?k=phone+cases+covers&rh=n%3A4363159031) ['playwright']
+Created new canonical product: riggear-shockproof-clear-hybrid-armor-back-cover-case-compatible-with-nothing-phone-3a-lite-5g-transparent-pc-with-tpu-bumper
+Created listing: B0G52VMQSP on amazon_in
+Scraped from <200 https://www.amazon.in/RIGGEAR-Shockproof-Clear-Compatible-Transparent/dp/B0G52VMQSP/ref=sr_1_24?dib=eyJ2IjoiMSJ9.IcaG05WTaDj6yecWnOJxJjhZFmjnkqcyQ_n5fRb8C9808U_Exek4QOHr5fM2vHP-afLxdAaq-mceMq7P0IFjVWceS62MFy9PVxlztpfjjrQ8N6t3Na__mPIq5fmoX5yfn2OeIiNqhD3bNzgHqzwaFndZ0nwuVZ-WDHTHRNZCgkZagQ3W3jtMLv8dn0Z2vU-jWPnbyxmR2KJINz8l2IwmDuqPixhwnEkRh9QHIuMlACzh6yPwycjz56FlljJ4m7VC4mZnc3WPPqA5X9a8AVs5Y9ZagMz8s-VCMiMAfw0Wf_8.0tCHdCEZQ3ozxq7nCkpCMx6OAw2VJkmntDI2TaIATPk&dib_tag=se&keywords=phone%2Bcases%2Bcovers&qid=1772150617&s=electronics&sr=1-24-catcorr&th=1>
+{'about_bullets': ['Compatible with Nothing Phone 3a Lite 5G',
+                   'Color : Transparent PC + Clear TPU Bumper',
+                   'Case Construction Type : Hybrid (Soft TPU Bumper + Hard '
+                   'Polycarbonate Plate)',
+                   'Raised Edges for Best Camera and Screen Protection',
+                   'Riggear Clear Hybrid Cases are newly designed cases which '
+                   'looks neat and provides Excellent protection for daily '
+                   'usage'],
+ 'brand': 'Riggear',
+ 'external_id': 'B0G52VMQSP',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/71gAXJ-TLoL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41f86YgALtL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41QlYQDFX2L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41fXNVFN2JL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41s+DVJ1M2L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41DJm3sTocL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41W2CH0OPnL._SL1500_.jpg'],
+ 'in_stock': True,
+ 'marketplace_slug': 'amazon_in',
+ 'mrp': Decimal('99900'),
+ 'offer_details': [],
+ 'price': Decimal('33100.00'),
+ 'rating': Decimal('4.5'),
+ 'raw_html_path': None,
+ 'review_count': None,
+ 'seller_name': 'RIGGEAR',
+ 'seller_rating': None,
+ 'specs': {'ASIN': 'B0G52VMQSP',
+           'Batteries Required': '\u200eNo',
+           'Brand': '\u200eRIGGEAR',
+           'Compatible Devices': '\u200eNothing 3a Lite, Nothing Phone 3a Lite',
+           'Country of Origin': '\u200eChina',
+           'Date First Available': '4 December 2025',
+           'Generic Name': 'Phone Case',
+           'Importer': 'Riggear,Banglore',
+           'Item Dimensions LxWxH': '10 x 10 x 10 Millimeters',
+           'Item Weight': '\u200e18 g',
+           'Item model number': '\u200e3A lite(Clear)',
+           'Manufacturer': '\u200eRIGGEAR',
+           'Material': '\u200ePolycarbonate, Thermoplastic Polyurethane',
+           'Model': '\u200e3A lite(Clear)',
+           'Model Name': '\u200eNothing Phone 3a Lite',
+           'Net Quantity': '1.0 Piece',
+           'Number of items': '\u200e1',
+           'Packer': 'Riggear,Banglore',
+           'Product Dimensions': '\u200e1 x 1 x 1 cm; 18 g',
+           'Special Features': '\u200e1mm Raised Edges for Camera & Screen '
+                               'Protection, Corner Shockproof Airbag Design '
+                               'for Best Protection, Flaunt true color of '
+                               'phone from Crystal Clear PC, Shock-Absorbent, '
+                               'Slim Profile'},
+ 'title': 'RIGGEAR Shockproof Clear Hybrid Armor Back Cover Case Compatible '
+          'with Nothing Phone 3a Lite 5G (Transparent PC with TPU Bumper)',
+ 'url': 'https://www.amazon.in/dp/B0G52VMQSP'}
+Crawled (200) <GET https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&xpid=DM0alaVLQVXuD&qid=1772150617&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=smartphones&rh=n%3A1805560031) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772150617&xpid=DM0alaVLQVXuD&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031&page=2&xpid=s-_kdWe_4dIMo&qid=1772150620&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031) ['playwright']
+Found 16 results on https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031&page=2&qid=1772150620&xpid=s-_kdWe_4dIMo&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=power+banks&i=electronics&rh=n%3A6612025031&page=2&xpid=KXCM-ZM-T7R1-&qid=1772150622&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=power+banks&rh=n%3A6612025031) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=power+banks&i=electronics&rh=n%3A6612025031&page=2&qid=1772150622&xpid=KXCM-ZM-T7R1-&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031&page=2&xpid=jn3EBSZbn9uon&qid=1772150624&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031) ['playwright']
+Found 22 results on https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031&page=2&qid=1772150624&xpid=jn3EBSZbn9uon&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=laptops&i=computers&rh=n%3A1375424031&page=2&xpid=4HJuTpzPOrQ1o&qid=1772150626&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=laptops&rh=n%3A1375424031) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=laptops&i=computers&rh=n%3A1375424031&page=2&qid=1772150626&xpid=4HJuTpzPOrQ1o&ref=sr_pg_1
+Crawled 24 pages (at 24 pages/min), scraped 1 items (at 1 items/min)
+Crawled (200) <GET https://www.amazon.in/s?k=tablets&i=computers&rh=n%3A1375458031&page=2&xpid=K38SInkmg11Pp&qid=1772150628&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=tablets&rh=n%3A1375458031) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=tablets&i=computers&rh=n%3A1375458031&page=2&qid=1772150628&xpid=K38SInkmg11Pp&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=monitors&i=computers&rh=n%3A1375425031&page=2&xpid=eq-BvzhD3SCGH&qid=1772150631&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=monitors&rh=n%3A1375425031) ['playwright']
+Found 30 results on https://www.amazon.in/s?k=monitors&i=computers&rh=n%3A1375425031&page=2&qid=1772150631&xpid=eq-BvzhD3SCGH&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=computer+keyboards&page=2&xpid=Cx7ip2bQvts3o&qid=1772150634&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=computer+keyboards&rh=n%3A1375431031) ['playwright']
+Found 16 results on https://www.amazon.in/s?k=computer+keyboards&page=2&qid=1772150634&xpid=Cx7ip2bQvts3o&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/ZEBRONICS-Pro-Precision-Comfortable-Lightweight/dp/B0DDTL9PB6/ref=sr_1_24?dib=eyJ2IjoiMSJ9.CseOJH3V75CJynwkMvm1nwHFPY9gVqx1Wiierc5gSuuiywMynp6HeWqVwHZNXM68vMLpCxeZ-qND2tWhjqJ8oQWgs_QJfHS3hXDE-R3WUQJYrUvnCV0M5RhXnzI529dYw5jiRju-jJ2iZsao8z7-2rBzEBdpxtbhkKrphONfaQijYzvIHgq2eMElKFUnlDNv9Ci8R4YpZuwSuf8OGzge4vJb6d_FGCMLU-u8sRPYrO1FcLYSAFKK1qzMRrtw3f9aisMI584XsqLyzFNN7l3mZU3axZ2aRUnhpwkQh1c_MGs.fPbVakKcfRtEgYAaGJeSbbRX9hqSB30bLu54Au-KaAU&dib_tag=se&keywords=computer+mouse&qid=1772150636&s=computers&sr=1-24-catcorr> (referer: https://www.amazon.in/s?k=computer+mouse&rh=n%3A1375431031) ['playwright']
+Created new canonical product: zebronics-dash-pro-24ghz-wireless-mouse-upto-1600-dpi-3-level-dpi-high-precision-power-saving-mode-comfortable-lightweight-for-mac-laptop-computer-black
+Created listing: B0DDTL9PB6 on amazon_in
+Scraped from <200 https://www.amazon.in/ZEBRONICS-Pro-Precision-Comfortable-Lightweight/dp/B0DDTL9PB6/ref=sr_1_24?dib=eyJ2IjoiMSJ9.CseOJH3V75CJynwkMvm1nwHFPY9gVqx1Wiierc5gSuuiywMynp6HeWqVwHZNXM68vMLpCxeZ-qND2tWhjqJ8oQWgs_QJfHS3hXDE-R3WUQJYrUvnCV0M5RhXnzI529dYw5jiRju-jJ2iZsao8z7-2rBzEBdpxtbhkKrphONfaQijYzvIHgq2eMElKFUnlDNv9Ci8R4YpZuwSuf8OGzge4vJb6d_FGCMLU-u8sRPYrO1FcLYSAFKK1qzMRrtw3f9aisMI584XsqLyzFNN7l3mZU3axZ2aRUnhpwkQh1c_MGs.fPbVakKcfRtEgYAaGJeSbbRX9hqSB30bLu54Au-KaAU&dib_tag=se&keywords=computer%2Bmouse&qid=1772150636&s=computers&sr=1-24-catcorr&th=1>
+{'about_bullets': ['Ergonomic design: It is ergonomically designed for a long '
+                   'working duration even when it is used on a mouse pad, '
+                   'plain table, or wooden surface.',
+                   'DPI level: The ZEB-Dash Pro wireless mouse has a dedicated '
+                   '3-level DPI switch and can operate at a DPI level of up to '
+                   '1600 for smooth cursor movements with reliably utmost '
+                   'precision.',
+                   'Buttons: The 4 buttons- Right, Left, and Middle(scroll), '
+                   'dedicated DPI switch can boost your productivity.',
+                   'Power-saving mode: When not in use, the mouse transcends '
+                   'to power-saving mode.',
+                   'Power button: The mouse comes with a Power button for the '
+                   'ON and OFF functions when in use and otherwise.'],
+ 'brand': 'Zebronics',
+ 'external_id': 'B0DDTL9PB6',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/61XYRv7b+8L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/31SiPukIf-L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41tX02Cz4sL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41JUVlKERzL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/51JzPkdp+yL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41K2MvUTiQL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41+JVj8cJXL._SL1500_.jpg'],
+ 'in_stock': True,
+ 'marketplace_slug': 'amazon_in',
+ 'mrp': Decimal('59900'),
+ 'offer_details': [],
+ 'price': Decimal('26900.00'),
+ 'rating': Decimal('3.8'),
+ 'raw_html_path': None,
+ 'review_count': None,
+ 'seller_name': 'Clicktech Retail Private Ltd',
+ 'seller_rating': None,
+ 'specs': {'ASIN': 'B0DDTL9PB6',
+           'Are Batteries Included': '\u200eYes',
+           'Batteries': '\u200e1 12V batteries required. (included)',
+           'Brand': '\u200eZEBRONICS',
+           'Colour': '\u200eZeb-Dash Pro (Black)',
+           'Country of Origin': '\u200eChina',
+           'Date First Available': '20 August 2024',
+           'Generic Name': 'Mouse',
+           'Hardware Platform': '\u200eLaptop, Personal Computer',
+           'Importer': 'No.13/7, Smith Road, Royapettah, Chennai - 600 002',
+           'Included Components': '\u200eMouse - 1unit, Nano Receiver - 1unit',
+           'Item Dimensions LxWxH': '10 x 5.9 x 0.1 Centimeters',
+           'Item Height': '\u200e0.1 Centimeters',
+           'Item Weight': '\u200e53 g',
+           'Item Width': '\u200e5.9 Centimeters',
+           'Item model number': '\u200eZeb-Dash Pro',
+           'Lithium Battery Energy Content': '\u200e0.06 Watt Hours',
+           'Manufacturer': '\u200eZebronics India Private Limited',
+           'Net Quantity': '1 Count',
+           'Number of Lithium Ion Cells': '\u200e2',
+           'Operating System': '\u200eLinux, Windows 7, Windows XP',
+           'Packer': 'No.13/7, Smith Road, Royapettah, Chennai - 600 002',
+           'Power Source': '\u200eBattery Powered',
+           'Product Dimensions': '\u200e10 x 5.9 x 0.1 cm; 53 g',
+           'Series': '\u200eZeb-Dash Pro'},
+ 'title': 'ZEBRONICS Dash Pro 2.4GHz Wireless Mouse, Upto 1600 DPI, 3 Level '
+          'DPI, High Precision, Power Saving Mode, Comfortable & Lightweight, '
+          'for Mac | Laptop | Computer (Black)',
+ 'url': 'https://www.amazon.in/dp/B0DDTL9PB6'}
+Crawled (200) <GET https://www.amazon.in/s?k=routers&i=electronics&rh=n%3A1389401031&page=2&xpid=DPdtff0VxoYSA&qid=1772150641&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=routers&rh=n%3A1389401031) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=routers&i=electronics&rh=n%3A1389401031&page=2&qid=1772150641&xpid=DPdtff0VxoYSA&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/Bambu-Mini-Printer-Beginners-Guide-ebook/dp/B0G7XPGTLP/ref=sr_1_24?dib=eyJ2IjoiMSJ9.sOoAgqgjvhm5YWgmoWv0Maq4XWh0Sn2bGSM-O5eZ1fcfxMZz_RVTqox2QuGV5QQGIo48T2vvCDFXchTmtZIqATNrXQmwuChXMIY8CSMeGbE9VJCNGzSBpzTV5OASkKePQWAz_CsOG94PJ8oCtoyxbJ0-taSmt8tedY6XNw1gy_lVEvX2Tu8_HvqX3JzFWf1n1XjL3FuNIhOS6ZJbPMogdEs51i2DiibmtYaKWye1KdmnIOYhSkN7t8VcG_9utmxcOAOq1B8Cn4_MzImo4Eyr_Epk0r5crOoQRqN89XqSDh8.F7NDDgtMw220P2BKqNST6V08KoZFGGUw1dFtwS-WiPU&dib_tag=se&keywords=printers&qid=1772150638&s=computers&sr=1-24-catcorr> (referer: https://www.amazon.in/s?k=printers&rh=n%3A1375431031) ['playwright']
+Created new canonical product: bambu-lab-a1-mini-3d-printer-beginners-user-guide-2026-practical-tutorials-calibration-tips-workflow-secrets-for-high-quality-prints
+Created listing: B0G7XPGTLP on amazon_in
+Error processing {'about_bullets': [],
+ 'brand': None,
+ 'external_id': 'B0G7XPGTLP',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/71xIdksoY5L._SL1500_.jpg'],
+ 'in_stock': False,
+ 'marketplace_slug': 'amazon_in',
+ 'mrp': None,
+ 'offer_details': [],
+ 'price': None,
+ 'rating': Decimal('3.0'),
+ 'raw_html_path': None,
+ 'review_count': None,
+ 'seller_name': None,
+ 'seller_rating': None,
+ 'specs': {},
+ 'title': 'Bambu Lab A1 Mini 3D Printer Beginners User Guide 2026: Practical '
+          'Tutorials, Calibration Tips & Workflow Secrets for High-Quality '
+          'Prints',
+ 'url': 'https://www.amazon.in/dp/B0G7XPGTLP'}
+Traceback (most recent call last):
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\django\db\backends\utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.NotNullViolation: null value in column "price" of relation "_hyper_1_38_chunk" violates not-null constraint
+DETAIL:  Failing row contains (2026-02-27 00:04:46.005923+00, 7a7e66b4-938b-423b-ada3-3e2cd3690f26, 235eac46-8009-4539-b954-66b7be5d3e57, 1, null, null, null, f, ).
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\core\scraper.py", line 498, in start_itemproc_async
+    output = await self.itemproc.process_item_async(item)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\pipelines\__init__.py", line 59, in process_item_async
+    return await self._process_chain(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "process_item", item, add_spider=True, warn_deferred=True
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\scrapy\middleware.py", line 152, in _process_chain
+    method(obj, *(*args, self._spider)), _warn=warn
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rames\Downloads\whydud\platform\whydud\backend\apps\scraping\pipelines.py", line 195, in process_item
+    cursor.execute(
+    ~~~~~~~~~~~~~~^
+        """
+        ^^^
+    ...<13 lines>...
+        ],
+        ^^
+    )
+    ^
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\django\db\backends\utils.py", line 122, in execute
+    return super().execute(sql, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\django\db\backends\utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\django\db\backends\utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\django\db\backends\utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\django\db\utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\django\db\backends\utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\rames\AppData\Roaming\Python\Python314\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.IntegrityError: null value in column "price" of relation "_hyper_1_38_chunk" violates not-null constraint
+DETAIL:  Failing row contains (2026-02-27 00:04:46.005923+00, 7a7e66b4-938b-423b-ada3-3e2cd3690f26, 235eac46-8009-4539-b954-66b7be5d3e57, 1, null, null, null, f, ).
+Crawled (200) <GET https://www.amazon.in/s?k=external+hard+drives&page=2&xpid=3bOLVSNX5TkKa&qid=1772150643&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=external+hard+drives&rh=n%3A1375430031) ['playwright']
+Found 16 results on https://www.amazon.in/s?k=external+hard+drives&page=2&qid=1772150643&xpid=3bOLVSNX5TkKa&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=pen+drives&page=2&xpid=MwW6DzOZ9HxAY&qid=1772150645&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=pen+drives&rh=n%3A1375430031) ['playwright']
+Found 16 results on https://www.amazon.in/s?k=pen+drives&page=2&qid=1772150645&xpid=MwW6DzOZ9HxAY&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=graphics+cards&i=computers&rh=n%3A1375424031&page=2&xpid=ZIHpt1lM2dHFu&qid=1772150648&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=graphics+cards&rh=n%3A1375424031) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=graphics+cards&i=computers&rh=n%3A1375424031&page=2&qid=1772150648&xpid=ZIHpt1lM2dHFu&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=webcams&i=electronics&rh=n%3A1389175031&page=2&xpid=9-2datNFyEBkv&qid=1772150650&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=webcams&rh=n%3A1389175031) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=webcams&i=electronics&rh=n%3A1389175031&page=2&qid=1772150650&xpid=9-2datNFyEBkv&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/s?k=headphones&i=electronics&rh=n%3A1388921031&page=2&xpid=mSE97n6L7_7N1&qid=1772150653&ref=sr_pg_1> (referer: https://www.amazon.in/s?k=headphones&rh=n%3A1388921031) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=headphones&i=electronics&rh=n%3A1388921031&page=2&qid=1772150653&xpid=mSE97n6L7_7N1&ref=sr_pg_1
+Crawled (200) <GET https://www.amazon.in/Marshall-Major-Foldable-Bluetooth-Headphones/dp/B08KHT2HDT/ref=sr_1_24?dib=eyJ2IjoiMSJ9.XWOFLoq52kabfpRz3Q8Ey_C0wBdFf2r9KNFQOg5VXPR6SsNRaUbQUCDrpiyepIYhkWo9HYsPC8-m9ahXLDmeEEh-3G1GZP1s89bTGQQuTPdL_NhsCW8hlsLnpeS8obWNUSH2yU-s4bSymjcGH8c2pGrK5QIHL5QoLoTHnLhS96RBJd634wFnuu3-OH2z4cRpuReG5zQiD_lcgeFZeNPjUDwzsl5sYNOolWamUAv4kW-pj6jtEL0tShSZN12jgbUHC1VID83I33pnu5iCVUsQyTuwX5Vc-kwtX6fxKzgBusk.PsS0H3hRNEcpbatX9it7qFrHxoke6pVMp-IBjo1zr0Y&dib_tag=se&keywords=headphones&qid=1772150653&s=electronics&sr=1-24> (referer: https://www.amazon.in/s?k=headphones&rh=n%3A1388921031) ['playwright']
+Matched 'Marshall Major IV Wireless Bluetooth On Ear Headphone with M' \u2192 product marshall-major-v-wireless-on-ear-headpho (confidence=0.70, method=fuzzy_title)
+Created listing: B08KHT2HDT on amazon_in
+Scraped from <200 https://www.amazon.in/Marshall-Major-Foldable-Bluetooth-Headphones/dp/B08KHT2HDT/ref=sr_1_24?dib=eyJ2IjoiMSJ9.XWOFLoq52kabfpRz3Q8Ey_C0wBdFf2r9KNFQOg5VXPR6SsNRaUbQUCDrpiyepIYhkWo9HYsPC8-m9ahXLDmeEEh-3G1GZP1s89bTGQQuTPdL_NhsCW8hlsLnpeS8obWNUSH2yU-s4bSymjcGH8c2pGrK5QIHL5QoLoTHnLhS96RBJd634wFnuu3-OH2z4cRpuReG5zQiD_lcgeFZeNPjUDwzsl5sYNOolWamUAv4kW-pj6jtEL0tShSZN12jgbUHC1VID83I33pnu5iCVUsQyTuwX5Vc-kwtX6fxKzgBusk.PsS0H3hRNEcpbatX9it7qFrHxoke6pVMp-IBjo1zr0Y&dib_tag=se&keywords=headphones&qid=1772150653&s=electronics&sr=1-24>
+{'about_bullets': ['Major IV delivers 80+ solid hours of wireless playtime.',
+                   'Major IV’s new, improved ergonomic design means that when '
+                   'you’re deep diving into your music, the tenth hour is as '
+                   'comfortable as the first.',
+                   'Re-Engineered - New ear cushions + 3D hinges + straight '
+                   'fit headband + loop wire with reinforced rubber dampers.',
+                   'Major IV can be charged wirelessly, so it’s now easier '
+                   'than ever to charge and go.',
+                   'The multi-directional control knob lets you control your '
+                   'music and phone functionality with ease.'],
+ 'brand': 'Marshall',
+ 'external_id': 'B08KHT2HDT',
+ 'fulfilled_by': None,
+ 'images': ['https://m.media-amazon.com/images/I/71mTfSKhhTL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/31qGR9hxtsL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41J-1tN13cL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/512FUMV+26L._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41oO5e9omFL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/41DDCdDSpxL._SL1500_.jpg',
+            'https://m.media-amazon.com/images/I/217X7udBJtL._SL1500_.jpg'],
+ 'in_stock': True,
+ 'marketplace_slug': 'amazon_in',
+ 'mrp': Decimal('1499900'),
+ 'offer_details': [],
+ 'price': Decimal('899900.00'),
+ 'rating': Decimal('4.3'),
+ 'raw_html_path': None,
+ 'review_count': None,
+ 'seller_name': 'Clicktech Retail Private Ltd',
+ 'seller_rating': None,
+ 'specs': {'ASIN': 'B08KHT2HDT',
+           'Age Range (Description)': '\u200eAdult',
+           'Audio Driver Type': '\u200eDynamic Driver',
+           'Batteries': '\u200e2 Lithium Polymer batteries required.',
+           'Batteries Included': '\u200eNo',
+           'Batteries Required': '\u200eNo',
+           'Battery Life': '\u200e80 Hours',
+           'Bluetooth Range': '\u200e33 Feet',
+           'Bluetooth Version': '\u200e5',
+           'Cable Feature': '\u200eWithout Cable',
+           'Cable feature': '\u200eWithout Cable',
+           'Carrying Case Color': '\u200eBlack',
+           'Carrying Case Material': '\u200ePlastic',
+           'Charging Time': '\u200e15 Minutes',
+           'Compatible Devices': '\u200eBluetooth Devices',
+           'Connectivity Technology': '\u200eBluetooth',
+           'Control Method': '\u200eTouch',
+           'Control Type': '\u200eMedia Control',
+           'Controller Type': '\u200eremote control',
+           'Country of Origin': '\u200eUnited Kingdom',
+           'Date First Available': '30 September 2020',
+           'Does it contain liquid?': '\u200eNo',
+           'Earpiece Shape': '\u200eOn Ear',
+           'Form Factor': '\u200eOn_ear',
+           'Frequency Response': '\u200e20 Hz',
+           'Generation': '\u200eIV',
+           'Generic Name': 'Headphone',
+           'Hardware Interface': '\u200eBluetooth',
+           'Headphones Jack': '\u200e3.5 mm Jack',
+           'Importer': 'Luxury Personified LLP,Plot number 38,Sector '
+                       '20A,faridabad-121001',
+           'Included Components': '\u200eHeadphone,Cable,Manual',
+           'Includes Rechargeable Battery': '\u200eYes',
+           'Input Device Interface': '\u200eBluetooth',
+           'Item Dimensions LxWxH': '16 x 16 x 8.6 Centimeters',
+           'Item Weight': '\u200e178 g',
+           'Item model number': '\u200e1005773',
+           'Manufacturer': '\u200eMarshall',
+           'Material': '\u200eRubber',
+           'Microphone format': '\u200eMic',
+           'Model': '\u200e1005773',
+           'Model Name': '\u200eMajor Iv',
+           'Model Year': '\u200e2020',
+           'Net Quantity': '1 Count',
+           'Noise Control': '\u200eNone',
+           'Noise Control Features': '\u200eactive_noise_cancellation',
+           'Number of Items': '\u200e1',
+           'Packer': 'Luxury Personified LLP,Plot number 38,Sector '
+                     '20A,faridabad-121001',
+           'Product Dimensions': '\u200e16 x 16 x 8.64 cm; 178.04 g',
+           'Recommended Uses For Product': '\u200eEntertainment, Calling, '
+                                           'Gaming, Outdoor, Recording, '
+                                           'Exercising, Running',
+           'Sensitivity': '\u200e99 dB',
+           'Series number': '\u200e4',
+           'Special Feature': '\u200eWireless, Bluetooth, Mic, On Ear '
+                              'Headphone',
+           'Special Features': '\u200eWireless, Bluetooth, Mic, On Ear '
+                               'Headphone',
+           'Style': '\u200eOn ear',
+           'Supports Bluetooth Technology': '\u200eYes',
+           'Water Resistance Level': '\u200eWater Resistant',
+           'Wireless Communication Technology': '\u200eBluetooth'},
+ 'title': 'Marshall Major IV Wireless Bluetooth On Ear Headphone with Mic '
+          '(Black)',
+ 'url': 'https://www.amazon.in/dp/B08KHT2HDT'}
+Crawled (200) <GET https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=3&qid=1772150659&xpid=DM0alaVLQVXuD&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=2&qid=1772150617&xpid=DM0alaVLQVXuD&ref=sr_pg_1) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=smartphones&i=electronics&rh=n%3A1805560031&page=3&qid=1772150659&xpid=DM0alaVLQVXuD&ref=sr_pg_2
+Crawled (200) <GET https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031&page=3&qid=1772150661&xpid=s-_kdWe_4dIMo&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031&page=2&qid=1772150620&xpid=s-_kdWe_4dIMo&ref=sr_pg_1) ['playwright']
+Found 16 results on https://www.amazon.in/s?k=screen+protectors&rh=n%3A4363162031&page=3&qid=1772150661&xpid=s-_kdWe_4dIMo&ref=sr_pg_2
+Crawled (200) <GET https://www.amazon.in/s?k=power+banks&i=electronics&rh=n%3A6612025031&page=3&qid=1772150663&xpid=KXCM-ZM-T7R1-&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=power+banks&i=electronics&rh=n%3A6612025031&page=2&qid=1772150622&xpid=KXCM-ZM-T7R1-&ref=sr_pg_1) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=power+banks&i=electronics&rh=n%3A6612025031&page=3&qid=1772150663&xpid=KXCM-ZM-T7R1-&ref=sr_pg_2
+Crawled (200) <GET https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031&page=3&qid=1772150666&xpid=jn3EBSZbn9uon&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031&page=2&qid=1772150624&xpid=jn3EBSZbn9uon&ref=sr_pg_1) ['playwright']
+Found 16 results on https://www.amazon.in/s?k=mobile+chargers&rh=n%3A4363085031&page=3&qid=1772150666&xpid=jn3EBSZbn9uon&ref=sr_pg_2
+Crawled (200) <GET https://www.amazon.in/s?k=laptops&i=computers&rh=n%3A1375424031&page=3&qid=1772150668&xpid=4HJuTpzPOrQ1o&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=laptops&i=computers&rh=n%3A1375424031&page=2&qid=1772150626&xpid=4HJuTpzPOrQ1o&ref=sr_pg_1) ['playwright']
+Found 33 results on https://www.amazon.in/s?k=laptops&i=computers&rh=n%3A1375424031&page=3&qid=1772150668&xpid=4HJuTpzPOrQ1o&ref=sr_pg_2
+Crawled (200) <GET https://www.amazon.in/s?k=tablets&i=computers&rh=n%3A1375458031&page=3&qid=1772150671&xpid=K38SInkmg11Pp&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=tablets&i=computers&rh=n%3A1375458031&page=2&qid=1772150628&xpid=K38SInkmg11Pp&ref=sr_pg_1) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=tablets&i=computers&rh=n%3A1375458031&page=3&qid=1772150671&xpid=K38SInkmg11Pp&ref=sr_pg_2
+Crawled (200) <GET https://www.amazon.in/s?k=monitors&i=computers&rh=n%3A1375425031&page=3&qid=1772150674&xpid=eq-BvzhD3SCGH&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=monitors&i=computers&rh=n%3A1375425031&page=2&qid=1772150631&xpid=eq-BvzhD3SCGH&ref=sr_pg_1) ['playwright']
+Found 24 results on https://www.amazon.in/s?k=monitors&i=computers&rh=n%3A1375425031&page=3&qid=1772150674&xpid=eq-BvzhD3SCGH&ref=sr_pg_2
+Crawled (200) <GET https://www.amazon.in/s?k=computer+keyboards&page=3&qid=1772150676&xpid=Cx7ip2bQvts3o&ref=sr_pg_2> (referer: https://www.amazon.in/s?k=computer+keyboards&page=2&qid=1772150634&xpid=Cx7ip2bQvts3o&ref=sr_pg_1) ['playwright']
+Found 16 results on https://www.amazon.in/s?k=computer+keyboards&page=3&qid=1772150676&xpid=Cx7ip2bQvts3o&ref=sr_pg_2
