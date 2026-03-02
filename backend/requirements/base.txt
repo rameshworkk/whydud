@@ -23,7 +23,7 @@ meilisearch==0.40.0
 # NLP (production only — not installed in local dev venv)
 spacy==3.7.5
 textblob==0.19.0
-numpy==2.4.1
+numpy==1.26.4
 pandas==2.3.3
 scikit-learn==1.5.1
 
