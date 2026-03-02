@@ -1,0 +1,248 @@
+version: "3.9"
+
+# ============================================================
+# Whydud — PRIMARY Node (12 GB / 6 CPU)
+# PostgreSQL PRIMARY + Full App Stack
+# ============================================================
+
+services:
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: whydud-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+      - "10.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-whydud}
+      POSTGRES_USER: ${POSTGRES_USER:-whydud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./docker/postgres/primary.conf:/etc/postgresql/custom.conf:ro
+      - ./docker/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./docker/postgres/init-replication.sql:/docker-entrypoint-initdb.d/02-replication.sql:ro
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/custom.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+    shm_size: '256mb'
+    networks:
+      - whydud
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-whydud} -d ${POSTGRES_DB:-whydud}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: whydud-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+      - "10.0.0.1:6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:?required}
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    networks:
+      - whydud
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.7
+    container_name: whydud-meilisearch
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7700:7700"
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:?required}
+      MEILI_ENV: production
+    volumes:
+      - meilisearch_data:/meili_data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - whydud
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: whydud-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile.cloudflare:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - whydud
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    container_name: whydud-backend
+    restart: unless-stopped
+    command: >
+      gunicorn whydud.wsgi:application
+      --workers 3
+      --worker-class gthread
+      --threads 2
+      --bind 0.0.0.0:8000
+      --timeout 120
+      --access-logfile -
+    env_file: ../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: whydud.settings.prod
+      DATABASE_URL: postgres://${POSTGRES_USER:-whydud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whydud}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
+      NODE_ROLE: primary
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    volumes:
+      - static_files:/app/staticfiles
+      - media_files:/app/media
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    networks:
+      - whydud
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfiles/frontend.Dockerfile
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://whydud.com}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://whydud.com}
+    container_name: whydud-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://whydud.com}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://whydud.com}
+      INTERNAL_API_URL: http://backend:8000
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - whydud
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    container_name: whydud-celery-worker
+    restart: unless-stopped
+    command: >
+      celery -A whydud worker
+      --loglevel=info
+      --concurrency=2
+      --queues=default,scoring,alerts,email
+      --hostname=primary@%h
+    env_file: ../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: whydud.settings.prod
+      DATABASE_URL: postgres://${POSTGRES_USER:-whydud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whydud}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/1
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - whydud
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    container_name: whydud-celery-beat
+    restart: unless-stopped
+    command: >
+      celery -A whydud beat
+      --loglevel=info
+      --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    env_file: ../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: whydud.settings.prod
+      DATABASE_URL: postgres://${POSTGRES_USER:-whydud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whydud}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    networks:
+      - whydud
+
+volumes:
+  postgres_data:
+  redis_data:
+  meilisearch_data:
+  caddy_data:
+  caddy_config:
+  static_files:
+  media_files:
+
+networks:
+  whydud:
+    driver: bridge
