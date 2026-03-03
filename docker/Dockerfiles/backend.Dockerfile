@@ -35,6 +35,9 @@ RUN pip install -r requirements/prod.txt
 # Install spaCy English model
 RUN python -m spacy download en_core_web_sm
 
+# Install Playwright Chromium + system deps for scraping spiders
+RUN playwright install-deps chromium && playwright install chromium
+
 # ---------------------------------------------------------------------------
 # Development
 # ---------------------------------------------------------------------------
