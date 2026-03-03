@@ -10,7 +10,7 @@ from apps.products.models import Marketplace
 
 MARKETPLACES = [
     {
-        "slug": "amazon_in",
+        "slug": "amazon-in",
         "name": "Amazon.in",
         "base_url": "https://www.amazon.in",
         "affiliate_param": "tag",
@@ -33,21 +33,21 @@ MARKETPLACES = [
         "scraper_status": "active",
     },
     {
-        "slug": "reliance_digital",
+        "slug": "reliance-digital",
         "name": "Reliance Digital",
         "base_url": "https://www.reliancedigital.in",
         "affiliate_param": "utm_source",
         "scraper_status": "active",
     },
     {
-        "slug": "vijay_sales",
+        "slug": "vijay-sales",
         "name": "Vijay Sales",
         "base_url": "https://www.vijaysales.com",
         "affiliate_param": "utm_source",
         "scraper_status": "active",
     },
     {
-        "slug": "tata_cliq",
+        "slug": "tata-cliq",
         "name": "Tata CLiQ",
         "base_url": "https://www.tatacliq.com",
         "affiliate_param": "utm_source",
@@ -98,10 +98,26 @@ MARKETPLACES = [
 ]
 
 
+_SLUG_MIGRATIONS = {
+    "amazon_in": "amazon-in",
+    "reliance_digital": "reliance-digital",
+    "vijay_sales": "vijay-sales",
+    "tata_cliq": "tata-cliq",
+}
+
+
 class Command(BaseCommand):
     help = "Seed all 12 Indian marketplaces (update_or_create by slug)"
 
     def handle(self, *args, **options):
+        # Fix old underscore slugs → hyphens
+        migrated = 0
+        for old_slug, new_slug in _SLUG_MIGRATIONS.items():
+            rows = Marketplace.objects.filter(slug=old_slug).update(slug=new_slug)
+            if rows:
+                migrated += rows
+                self.stdout.write(f"  Migrated slug: {old_slug} → {new_slug}")
+
         created = 0
         updated = 0
         for data in MARKETPLACES:
@@ -118,6 +134,6 @@ class Command(BaseCommand):
         total = Marketplace.objects.count()
         self.stdout.write(
             self.style.SUCCESS(
-                f"Marketplaces: {total} total ({created} created, {updated} updated)"
+                f"Marketplaces: {total} total ({created} created, {updated} updated, {migrated} slug-migrated)"
             )
         )
