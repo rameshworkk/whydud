@@ -1,8 +1,10 @@
 """Celery application configuration for Whydud."""
+import logging
 import os
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import task_failure, task_retry, task_success
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
@@ -79,3 +81,102 @@ app.conf.beat_schedule = {
         "options": {"queue": "scraping"},
     },
 }
+
+# ---------------------------------------------------------------------------
+# Discord webhook notifications for all task events
+# ---------------------------------------------------------------------------
+
+_discord_logger = logging.getLogger("whydud.celery.discord")
+
+# Internal Celery tasks we don't want notifications for
+_IGNORED_TASKS = frozenset(
+    {
+        "celery.backend_cleanup",
+        "celery.chord_unlock",
+        "celery.accumulate",
+        "celery.group",
+        "celery.chain",
+    }
+)
+
+
+def _task_queue(sender) -> str:
+    """Best-effort extraction of the queue name from a task."""
+    try:
+        return getattr(sender, "queue", "") or getattr(sender.request, "delivery_info", {}).get("routing_key", "")
+    except Exception:
+        return ""
+
+
+def _task_worker(sender) -> str:
+    try:
+        return sender.request.hostname or ""
+    except Exception:
+        return ""
+
+
+@task_success.connect
+def _on_task_success(sender=None, result=None, **kwargs):
+    if sender and sender.name in _IGNORED_TASKS:
+        return
+    try:
+        from common.discord import notify_task_success
+
+        runtime = getattr(sender.request, "runtime", None) if sender else None
+        notify_task_success(
+            task_name=sender.name if sender else "unknown",
+            result=result,
+            runtime=runtime,
+            worker=_task_worker(sender),
+            queue=_task_queue(sender),
+        )
+    except Exception:
+        _discord_logger.warning("Discord success notification failed", exc_info=True)
+
+
+@task_failure.connect
+def _on_task_failure(sender=None, exception=None, traceback=None, **kwargs):
+    if sender and sender.name in _IGNORED_TASKS:
+        return
+    try:
+        from common.discord import notify_task_failure
+
+        tb_str = ""
+        if traceback is not None:
+            import traceback as tb_mod
+
+            tb_str = "".join(tb_mod.format_tb(traceback)) if hasattr(traceback, "tb_frame") else str(traceback)
+
+        notify_task_failure(
+            task_name=sender.name if sender else "unknown",
+            exception=str(exception) if exception else "Unknown error",
+            traceback_str=tb_str,
+            worker=_task_worker(sender),
+            queue=_task_queue(sender),
+        )
+    except Exception:
+        _discord_logger.warning("Discord failure notification failed", exc_info=True)
+
+
+@task_retry.connect
+def _on_task_retry(sender=None, reason=None, request=None, **kwargs):
+    if sender and sender.name in _IGNORED_TASKS:
+        return
+    try:
+        from common.discord import notify_task_retry
+
+        retries = 0
+        if request:
+            retries = getattr(request, "retries", 0)
+        elif sender:
+            retries = getattr(sender.request, "retries", 0)
+
+        notify_task_retry(
+            task_name=sender.name if sender else "unknown",
+            reason=str(reason) if reason else "Unknown",
+            retries=retries,
+            worker=_task_worker(sender),
+            queue=_task_queue(sender),
+        )
+    except Exception:
+        _discord_logger.warning("Discord retry notification failed", exc_info=True)

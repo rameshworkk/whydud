@@ -193,6 +193,8 @@ services:
       MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
       SCRAPING_PROXY_LIST: ${SCRAPING_PROXY_LIST}
       SCRAPING_PROXY_TYPE: ${SCRAPING_PROXY_TYPE:-rotating}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+      NODE_ROLE: replica
     depends_on:
       - backend
     deploy:
