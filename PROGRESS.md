@@ -2120,3 +2120,58 @@ python -m apps.scraping.runner snapdeal --max-pages 1
 cd backend
 python -m apps.scraping.runner nykaa --max-pages 1
 ```
+
+---
+
+### 2026-03-03 — JioMart Spider (P2 Marketplace)
+
+#### Overview
+Built a **sitemap-based, HTTP-only** spider for JioMart (jiomart.com). JioMart's listing/search pages are 100% client-rendered via Algolia, making them impossible to scrape without Playwright. However, product detail pages are server-side rendered, and JioMart publishes comprehensive XML sitemaps. The spider uses sitemap discovery for Phase 1 and SSR HTML parsing for Phase 2.
+
+#### Problem: Akamai WAF TLS Fingerprinting
+- Standard Python requests blocked with HTTP 403 by Akamai Bot Manager
+- Same issue as Nykaa — TLS fingerprint (JA3/JA4) doesn't match any real browser
+- **Solution**: `JioMartCurlCffiMiddleware` using `curl_cffi` with `impersonate="chrome131"` for Chrome TLS handshake
+
+#### Problem: Double Decompression of Gzipped Sitemaps
+- curl_cffi internally decompresses gzip/brotli responses, but passes through the original `Content-Encoding` header
+- Scrapy's `HttpCompressionMiddleware` then tried to decompress already-decompressed content → "Not a gzipped file" error
+- **Solution**: Strip `Content-Encoding` header from curl_cffi responses before returning to Scrapy
+
+#### Architecture
+- **Phase 1 (Sitemap Discovery)**: Fetch `sitemap.xml` → parse sitemap index XML → filter to allowed verticals (electronics, cdit, home-improvement) → parse sub-sitemaps → extract product URLs
+  - Uses `xml.etree.ElementTree` for namespace-aware XML parsing
+  - `ALLOWED_SITEMAPS` dict filters v1 categories (skips groceries/FMCG)
+  - `--max-pages` controls URLs per sitemap: `urls_per_sitemap = max_pages * 50`
+- **Phase 2 (Product Detail)**: HTTP GET product pages → parse SSR HTML
+  - Title from `<span class="product-header-name">`
+  - Selling price from `#pdp-price-info` span
+  - MRP from `.line-through` span or MRP label
+  - Images from `#images_[n]` tags
+  - Specs from `#features-value-container` divs
+  - Breadcrumbs from `.cls-bread-crumb` links
+  - Brand from `<a href="/brand/...">`
+  - Rating/reviews from `.plp-card-details-rating` and `.plp-card-details-reviewCount`
+  - In-stock detection via absence of `.oos-text` class
+- **Category mapping**: URL vertical segments mapped to Whydud category slugs via `VERTICAL_CATEGORY_MAP`
+- **Stale URL handling**: 404 responses logged and skipped gracefully (sitemaps dated 2023-12 to 2024-04)
+
+#### Test Results (`--max-pages 1`)
+- **2 sitemaps fetched** — electronics (7,124 URLs) + cdit (43,701 URLs)
+- **100 product URLs queued** — 50 per sitemap
+- **94 products extracted** — 97% success rate (3 stale 404s)
+- **90 products synced to Meilisearch**
+- **45 items/minute** throughput
+- Rich data: prices (paisa), images, specs, breadcrumbs, brand, availability
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/jiomart_spider.py` | Complete rewrite — removed Playwright, sitemap-based discovery + HTTP-only SSR parsing, curl_cffi TLS impersonation, Akamai WAF bypass |
+
+#### Run Command
+```
+cd backend
+python -m apps.scraping.runner jiomart --max-pages 1
+```

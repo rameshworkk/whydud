@@ -1,172 +1,244 @@
-"""JioMart spider — scrapes multi-category marketplace listings and details.
+"""JioMart spider — sitemap-based discovery + HTTP product detail parsing.
 
 Architecture:
-  JioMart runs on Jio Commerce Platform (similar to Reliance Digital).
-  - Cloudflare protected — Playwright required for all pages
-  - Data source: window.__INITIAL_STATE__ or API endpoints
-  - JSON-LD Product schema on detail pages
-  - Skip grocery/perishable categories
+  Phase 1 (Discovery): Parse sitemap.xml → sub-sitemaps → product URLs.
+    JioMart's listing/search pages are 100% client-rendered (Algolia) and
+    CANNOT be scraped without Playwright. robots.txt explicitly disallows
+    /search and /*? — we respect this and use sitemaps instead.
+  Phase 2 (Detail): HTTP GET each product URL → parse SSR HTML for
+    product name, prices, brand, specs, seller, images.
 
-URL patterns:
-  Category: /c/{category-path}/{category-id}
-  Product:  /p/{category}/{product-slug}/{product-id}
-  Search:   /search/{query}
+  NO Playwright — HTTP only.
+
+  Prices on JioMart are in RUPEES (not paisa). Spider converts to paisa
+  (* 100) before yielding.
+
+  Akamai WAF requires Sec-Fetch-* headers AND a browser-like TLS
+  fingerprint — HEAD requests return 403. Only GET works. Uses curl_cffi
+  with Chrome TLS impersonation (same approach as Nykaa spider) because
+  Python's standard ssl/urllib3 TLS fingerprint is blocked by Akamai.
+
+  Product URL pattern: https://www.jiomart.com/p/{vertical}/{slug}/{sku_id}
+
+Sitemaps (discovered 2026-03-03):
+  Main: https://www.jiomart.com/sitemap.xml
+  Sub-sitemaps: electronics.xml, fashion.xml, gm-sitemap.xml,
+    fmcg-sitemap.xml, cdit-sitemap.xml, website.xml
+  Dated 2023-12 to 2024-04 — may have stale URLs, handle 404s gracefully.
+
+Prices are pincode-dependent — defaults to Mumbai (400020). Fine for v1.
 """
 import json
-import random
+import logging
 import re
 from decimal import Decimal, InvalidOperation
+from xml.etree import ElementTree
 
 import scrapy
-from scrapy_playwright.page import PageMethod
+from scrapy import signals
+from scrapy.http import HtmlResponse, TextResponse
 
 from apps.scraping.items import ProductItem
 from .base_spider import BaseWhydudSpider
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-PRODUCT_ID_RE = re.compile(r"/(\d{6,})(?:\?|$)")
-PRICE_RE = re.compile(r"[\d,]+(?:\.\d{1,2})?")
-
 MARKETPLACE_SLUG = "jiomart"
 
+SITEMAP_INDEX_URL = "https://www.jiomart.com/sitemap.xml"
+
+# Chrome/131 User-Agent — used for all JioMart requests
+JIOMART_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+# Required headers for Akamai bypass — applied by CurlCffiMiddleware
+JIOMART_HEADERS = {
+    "User-Agent": JIOMART_USER_AGENT,
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;"
+        "q=0.9,image/avif,image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-IN,en;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "sec-ch-ua": '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+}
+
+
+# ===================================================================
+# CurlCffi downloader middleware — Chrome TLS impersonation for Akamai
+# ===================================================================
+
+class JioMartCurlCffiMiddleware:
+    """Scrapy downloader middleware that uses curl_cffi for JioMart requests.
+
+    Akamai Bot Manager fingerprints TLS handshakes (JA3/JA4).
+    Python's ssl module and Twisted have a distinct fingerprint that's
+    blocked (403). curl_cffi wraps libcurl and can impersonate a real
+    Chrome browser's TLS handshake.
+    """
+
+    def __init__(self) -> None:
+        from curl_cffi import requests as curl_requests
+        self._session = curl_requests.Session(impersonate="chrome131")
+        self._request_count = 0
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        middleware = cls()
+        crawler.signals.connect(
+            middleware.spider_closed, signal=signals.spider_closed,
+        )
+        return middleware
+
+    def spider_closed(self) -> None:
+        """Close the curl_cffi session on spider shutdown."""
+        try:
+            self._session.close()
+        except Exception:
+            pass
+
+    def process_request(self, request, spider):
+        """Intercept request and fetch via curl_cffi."""
+        # Only handle non-Playwright requests to jiomart.com
+        if request.meta.get("playwright"):
+            return None
+        if "jiomart.com" not in request.url:
+            return None
+
+        self._request_count += 1
+
+        # Use Accept: text/xml for sitemap requests
+        headers = dict(JIOMART_HEADERS)
+        if "sitemap" in request.url.lower() or request.url.endswith(".xml"):
+            headers["Accept"] = "text/xml,application/xml,text/html,*/*;q=0.8"
+
+        try:
+            resp = self._session.get(
+                request.url,
+                headers=headers,
+                timeout=60,
+                allow_redirects=True,
+            )
+
+            # curl_cffi already decompresses gzip/brotli — strip the
+            # Content-Encoding header so Scrapy doesn't try again.
+            resp_headers = {
+                k: v for k, v in resp.headers.items()
+                if k.lower() != "content-encoding"
+            }
+
+            # Use TextResponse for XML sitemaps, HtmlResponse for product pages
+            if "sitemap" in request.url.lower() or request.url.endswith(".xml"):
+                return TextResponse(
+                    url=str(resp.url),
+                    status=resp.status_code,
+                    headers=resp_headers,
+                    body=resp.content,
+                    request=request,
+                    encoding="utf-8",
+                )
+            return HtmlResponse(
+                url=str(resp.url),
+                status=resp.status_code,
+                headers=resp_headers,
+                body=resp.content,
+                request=request,
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.warning(f"curl_cffi request failed for {request.url}: {exc}")
+            return None
+
+PRICE_RE = re.compile(r"[\d,]+(?:\.\d{1,2})?")
+
+# XML namespace used in sitemap files
+SITEMAP_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+
+# Product URL pattern — /p/{vertical}/{slug}/{sku_id}
+PRODUCT_URL_RE = re.compile(r"/p/[^/]+/[^/]+/\d+")
+
+# SKU ID from URL — last numeric segment
+SKU_ID_RE = re.compile(r"/(\d+)$")
+
+# Default number of product URLs to process per sitemap
+# (overridden by --max-pages: urls_per_sitemap = max_pages * 50)
+DEFAULT_URLS_PER_SITEMAP = 250
+
 # ---------------------------------------------------------------------------
-# Keyword → Whydud category slug mapping
+# Sub-sitemaps to follow for v1 (skip groceries/FMCG)
+# Maps sub-sitemap filename pattern → category slug hint
 # ---------------------------------------------------------------------------
 
-KEYWORD_CATEGORY_MAP: dict[str, str] = {
-    # Electronics
-    "smartphones": "smartphones",
-    "mobiles": "smartphones",
-    "mobile-phones": "smartphones",
-    "mobile-accessories": "smartphones",
-    "power-banks": "smartphones",
-    "tablets": "tablets",
-    "laptops": "laptops",
-    "computers": "laptops",
-    "monitors": "laptops",
-    "printers": "laptops",
-    "headphones": "audio",
-    "earphones": "audio",
-    "speakers": "audio",
-    "soundbars": "audio",
-    "televisions": "televisions",
-    "smart-tv": "televisions",
-    "cameras": "cameras",
-    "smartwatches": "smartwatches",
-    "smart-watches": "smartwatches",
-    # Appliances
-    "refrigerators": "refrigerators",
-    "washing-machines": "washing-machines",
-    "air-conditioners": "air-conditioners",
-    "microwave": "appliances",
-    "water-purifiers": "appliances",
-    "air-purifiers": "appliances",
-    "vacuum-cleaners": "appliances",
-    "fans": "appliances",
-    # Kitchen
-    "mixer-grinders": "kitchen-tools",
-    "air-fryers": "kitchen-tools",
-    "electric-kettles": "kitchen-tools",
-    "induction-cooktops": "kitchen-tools",
-    "kitchen-appliances": "kitchen-tools",
-    # Fashion
-    "mens-clothing": "mens-fashion",
-    "mens-tshirts": "mens-fashion",
-    "mens-shirts": "mens-fashion",
-    "womens-clothing": "womens-fashion",
-    "womens-kurtas": "womens-fashion",
-    "sarees": "womens-fashion",
-    "kids-clothing": "kids-fashion",
-    # Footwear
-    "mens-footwear": "footwear",
-    "womens-footwear": "footwear",
-    "sports-shoes": "footwear",
-    # Personal Care
-    "personal-care": "grooming",
-    "trimmers": "grooming",
-    "shavers": "grooming",
-    "hair-dryers": "grooming",
-    # Home
-    "home-furnishing": "home-decor",
-    "home-decor": "home-decor",
-    "bedsheets": "home-decor",
+ALLOWED_SITEMAPS: dict[str, str] = {
+    "electronics": "electronics",
+    "cdit": "electronics",
+    "home": "home-improvement",
 }
 
 # ---------------------------------------------------------------------------
-# Seed URLs — JioMart category pages (skip grocery/perishables)
-# Format: (url, max_pages)
+# Vertical → Whydud category slug mapping (from URL path segment)
 # ---------------------------------------------------------------------------
 
-_TOP = 10
-_STD = 5
-
-SEED_CATEGORY_URLS: list[tuple[str, int]] = [
-    # ── Electronics ─────────────────────────────────────────────────────
-    ("https://www.jiomart.com/c/electronics/mobiles-tablets/smartphones/476", _TOP),
-    ("https://www.jiomart.com/c/electronics/mobiles-tablets/tablets/477", _STD),
-    ("https://www.jiomart.com/c/electronics/laptops-desktops/laptops/480", _TOP),
-    ("https://www.jiomart.com/c/electronics/televisions/smart-tv/486", _STD),
-    ("https://www.jiomart.com/c/electronics/audio-video/headphones-earphones/490", _TOP),
-    ("https://www.jiomart.com/c/electronics/audio-video/bluetooth-speakers/491", _STD),
-    ("https://www.jiomart.com/c/electronics/cameras-accessories/cameras/494", _STD),
-    ("https://www.jiomart.com/c/electronics/wearable-devices/smartwatches/498", _STD),
-    # ── Home Appliances ─────────────────────────────────────────────────
-    ("https://www.jiomart.com/c/home-appliances/large-appliances/refrigerators/506", _STD),
-    ("https://www.jiomart.com/c/home-appliances/large-appliances/washing-machines/507", _STD),
-    ("https://www.jiomart.com/c/home-appliances/large-appliances/air-conditioners/508", _STD),
-    ("https://www.jiomart.com/c/home-appliances/small-appliances/air-purifiers/513", _STD),
-    ("https://www.jiomart.com/c/home-appliances/small-appliances/vacuum-cleaners/514", _STD),
-    # ── Kitchen Appliances ──────────────────────────────────────────────
-    ("https://www.jiomart.com/c/home-appliances/kitchen-appliances/mixer-grinders/517", _STD),
-    ("https://www.jiomart.com/c/home-appliances/kitchen-appliances/air-fryers/520", _STD),
-    # ── Fashion ─────────────────────────────────────────────────────────
-    ("https://www.jiomart.com/c/fashion/mens-clothing/t-shirts/550", _STD),
-    ("https://www.jiomart.com/c/fashion/mens-clothing/shirts/551", _STD),
-    ("https://www.jiomart.com/c/fashion/womens-clothing/kurtas-kurtis/560", _STD),
-    ("https://www.jiomart.com/c/fashion/womens-clothing/sarees/561", _STD),
-    # ── Personal Care ───────────────────────────────────────────────────
-    ("https://www.jiomart.com/c/premium-beauty/skincare/moisturizers/587", _STD),
-    ("https://www.jiomart.com/c/premium-beauty/makeup/face/591", _STD),
-    # ── Home Furnishing ─────────────────────────────────────────────────
-    ("https://www.jiomart.com/c/home-kitchen/home-furnishing/bedsheets/610", _STD),
-]
-
-MAX_LISTING_PAGES = 5
+VERTICAL_CATEGORY_MAP: dict[str, str] = {
+    "electronics": "electronics",
+    "fashion": "fashion",
+    "homeandkitchen": "home-kitchen",
+    "homeimprovement": "home-improvement",
+    "beauty": "beauty",
+    "wellness": "wellness",
+    "jewellery": "jewellery",
+}
 
 
 class JioMartSpider(BaseWhydudSpider):
-    """Scrapes JioMart.com multi-category marketplace.
+    """Scrapes JioMart.com via sitemap discovery + SSR HTML product pages.
 
-    JioMart is Cloudflare-protected — Playwright required for all pages.
-    Uses Jio Commerce Platform similar to Reliance Digital.
+    Two-phase architecture — NO Playwright required:
+      Phase 1: Parse sitemap XML index → sub-sitemaps → product URLs
+      Phase 2: HTTP GET product pages → parse SSR HTML
 
-    Data extraction:
-    - window.__INITIAL_STATE__ for listing and detail data
-    - JSON-LD Product schema on detail pages as fallback
-    - HTML CSS selectors as last resort
+    Prices on JioMart are in INR (rupees), NOT paisa. Spider converts.
 
     Spider arguments:
       job_id        — UUID of a ScraperJob row.
-      category_urls — comma-separated override URLs.
-      max_pages     — override MAX_LISTING_PAGES.
+      category_urls — comma-separated override product URLs (skip sitemaps).
+      max_pages     — limits product URLs per sitemap (urls = max_pages * 50).
     """
 
     name = "jiomart"
     allowed_domains = ["jiomart.com", "www.jiomart.com"]
 
-    QUICK_MODE_CATEGORIES = 5
-
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
         "DOWNLOAD_DELAY": 3,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
         "CONCURRENT_REQUESTS": 4,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
         "RETRY_TIMES": 2,
         "RETRY_HTTP_CODES": [500, 502, 503, 504, 408, 429],
-        "HTTPERROR_ALLOWED_CODES": [403, 429, 503],
+        "HTTPERROR_ALLOWED_CODES": [403, 404, 429],
+        # CurlCffi middleware intercepts HTTP requests and uses Chrome
+        # TLS impersonation to bypass Akamai JA3 fingerprinting.
+        # Priority 100 = runs before all other downloader middlewares.
+        "DOWNLOADER_MIDDLEWARES": {
+            "scrapy.downloadermiddlewares.useragent.UserAgentMiddleware": None,
+            "scrapy.downloadermiddlewares.retry.RetryMiddleware": None,
+            "apps.scraping.spiders.jiomart_spider.JioMartCurlCffiMiddleware": 100,
+            "apps.scraping.middlewares.BackoffRetryMiddleware": 350,
+            "apps.scraping.middlewares.PlaywrightProxyMiddleware": 400,
+        },
     }
 
     # ------------------------------------------------------------------
@@ -183,371 +255,448 @@ class JioMartSpider(BaseWhydudSpider):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.job_id = job_id
-        self._category_urls: list[str] = (
+        self._override_urls: list[str] = (
             [u.strip() for u in category_urls.split(",") if u.strip()]
             if category_urls
             else []
         )
         self._max_pages_override: int | None = int(max_pages) if max_pages else None
-        self._pages_followed: dict[str, int] = {}
-        self._max_pages_map: dict[str, int] = {}
+
+        # Compute URL limit per sitemap
+        if self._max_pages_override is not None:
+            self._urls_per_sitemap = self._max_pages_override * 50
+        else:
+            self._urls_per_sitemap = DEFAULT_URLS_PER_SITEMAP
+
+        # Dedup — track seen SKU IDs
+        self._seen_ids: set[str] = set()
 
         # Stats
-        self._listing_pages_scraped: int = 0
-        self._product_pages_scraped: int = 0
+        self._sitemaps_fetched: int = 0
+        self._product_urls_found: int = 0
+        self._product_pages_fetched: int = 0
         self._products_extracted: int = 0
+        self._stale_urls: int = 0
+        self._duplicates_skipped: int = 0
 
-    def closed(self, reason):
-        total = self._product_pages_scraped + self.items_failed
-        rate = (self._product_pages_scraped / total * 100) if total > 0 else 0
+    # ------------------------------------------------------------------
+    # Header override — Akamai bypass requires specific Chrome headers
+    # ------------------------------------------------------------------
+
+    def _make_headers(self) -> dict[str, str]:
+        """Return JioMart-specific headers for Akamai bypass.
+
+        The actual HTTP request is made by JioMartCurlCffiMiddleware
+        using JIOMART_HEADERS with Chrome TLS impersonation.
+        """
+        return dict(JIOMART_HEADERS)
+
+    def closed(self, reason: str) -> None:
+        """Log final scrape statistics."""
         self.logger.info(
             f"JioMart spider finished ({reason}): "
-            f"listings={self._listing_pages_scraped}, "
-            f"product_attempts={total}, "
-            f"products_ok={self._product_pages_scraped} ({rate:.0f}%), "
-            f"failed={self.items_failed}"
+            f"sitemaps={self._sitemaps_fetched}, "
+            f"product_urls_found={self._product_urls_found}, "
+            f"product_pages={self._product_pages_fetched}, "
+            f"products_extracted={self._products_extracted}, "
+            f"stale_404s={self._stale_urls}, "
+            f"duplicates_skipped={self._duplicates_skipped}, "
+            f"items_scraped={self.items_scraped}, "
+            f"items_failed={self.items_failed}"
         )
 
     # ------------------------------------------------------------------
-    # Stealth
-    # ------------------------------------------------------------------
-
-    async def _apply_stealth(self, page, request):
-        try:
-            await self.STEALTH.apply_stealth_async(page)
-            page.set_default_navigation_timeout(60000)
-            page.set_default_timeout(45000)
-        except Exception as e:
-            self.logger.warning(f"Stealth setup issue: {e}")
-
-    # ------------------------------------------------------------------
-    # start_requests — Playwright required (Cloudflare)
+    # start_requests
     # ------------------------------------------------------------------
 
     def start_requests(self):
-        url_pairs = self._load_urls()
-        random.shuffle(url_pairs)
-
-        for url, max_pg in url_pairs:
-            base = url.split("?")[0]
-            self._max_pages_map[base] = max_pg
-
-            self.logger.info(f"Queuing category ({max_pg} pages): {url}")
-            yield scrapy.Request(
-                url,
-                callback=self.parse_listing_page,
-                errback=self.handle_error,
-                headers=self._make_headers(),
-                meta={
-                    "category_slug": self._resolve_category_from_url(url),
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                        PageMethod("wait_for_timeout", random.randint(3000, 5000)),
-                    ],
-                },
-                dont_filter=True,
-            )
-
-        self.logger.info(f"Queued {len(url_pairs)} categories (Playwright)")
-
-    def _load_urls(self) -> list[tuple[str, int]]:
-        fallback = self._max_pages_override or MAX_LISTING_PAGES
-
-        if self._category_urls:
-            return [(u, fallback) for u in self._category_urls]
-
+        """Fetch the main sitemap index or override URLs."""
         if self.job_id:
             try:
                 from apps.scraping.models import ScraperJob
                 job = ScraperJob.objects.get(id=self.job_id)
-                self.logger.info(f"Running for job {self.job_id}")
+                self.logger.info(
+                    f"Running for job {self.job_id}, "
+                    f"marketplace: {job.marketplace.slug}"
+                )
             except Exception as exc:
-                self.logger.warning(f"Could not load ScraperJob {self.job_id}: {exc}")
+                self.logger.warning(
+                    f"Could not load ScraperJob {self.job_id}: {exc}"
+                )
 
-        if self._max_pages_override is not None:
-            if self._max_pages_override <= 3:
-                return [
-                    (url, self._max_pages_override)
-                    for url, _ in SEED_CATEGORY_URLS[:self.QUICK_MODE_CATEGORIES]
-                ]
-            return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
-        return list(SEED_CATEGORY_URLS)
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _resolve_category_from_url(self, url: str) -> str | None:
-        path = url.split("?")[0].lower()
-        for keyword, slug in KEYWORD_CATEGORY_MAP.items():
-            if keyword in path:
-                return slug
-        return None
-
-    def _extract_initial_state(self, response) -> dict | None:
-        match = re.search(
-            r"window\.__INITIAL_STATE__\s*=\s*(\{.+?\})\s*;?\s*</script>",
-            response.text,
-            re.DOTALL,
-        )
-        if not match:
-            return None
-        try:
-            return json.loads(match.group(1))
-        except (json.JSONDecodeError, ValueError):
-            self.logger.warning(f"Failed to parse __INITIAL_STATE__ on {response.url}")
-            return None
-
-    def _parse_price(self, price_val) -> Decimal | None:
-        if price_val is None:
-            return None
-        try:
-            val_str = str(price_val).replace(",", "")
-            match = PRICE_RE.search(val_str)
-            if not match:
-                return None
-            rupees = Decimal(match.group().replace(",", ""))
-            if rupees <= 0:
-                return None
-            return rupees * 100
-        except (InvalidOperation, ValueError):
-            return None
-
-    def _is_blocked(self, response) -> bool:
-        if response.status in (403, 429, 503):
-            return True
-        title = (response.css("title::text").get() or "").strip().lower()
-        if "just a moment" in title or "attention required" in title:
-            return True
-        if "access denied" in title:
-            return True
-        return False
-
-    # ------------------------------------------------------------------
-    # Phase 1: Listing pages
-    # ------------------------------------------------------------------
-
-    def parse_listing_page(self, response):
-        self._listing_pages_scraped += 1
-
-        if self._is_blocked(response):
-            self.logger.warning(f"Blocked on listing {response.url} — skipping")
-            return
-
-        category_slug = response.meta.get("category_slug")
-
-        # Strategy 1: __INITIAL_STATE__
-        state = self._extract_initial_state(response)
-        products = []
-        if state:
-            plp = state.get("productListingPage") or {}
-            pl = plp.get("productlists") or {}
-            items = pl.get("items") or []
-            if isinstance(items, list):
-                products = items
-
-        if products:
-            self.logger.info(f"Found {len(products)} products on {response.url}")
-            for prod in products:
-                slug = prod.get("slug") or prod.get("url", "")
-                if not slug:
-                    continue
-                product_url = response.urljoin(slug) if slug.startswith("/") else f"https://www.jiomart.com/p/{slug}"
+        # Override mode: directly scrape provided product URLs
+        if self._override_urls:
+            self.logger.info(
+                f"Override mode: scraping {len(self._override_urls)} URLs directly"
+            )
+            for url in self._override_urls:
                 yield scrapy.Request(
-                    product_url,
+                    url,
                     callback=self.parse_product_page,
                     errback=self.handle_error,
                     headers=self._make_headers(),
                     meta={
-                        "category_slug": category_slug,
-                        "listing_data": prod,
-                        "playwright": True,
-                        "playwright_page_init_callback": self._apply_stealth,
-                        "playwright_page_methods": [
-                            PageMethod("wait_for_load_state", "domcontentloaded"),
-                            PageMethod("wait_for_timeout", random.randint(2000, 4000)),
-                        ],
+                        "category_slug": self._resolve_category_from_url(url),
+                        "playwright": False,
                     },
                 )
-        else:
-            # Strategy 2: HTML links
-            links = set()
-            for href in response.css("a[href*='/p/']::attr(href)").getall():
-                full_url = response.urljoin(href)
-                if "/p/" in full_url:
-                    links.add(full_url)
-            if links:
-                self.logger.info(f"Found {len(links)} products (HTML) on {response.url}")
-                for prod_url in links:
-                    yield scrapy.Request(
-                        prod_url,
-                        callback=self.parse_product_page,
-                        errback=self.handle_error,
-                        headers=self._make_headers(),
-                        meta={
-                            "category_slug": category_slug,
-                            "playwright": True,
-                            "playwright_page_init_callback": self._apply_stealth,
-                            "playwright_page_methods": [
-                                PageMethod("wait_for_load_state", "domcontentloaded"),
-                                PageMethod("wait_for_timeout", random.randint(2000, 4000)),
-                            ],
-                        },
-                    )
-            else:
-                self.logger.warning(f"No products found on {response.url}")
-                return
+            return
 
-        # Pagination
-        base_url = response.url.split("?")[0]
-        pages_so_far = self._pages_followed.get(base_url, 1)
-        max_for_category = self._max_pages_map.get(base_url, MAX_LISTING_PAGES)
+        # Normal mode: start from sitemap index
+        self.logger.info("Fetching sitemap index")
+        yield scrapy.Request(
+            SITEMAP_INDEX_URL,
+            callback=self.parse_sitemap_index,
+            errback=self.handle_error,
+            headers=self._make_headers(),
+            meta={"playwright": False},
+        )
 
-        if pages_so_far < max_for_category:
-            next_page = pages_so_far + 1
-            separator = "&" if "?" in base_url else "?"
-            next_url = f"{base_url}{separator}page={next_page}"
-            self._pages_followed[base_url] = next_page
+    # ------------------------------------------------------------------
+    # Phase 1: Sitemap parsing
+    # ------------------------------------------------------------------
+
+    def parse_sitemap_index(self, response):
+        """Parse the sitemap index XML and follow allowed sub-sitemaps."""
+        if response.status in (403, 429):
+            self.logger.error(
+                f"Blocked ({response.status}) on sitemap index — cannot proceed"
+            )
+            return
+
+        try:
+            root = ElementTree.fromstring(response.text)
+        except ElementTree.ParseError as exc:
+            self.logger.error(f"Failed to parse sitemap index XML: {exc}")
+            return
+
+        # Extract <loc> URLs from sitemap index
+        sitemap_urls = [
+            loc.text.strip()
+            for loc in root.findall(".//sm:sitemap/sm:loc", SITEMAP_NS)
+            if loc.text
+        ]
+
+        # Fallback: try without namespace (some sitemaps don't use it)
+        if not sitemap_urls:
+            sitemap_urls = [
+                loc.text.strip()
+                for loc in root.iter()
+                if loc.tag.endswith("loc") and loc.text
+            ]
+
+        self.logger.info(
+            f"Found {len(sitemap_urls)} sub-sitemaps in index"
+        )
+
+        # Filter to allowed categories for v1
+        for url in sitemap_urls:
+            url_lower = url.lower()
+            category_hint = None
+
+            for pattern, cat_slug in ALLOWED_SITEMAPS.items():
+                if pattern in url_lower:
+                    category_hint = cat_slug
+                    break
+
+            if category_hint is None:
+                self.logger.debug(f"Skipping sitemap (not in v1 scope): {url}")
+                continue
+
+            self.logger.info(f"Following sub-sitemap ({category_hint}): {url}")
+            yield scrapy.Request(
+                url,
+                callback=self.parse_sitemap,
+                errback=self.handle_error,
+                headers=self._make_headers(),
+                meta={
+                    "category_hint": category_hint,
+                    "playwright": False,
+                },
+                dont_filter=True,
+            )
+
+    def parse_sitemap(self, response):
+        """Parse a sub-sitemap XML and extract product URLs."""
+        self._sitemaps_fetched += 1
+
+        if response.status in (403, 429):
+            self.logger.warning(
+                f"Blocked ({response.status}) on sitemap {response.url}"
+            )
+            return
+
+        category_hint = response.meta.get("category_hint", "")
+
+        try:
+            root = ElementTree.fromstring(response.text)
+        except ElementTree.ParseError as exc:
+            self.logger.error(
+                f"Failed to parse sitemap XML {response.url}: {exc}"
+            )
+            return
+
+        # Extract all <loc> URLs
+        all_urls = [
+            loc.text.strip()
+            for loc in root.findall(".//sm:url/sm:loc", SITEMAP_NS)
+            if loc.text
+        ]
+
+        # Fallback: try without namespace
+        if not all_urls:
+            all_urls = [
+                loc.text.strip()
+                for loc in root.iter()
+                if loc.tag.endswith("loc") and loc.text
+            ]
+
+        # Filter to product URLs only (pattern: /p/{vertical}/{slug}/{sku_id})
+        product_urls = [
+            url for url in all_urls
+            if PRODUCT_URL_RE.search(url)
+        ]
+
+        self.logger.info(
+            f"Sitemap {response.url}: "
+            f"{len(all_urls)} total URLs, "
+            f"{len(product_urls)} product URLs"
+        )
+
+        # Limit URLs per sitemap
+        urls_to_process = product_urls[:self._urls_per_sitemap]
+        self._product_urls_found += len(urls_to_process)
+
+        product_count = 0
+        for url in urls_to_process:
+            # Extract SKU ID for dedup
+            sku_match = SKU_ID_RE.search(url)
+            if not sku_match:
+                continue
+            sku_id = sku_match.group(1)
+
+            if sku_id in self._seen_ids:
+                self._duplicates_skipped += 1
+                continue
+            self._seen_ids.add(sku_id)
+
+            product_count += 1
+            category_slug = self._resolve_category_from_url(url) or category_hint
 
             yield scrapy.Request(
-                next_url,
-                callback=self.parse_listing_page,
+                url,
+                callback=self.parse_product_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
                 meta={
                     "category_slug": category_slug,
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                        PageMethod("wait_for_timeout", random.randint(3000, 5000)),
-                    ],
+                    "sku_id": sku_id,
+                    "playwright": False,
                 },
             )
 
+        self.logger.info(
+            f"Queued {product_count} product pages from {response.url}"
+        )
+
     # ------------------------------------------------------------------
-    # Phase 2: Product detail pages
+    # Phase 2: Product detail pages (SSR HTML parsing)
     # ------------------------------------------------------------------
 
     def parse_product_page(self, response):
-        if self._is_blocked(response):
-            self.logger.warning(f"Blocked on product {response.url}")
+        """Parse SSR HTML product detail page for structured data."""
+        self._product_pages_fetched += 1
+
+        # Handle stale sitemap URLs gracefully
+        if response.status == 404:
+            self._stale_urls += 1
+            self.logger.debug(f"Stale URL (404): {response.url}")
+            return
+
+        if response.status in (403, 429):
+            self.logger.warning(
+                f"Blocked ({response.status}) on {response.url}"
+            )
+            self.items_failed += 1
+            return
+
+        if response.status >= 400:
+            self.logger.warning(
+                f"Error {response.status} on {response.url}"
+            )
             self.items_failed += 1
             return
 
         category_slug = response.meta.get("category_slug")
-        listing_data = response.meta.get("listing_data")
+        sku_id = response.meta.get("sku_id")
 
-        # Strategy 1: __INITIAL_STATE__
-        state = self._extract_initial_state(response)
-        if state:
-            pdp = state.get("productDetailsPage") or {}
-            product = pdp.get("product")
-            if product and product.get("name"):
-                item = self._parse_from_state(product, response.url, category_slug)
-                if item:
-                    self._product_pages_scraped += 1
-                    self._products_extracted += 1
-                    self.items_scraped += 1
-                    yield item
-                    return
+        # Fallback SKU ID extraction from URL
+        if not sku_id:
+            sku_match = SKU_ID_RE.search(response.url)
+            sku_id = sku_match.group(1) if sku_match else None
 
-        # Strategy 2: JSON-LD
-        item = self._parse_from_json_ld(response, category_slug)
+        if not sku_id:
+            self.logger.warning(f"No SKU ID for {response.url} — skipping")
+            self.items_failed += 1
+            return
+
+        item = self._extract_product(response, category_slug, sku_id)
         if item:
-            self._product_pages_scraped += 1
             self._products_extracted += 1
             self.items_scraped += 1
             yield item
-            return
+        else:
+            self.logger.warning(
+                f"Could not extract product data from {response.url}"
+            )
+            self.items_failed += 1
 
-        # Strategy 3: Listing data fallback
-        if listing_data:
-            item = self._parse_from_listing(listing_data, response.url, category_slug)
-            if item:
-                self._product_pages_scraped += 1
-                self._products_extracted += 1
-                self.items_scraped += 1
-                yield item
-                return
+    def _extract_product(
+        self, response, category_slug: str | None, sku_id: str,
+    ) -> ProductItem | None:
+        """Extract product data from JioMart SSR HTML.
 
-        self.logger.warning(f"Could not extract product data from {response.url}")
-        self.items_failed += 1
-
-    # ------------------------------------------------------------------
-    # Extraction: __INITIAL_STATE__ (primary)
-    # ------------------------------------------------------------------
-
-    def _parse_from_state(self, product: dict, url: str, category_slug: str | None) -> ProductItem | None:
-        name = product.get("name")
-        if not name:
-            return None
-
-        uid = product.get("uid") or product.get("item_code")
-        if not uid:
-            return None
-        external_id = str(uid)
-
-        # Prices (rupees → paisa)
-        price_data = product.get("price") or {}
-        selling_price = self._parse_price(
-            (price_data.get("effective") or {}).get("min")
-            or (price_data.get("selling") or {}).get("min")
+        Data sources:
+          1. HTML elements (product name, prices, specs table)
+          2. Meta tags (og: properties)
+          3. JSON-LD BreadcrumbList (for breadcrumbs only — no Product schema)
+        """
+        # === Title ===
+        title = (
+            response.css("h1.product-header-name::text").get()
+            or response.css("h1::text").get()
+            or response.css("meta[property='og:title']::attr(content)").get()
         )
-        mrp = self._parse_price((price_data.get("marked") or {}).get("min"))
+        if not title or not title.strip():
+            return None
+        title = title.strip()
 
-        brand_data = product.get("brand") or {}
-        brand = brand_data.get("name") if isinstance(brand_data, dict) else str(brand_data) if brand_data else None
+        # === Prices (rupees → paisa) ===
+        selling_price = self._extract_selling_price(response)
+        mrp = self._extract_mrp(response)
 
-        images = []
-        for media in product.get("medias") or []:
-            img_url = media.get("url", "")
-            if img_url and media.get("type") == "image":
-                if img_url.startswith("//"):
-                    img_url = "https:" + img_url
-                images.append(img_url)
+        # === Brand ===
+        brand = (
+            response.css(".product-info-brand a::text").get()
+            or response.css(".brand-name::text").get()
+            or response.css("[class*='brand'] a::text").get()
+        )
+        if brand:
+            brand = brand.strip() or None
 
-        specs = {}
-        for key, val in (product.get("attributes") or {}).items():
-            if key and val:
-                specs[key.replace("_", " ").title()] = str(val)
+        # === Images ===
+        images = self._extract_images(response)
 
+        # === Rating ===
         rating = None
-        if product.get("rating"):
+        rating_str = (
+            response.css(".rating-value::text").get()
+            or response.css("[class*='rating'] span::text").get()
+        )
+        if rating_str:
             try:
-                rating = Decimal(str(product["rating"]))
+                val = Decimal(rating_str.strip())
+                if 0 < val <= 5:
+                    rating = val
             except (InvalidOperation, ValueError):
                 pass
 
-        in_stock = product.get("is_available", True)
-        description = product.get("description")
+        # === Review count ===
+        review_count = None
+        review_str = response.css(
+            "[class*='review-count']::text, "
+            "[class*='rating-count']::text"
+        ).get()
+        if review_str:
+            nums = re.findall(r"\d+", review_str)
+            if nums:
+                try:
+                    review_count = int(nums[0])
+                    if review_count == 0:
+                        review_count = None
+                except (ValueError, TypeError):
+                    pass
 
-        if not category_slug:
-            cat_map = product.get("category_map") or {}
-            for level in ("l3", "l2"):
-                cat_name = (cat_map.get(level) or {}).get("name", "").lower().replace(" ", "-")
-                for kw, slug in KEYWORD_CATEGORY_MAP.items():
-                    if kw in cat_name:
+        # === Seller ===
+        seller_name = (
+            response.css(".seller-name::text").get()
+            or response.css("[class*='seller'] a::text").get()
+            or response.css("[class*='sold-by'] span::text").get()
+        )
+        if seller_name:
+            seller_name = seller_name.strip()
+
+        # === Specifications ===
+        specs = self._extract_specs(response)
+
+        # === Description ===
+        description = response.css(
+            ".product-description::text, "
+            "[class*='product-desc']::text, "
+            "meta[property='og:description']::attr(content)"
+        ).get()
+        if description:
+            description = description.strip()[:5000] or None
+
+        # === Stock ===
+        out_of_stock_el = response.css(
+            ".out-of-stock, [class*='sold-out'], [class*='outofstock']"
+        )
+        add_to_cart = response.css(
+            "button[class*='add-to-cart'], button[class*='addtocart']"
+        )
+        in_stock = len(out_of_stock_el) == 0 or len(add_to_cart) > 0
+
+        # === Breadcrumbs ===
+        breadcrumbs = self._extract_breadcrumbs(response)
+
+        # === Category from breadcrumbs or URL ===
+        if not category_slug and breadcrumbs:
+            for crumb in breadcrumbs:
+                crumb_lower = crumb.lower()
+                for kw, slug in VERTICAL_CATEGORY_MAP.items():
+                    if kw in crumb_lower:
                         category_slug = slug
                         break
                 if category_slug:
                     break
 
+        # === Metadata from specs ===
+        manufacturer = (
+            specs.get("Manufacturer")
+            or specs.get("manufacturer")
+            or brand
+        )
+        weight = (
+            specs.get("Weight")
+            or specs.get("Net Weight")
+            or specs.get("weight")
+        )
+        dimensions = specs.get("Dimensions") or specs.get("dimensions")
+        model_number = (
+            specs.get("Model Number")
+            or specs.get("Model Name")
+            or specs.get("model")
+        )
+        warranty = specs.get("Warranty") or specs.get("warranty")
+        country_of_origin = (
+            specs.get("Country of Origin")
+            or specs.get("Country Of Origin")
+        )
+
         return ProductItem(
             marketplace_slug=MARKETPLACE_SLUG,
-            external_id=external_id,
-            url=url,
-            title=name,
+            external_id=sku_id,
+            url=response.url,
+            title=title,
             brand=brand,
             price=selling_price,
             mrp=mrp,
             images=images,
             rating=rating,
-            review_count=None,
+            review_count=review_count,
             specs=specs,
-            seller_name="JioMart",
+            seller_name=seller_name or "JioMart",
             seller_rating=None,
             in_stock=in_stock,
             fulfilled_by="JioMart",
@@ -556,145 +705,221 @@ class JioMartSpider(BaseWhydudSpider):
             offer_details=[],
             raw_html_path=None,
             description=description,
-            warranty=specs.get("Warranty"),
+            warranty=str(warranty) if warranty else None,
             delivery_info=None,
             return_policy=None,
-            breadcrumbs=[],
+            breadcrumbs=breadcrumbs,
             variant_options=[],
-            country_of_origin=specs.get("Country Of Origin"),
-            manufacturer=specs.get("Manufacturer") or brand,
-            model_number=specs.get("Model"),
-            weight=specs.get("Weight"),
-            dimensions=specs.get("Dimensions"),
+            country_of_origin=str(country_of_origin) if country_of_origin else None,
+            manufacturer=str(manufacturer) if manufacturer else None,
+            model_number=str(model_number) if model_number else None,
+            weight=str(weight) if weight else None,
+            dimensions=str(dimensions) if dimensions else None,
         )
 
     # ------------------------------------------------------------------
-    # Extraction: JSON-LD (fallback)
+    # Price extraction
     # ------------------------------------------------------------------
 
-    def _parse_from_json_ld(self, response, category_slug: str | None) -> ProductItem | None:
-        ld_scripts = response.css('script[type="application/ld+json"]::text').getall()
-        for script_text in ld_scripts:
+    def _extract_selling_price(self, response) -> Decimal | None:
+        """Extract the selling/offer price from HTML (rupees → paisa)."""
+        price_str = (
+            response.css(".selling-price::text").get()
+            or response.css("[class*='selling-price']::text").get()
+            or response.css("[class*='offer-price']::text").get()
+            or response.css("[class*='final-price']::text").get()
+            or response.css(".jm-heading-xxs::text").get()
+        )
+
+        # Fallback: look for ₹ symbol in price containers
+        if not price_str:
+            for text in response.css("[class*='price'] ::text").getall():
+                if "₹" in text or "Rs" in text:
+                    price_str = text
+                    break
+
+        return self._parse_price(price_str)
+
+    def _extract_mrp(self, response) -> Decimal | None:
+        """Extract the MRP (maximum retail price) from HTML (rupees → paisa)."""
+        mrp_str = (
+            response.css(".mrp-price::text").get()
+            or response.css("[class*='mrp']::text").get()
+            or response.css("[class*='strikethrough']::text").get()
+            or response.css("del::text").get()
+            or response.css(".original-price::text").get()
+        )
+        return self._parse_price(mrp_str)
+
+    # ------------------------------------------------------------------
+    # Image extraction
+    # ------------------------------------------------------------------
+
+    def _extract_images(self, response) -> list[str]:
+        """Extract product images from various HTML sources."""
+        images: list[str] = []
+        seen: set[str] = set()
+
+        def _add(url: str) -> None:
+            if not url or url.startswith("data:"):
+                return
+            clean = url.split("?")[0]
+            if clean.startswith("//"):
+                clean = "https:" + clean
+            if clean not in seen:
+                seen.add(clean)
+                images.append(clean)
+
+        # Product gallery images
+        for sel in (
+            "img.product-image::attr(src)",
+            "[class*='product-image'] img::attr(src)",
+            "[class*='gallery'] img::attr(src)",
+            ".pdp-image img::attr(src)",
+            "img[class*='pdp']::attr(src)",
+        ):
+            for img in response.css(sel).getall():
+                _add(img)
+
+        # Lazy-loaded images (JioMart CDN: cdn.jiostore.online)
+        for img in response.css("img[data-src]::attr(data-src)").getall():
+            if "jiomart" in img or "jiostore" in img or "cdn" in img:
+                _add(img)
+
+        # OG image fallback
+        if not images:
+            og = response.css("meta[property='og:image']::attr(content)").get()
+            if og:
+                _add(og)
+
+        return images
+
+    # ------------------------------------------------------------------
+    # Specification extraction
+    # ------------------------------------------------------------------
+
+    def _extract_specs(self, response) -> dict[str, str]:
+        """Extract product specifications from detail page."""
+        specs: dict[str, str] = {}
+
+        # Primary: table-based specs (common on JioMart PDPs)
+        for row in response.css(
+            ".specification-row, "
+            ".spec-row, "
+            "[class*='spec'] tr, "
+            "[class*='product-info'] tr, "
+            ".product-detail-row"
+        ):
+            label = row.css(
+                "td:first-child::text, "
+                "th::text, "
+                ".spec-label::text, "
+                ".spec-key::text"
+            ).get()
+            value = row.css(
+                "td:last-child::text, "
+                ".spec-value::text, "
+                ".spec-desc::text"
+            ).get()
+            if label and value and label.strip() and value.strip():
+                specs[label.strip()] = value.strip()
+
+        # Fallback: key-value pairs in divs
+        for row in response.css("[class*='attribute'], [class*='detail-row']"):
+            label = row.css(
+                "[class*='label']::text, "
+                "[class*='key']::text, "
+                "span:first-child::text"
+            ).get()
+            value = row.css(
+                "[class*='value']::text, "
+                "span:last-child::text"
+            ).get()
+            if (
+                label and value
+                and label.strip() and value.strip()
+                and label.strip() != value.strip()
+            ):
+                specs[label.strip()] = value.strip()
+
+        return specs
+
+    # ------------------------------------------------------------------
+    # Breadcrumb extraction
+    # ------------------------------------------------------------------
+
+    def _extract_breadcrumbs(self, response) -> list[str]:
+        """Extract breadcrumb trail from JSON-LD or HTML."""
+        breadcrumbs: list[str] = []
+
+        # Try JSON-LD BreadcrumbList
+        for script in response.css(
+            'script[type="application/ld+json"]::text'
+        ).getall():
             try:
-                ld_data = json.loads(script_text)
+                ld_data = json.loads(script)
+                if isinstance(ld_data, list):
+                    for item in ld_data:
+                        if isinstance(item, dict) and item.get("@type") == "BreadcrumbList":
+                            ld_data = item
+                            break
+                if (
+                    isinstance(ld_data, dict)
+                    and ld_data.get("@type") == "BreadcrumbList"
+                ):
+                    for element in ld_data.get("itemListElement", []):
+                        name = element.get("name", "").strip()
+                        if name:
+                            breadcrumbs.append(name)
+                    if breadcrumbs:
+                        return breadcrumbs
             except (json.JSONDecodeError, ValueError):
                 continue
 
-            if isinstance(ld_data, list):
-                for item in ld_data:
-                    if item.get("@type") == "Product":
-                        ld_data = item
-                        break
-                else:
-                    continue
+        # Fallback: HTML breadcrumbs
+        for bc in response.css(
+            ".breadcrumb a::text, "
+            "[class*='breadcrumb'] a::text, "
+            "nav[aria-label='breadcrumb'] a::text"
+        ).getall():
+            text = bc.strip()
+            if text:
+                breadcrumbs.append(text)
 
-            if ld_data.get("@type") != "Product":
-                continue
-
-            name = ld_data.get("name")
-            sku = ld_data.get("sku") or ld_data.get("productID")
-            if not name or not sku:
-                continue
-
-            offers = ld_data.get("offers") or {}
-            if isinstance(offers, list) and offers:
-                offers = offers[0]
-            price = self._parse_price(offers.get("price"))
-
-            brand_data = ld_data.get("brand") or {}
-            brand = brand_data.get("name") if isinstance(brand_data, dict) else None
-
-            images = ld_data.get("image") or []
-            if isinstance(images, str):
-                images = [images]
-
-            in_stock = "InStock" in (offers.get("availability") or "")
-
-            return ProductItem(
-                marketplace_slug=MARKETPLACE_SLUG,
-                external_id=str(sku),
-                url=response.url,
-                title=name,
-                brand=brand,
-                price=price,
-                mrp=None,
-                images=images,
-                rating=None,
-                review_count=None,
-                specs={},
-                seller_name="JioMart",
-                seller_rating=None,
-                in_stock=in_stock,
-                fulfilled_by="JioMart",
-                category_slug=category_slug,
-                about_bullets=[],
-                offer_details=[],
-                raw_html_path=None,
-                description=ld_data.get("description"),
-                warranty=None,
-                delivery_info=None,
-                return_policy=None,
-                breadcrumbs=[],
-                variant_options=[],
-                country_of_origin=None,
-                manufacturer=brand,
-                model_number=None,
-                weight=None,
-                dimensions=None,
-            )
-        return None
+        return breadcrumbs
 
     # ------------------------------------------------------------------
-    # Extraction: Listing data fallback
+    # URL helpers
     # ------------------------------------------------------------------
 
-    def _parse_from_listing(self, listing: dict, url: str, category_slug: str | None) -> ProductItem | None:
-        name = listing.get("name")
-        uid = listing.get("uid") or listing.get("item_code")
-        if not name or not uid:
+    @staticmethod
+    def _resolve_category_from_url(url: str) -> str | None:
+        """Extract category slug from JioMart product URL path.
+
+        URL pattern: /p/{vertical}/{slug}/{sku_id}
+        """
+        match = re.search(r"/p/([^/]+)/", url)
+        if not match:
             return None
+        vertical = match.group(1).lower()
+        return VERTICAL_CATEGORY_MAP.get(vertical)
 
-        price_data = listing.get("price") or {}
-        selling_price = self._parse_price((price_data.get("effective") or {}).get("min"))
-        mrp = self._parse_price((price_data.get("marked") or {}).get("min"))
+    # ------------------------------------------------------------------
+    # Price helpers
+    # ------------------------------------------------------------------
 
-        brand_data = listing.get("brand") or {}
-        brand = brand_data.get("name") if isinstance(brand_data, dict) else None
-
-        images = []
-        for media in listing.get("medias") or []:
-            if media.get("type") == "image":
-                images.append(media.get("url", ""))
-
-        return ProductItem(
-            marketplace_slug=MARKETPLACE_SLUG,
-            external_id=str(uid),
-            url=url,
-            title=name,
-            brand=brand,
-            price=selling_price,
-            mrp=mrp,
-            images=[img for img in images if img],
-            rating=None,
-            review_count=None,
-            specs={},
-            seller_name="JioMart",
-            seller_rating=None,
-            in_stock=True,
-            fulfilled_by="JioMart",
-            category_slug=category_slug,
-            about_bullets=[],
-            offer_details=[],
-            raw_html_path=None,
-            description=None,
-            warranty=None,
-            delivery_info=None,
-            return_policy=None,
-            breadcrumbs=[],
-            variant_options=[],
-            country_of_origin=None,
-            manufacturer=brand,
-            model_number=None,
-            weight=None,
-            dimensions=None,
-        )
+    @staticmethod
+    def _parse_price(price_str: str | None) -> Decimal | None:
+        """Parse a price string (rupees) to Decimal in paisa."""
+        if not price_str:
+            return None
+        match = PRICE_RE.search(str(price_str).strip())
+        if not match:
+            return None
+        try:
+            rupees = Decimal(match.group().replace(",", ""))
+            if rupees <= 0:
+                return None
+            return rupees * 100  # Convert to paisa
+        except (InvalidOperation, ValueError):
+            return None
