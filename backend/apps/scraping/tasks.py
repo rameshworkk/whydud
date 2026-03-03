@@ -4,6 +4,7 @@ All tasks run on the ``scraping`` queue.  Spiders are executed in a
 subprocess via ``apps.scraping.runner`` to avoid Twisted reactor restart
 issues inside Celery workers.
 """
+import collections
 import logging
 import os
 import subprocess
@@ -17,6 +18,37 @@ logger = logging.getLogger(__name__)
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RUNNER_MODULE = "apps.scraping.runner"
+
+# Number of trailing output lines to keep for error reporting
+_TAIL_LINES = 80
+
+
+def _run_spider_process(cmd: list[str], env: dict, timeout: int, spider_name: str) -> tuple[int, str]:
+    """Run a spider subprocess, streaming output to the celery worker log.
+
+    Returns (returncode, last_output) where last_output is the tail of
+    stderr+stdout for error reporting.
+    """
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=BACKEND_DIR,
+        env=env,
+    )
+    tail = collections.deque(maxlen=_TAIL_LINES)
+    try:
+        for line in proc.stdout:
+            line = line.rstrip()
+            tail.append(line)
+            logger.info("[%s] %s", spider_name, line)
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        raise
+    return proc.returncode, "\n".join(tail)
 
 
 # ---------------------------------------------------------------------------
@@ -85,23 +117,16 @@ def run_marketplace_spider(self, marketplace_slug: str, category_slugs: list[str
     env.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=BACKEND_DIR,
-            timeout=timeout,
-            env=env,
-        )
+        returncode, tail_output = _run_spider_process(cmd, env, timeout, spider_name)
 
         job.finished_at = timezone.now()
 
-        if result.returncode == 0:
+        if returncode == 0:
             job.status = ScraperJob.Status.COMPLETED
             logger.info("Spider %s completed for %s", spider_name, marketplace_slug)
         else:
             job.status = ScraperJob.Status.FAILED
-            job.error_message = (result.stderr or result.stdout or "")[:2000]
+            job.error_message = tail_output[:2000]
             logger.error("Spider %s failed: %s", spider_name, job.error_message[:200])
 
     except subprocess.TimeoutExpired:
@@ -206,23 +231,16 @@ def run_review_spider(self, marketplace_slug: str, max_review_pages: int | None 
     env.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=BACKEND_DIR,
-            timeout=timeout,
-            env=env,
-        )
+        returncode, tail_output = _run_spider_process(cmd, env, timeout, spider_name)
 
         job.finished_at = timezone.now()
 
-        if result.returncode == 0:
+        if returncode == 0:
             job.status = ScraperJob.Status.COMPLETED
             logger.info("Review spider %s completed for %s", spider_name, marketplace_slug)
         else:
             job.status = ScraperJob.Status.FAILED
-            job.error_message = (result.stderr or result.stdout or "")[:2000]
+            job.error_message = tail_output[:2000]
             logger.error("Review spider %s failed: %s", spider_name, job.error_message[:200])
 
     except subprocess.TimeoutExpired:
@@ -370,23 +388,16 @@ def run_spider(self, marketplace_slug: str, spider_name: str, job_id: str | None
     env.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=BACKEND_DIR,
-            timeout=timeout,
-            env=env,
-        )
+        returncode, tail_output = _run_spider_process(cmd, env, timeout, spider_name)
 
         job.finished_at = timezone.now()
 
-        if result.returncode == 0:
+        if returncode == 0:
             job.status = ScraperJob.Status.COMPLETED
             logger.info("Spider %s completed for %s", spider_name, marketplace_slug)
         else:
             job.status = ScraperJob.Status.FAILED
-            job.error_message = (result.stderr or result.stdout or "")[:2000]
+            job.error_message = tail_output[:2000]
             logger.error("Spider %s failed: %s", spider_name, job.error_message[:200])
 
     except subprocess.TimeoutExpired:
