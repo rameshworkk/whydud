@@ -1,26 +1,23 @@
-"""Reliance Digital spider — scrapes product listings and detail pages.
+"""Reliance Digital spider — scrapes products via the open Fynd Commerce JSON API.
 
 Architecture:
-  Reliance Digital is a Vue.js 2 SPA powered by Fynd/Jio Commerce Platform.
-  - Listing pages: window.__INITIAL_STATE__.productListingPage.productlists.items[]
-  - Detail pages:  window.__INITIAL_STATE__.productDetailsPage.product
-  - JSON-LD Product schema on detail pages as fallback
-  - Prices in the JSON are in rupees (NOT paisa) — spider converts to paisa
+  Single-phase: the /ext/raven-api/catalog/v1.0/products endpoint returns full
+  product data (title, brand, price, images, specs) in one JSON response.
+  No Playwright needed — pure HTTP + JSON.
 
-URL patterns:
-  Collection: /collection/{slug}?page_no={n}&page_size=12
-  L2 Category: /products/?l2_category={slug}&department=electronics
-  L3 Category: /products/?l3_categories={slug}&department=electronics
-  Product:     /product/{product-slug}-{uid}
-  Search:      /search?q={query}
+  Prices in the API are in RUPEES (not paisa). Spider converts to paisa (* 100).
+
+API details:
+  Endpoint: GET https://www.reliancedigital.in/ext/raven-api/catalog/v1.0/products
+  Params:   q={query}&page={n}&pageSize=24
+  Auth:     None required (open API)
+  Pagination: response.page.current, response.page.has_next, response.page.item_total
 """
-import json
 import random
 import re
 from decimal import Decimal, InvalidOperation
 
 import scrapy
-from scrapy_playwright.page import PageMethod
 
 from apps.scraping.items import ProductItem
 from .base_spider import BaseWhydudSpider
@@ -29,177 +26,96 @@ from .base_spider import BaseWhydudSpider
 # Constants
 # ---------------------------------------------------------------------------
 
-PRODUCT_UID_RE = re.compile(r"-(\d{5,})$")
-PRICE_RE = re.compile(r"[\d,]+(?:\.\d{1,2})?")
-
 MARKETPLACE_SLUG = "reliance-digital"
+
+API_BASE = "https://www.reliancedigital.in/ext/raven-api/catalog/v1.0/products"
+PAGE_SIZE = 24
+
+# ---------------------------------------------------------------------------
+# Seed queries — (search_query, category_slug_hint, max_pages)
+# ---------------------------------------------------------------------------
+
+SEED_QUERIES: list[tuple[str, str, int]] = [
+    ("smartphones", "smartphones", 10),
+    ("laptops", "laptops", 10),
+    ("headphones", "audio", 5),
+    ("televisions", "televisions", 5),
+    ("air conditioners", "air-conditioners", 5),
+    ("refrigerators", "refrigerators", 5),
+    ("washing machines", "washing-machines", 5),
+    ("air purifiers", "appliances", 5),
+    ("cameras", "cameras", 5),
+    ("tablets", "tablets", 5),
+]
 
 # ---------------------------------------------------------------------------
 # Keyword → Whydud category slug mapping
 # ---------------------------------------------------------------------------
 
 KEYWORD_CATEGORY_MAP: dict[str, str] = {
-    # Smartphones
-    "smart-phones": "smartphones",
-    "smart phones": "smartphones",
     "smartphones": "smartphones",
-    "feature-phones": "smartphones",
-    "mobile-accessories": "smartphones",
-    "mobile accessories": "smartphones",
-    "mobiles-tablets": "smartphones",
-    "power banks": "smartphones",
-    # Laptops & Computers
+    "smart phones": "smartphones",
+    "mobiles": "smartphones",
     "laptops": "laptops",
-    "entry-level-laptops": "laptops",
-    "premium-laptops": "laptops",
-    "gaming-laptops": "laptops",
-    "tablets": "tablets",
-    "regular-tablets": "tablets",
-    "monitors": "laptops",
-    "printers": "laptops",
-    "computers": "laptops",
-    "pen-drives": "laptops",
-    "hard-drives": "laptops",
-    "routers": "laptops",
-    "keyboards": "laptops",
-    # Audio
-    "headphones-headsets": "audio",
+    "notebooks": "laptops",
     "headphones": "audio",
-    "true-wireless": "audio",
-    "bluetooth-wifi-speakers": "audio",
-    "bluetooth speakers": "audio",
-    "tv-speakers-soundbars": "audio",
+    "earphones": "audio",
+    "earbuds": "audio",
+    "speakers": "audio",
     "soundbars": "audio",
-    "home-audio": "audio",
-    "party speakers": "audio",
-    # Wearables
-    "smart-watches": "smartwatches",
-    "smart-devices": "smartwatches",
-    "fitness-bands": "smartwatches",
-    # Cameras
-    "cameras": "cameras",
-    "action-cameras": "cameras",
-    "dslr": "cameras",
-    # TVs
     "televisions": "televisions",
-    "led-televisions": "televisions",
-    "led tvs": "televisions",
-    "smart tvs": "televisions",
-    "projectors": "televisions",
-    "streaming devices": "televisions",
-    # Large Appliances
+    "tvs": "televisions",
+    "led tv": "televisions",
+    "smart tv": "televisions",
+    "air conditioners": "air-conditioners",
+    "split ac": "air-conditioners",
     "refrigerators": "refrigerators",
-    "frost-free": "refrigerators",
-    "washing-machines": "washing-machines",
-    "split-air-conditioners": "air-conditioners",
-    "air-conditioners": "air-conditioners",
-    "air-care": "air-conditioners",
-    "microwave-ovens": "appliances",
-    "dishwashers": "appliances",
-    "water-heaters": "appliances",
-    # Small Appliances
-    "air-purifiers": "appliances",
-    "water-purifiers": "appliances",
-    "vacuum-cleaners": "appliances",
-    "fans": "appliances",
-    "irons": "appliances",
-    "home-appliances": "appliances",
-    # Kitchen
-    "kitchen-appliances": "kitchen-tools",
-    "mixer-grinders": "kitchen-tools",
-    "air-fryers": "kitchen-tools",
-    "coffee-machines": "kitchen-tools",
-    "induction-cooktops": "kitchen-tools",
-    "electric-kettles": "kitchen-tools",
-    "juicers": "kitchen-tools",
-    "food-processors": "kitchen-tools",
-    # Personal Care
-    "personal-care": "grooming",
+    "fridge": "refrigerators",
+    "washing machines": "washing-machines",
+    "air purifiers": "appliances",
+    "water purifiers": "appliances",
+    "cameras": "cameras",
+    "dslr": "cameras",
+    "tablets": "tablets",
+    "smartwatches": "smartwatches",
+    "smart watches": "smartwatches",
+    "gaming": "gaming",
+    "printers": "laptops",
+    "monitors": "laptops",
+    "kitchen appliances": "kitchen-tools",
+    "mixer grinders": "kitchen-tools",
     "trimmers": "grooming",
     "shavers": "grooming",
-    "hair-dryers": "grooming",
-    # Gaming
-    "gaming": "gaming",
-    "gaming-consoles": "gaming",
-    "gaming-accessories": "gaming",
 }
-
-# ---------------------------------------------------------------------------
-# Seed URLs — using collection pages (more reliable SSR than /products/ pages)
-# Format: (url, max_pages)
-# ---------------------------------------------------------------------------
-
-_TOP = 15  # pages for top categories
-_STD = 8   # pages for standard categories
-
-SEED_CATEGORY_URLS: list[tuple[str, int]] = [
-    # ── Smartphones ─────────────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l3_categories=smart-phones&department=electronics", _TOP),
-    ("https://www.reliancedigital.in/products/?l3_categories=feature-phones&department=electronics", _STD),
-    ("https://www.reliancedigital.in/products/?l3_categories=regular-tablets&department=electronics", _STD),
-    # ── Laptops & Computers ─────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l3_categories=entry-level-laptops&department=electronics", _TOP),
-    ("https://www.reliancedigital.in/products/?l3_categories=premium-laptops&department=electronics", _TOP),
-    ("https://www.reliancedigital.in/products/?l2_category=monitors&department=electronics", _STD),
-    ("https://www.reliancedigital.in/products/?l2_category=printers&department=electronics", _STD),
-    # ── TVs ─────────────────────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l3_categories=led-televisions&department=electronics", _TOP),
-    ("https://www.reliancedigital.in/products/?l2_category=projectors&department=electronics", _STD),
-    # ── Audio ───────────────────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l3_categories=true-wireless&department=electronics", _TOP),
-    ("https://www.reliancedigital.in/products/?l3_categories=bluetooth-wifi-speakers&department=electronics", _STD),
-    ("https://www.reliancedigital.in/products/?l3_categories=tv-speakers-soundbars&department=electronics", _STD),
-    # ── Wearables ───────────────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l2_category=smart-devices&department=electronics", _TOP),
-    # ── Cameras ─────────────────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l2_category=cameras&department=electronics", _STD),
-    # ── Large Appliances ────────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l2_category=refrigerators&department=electronics", _TOP),
-    ("https://www.reliancedigital.in/products/?l3_categories=washing-machines&department=electronics", _TOP),
-    ("https://www.reliancedigital.in/products/?l3_categories=split-air-conditioners&department=electronics", _TOP),
-    ("https://www.reliancedigital.in/products/?l2_category=air-care&department=electronics", _STD),
-    # ── Small/Kitchen Appliances ────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l2_category=kitchen-appliances&department=electronics", _STD),
-    ("https://www.reliancedigital.in/products/?l2_category=home-appliances&department=electronics", _STD),
-    # ── Personal Care ───────────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l2_category=personal-care&department=electronics", _STD),
-    # ── Gaming ──────────────────────────────────────────────────────────
-    ("https://www.reliancedigital.in/products/?l2_category=gaming&department=electronics", _STD),
-]
-
-MAX_LISTING_PAGES = 5
-PAGE_SIZE = 12
 
 
 class RelianceDigitalSpider(BaseWhydudSpider):
-    """Scrapes RelianceDigital.in electronics store.
+    """Scrapes RelianceDigital.in via their open Fynd Commerce JSON API.
 
-    Reliance Digital uses Fynd/Jio Commerce Platform (Vue.js 2 SPA).
-    Product data is embedded in window.__INITIAL_STATE__ as JSON:
-    - productListingPage.productlists.items[] for listings
-    - productDetailsPage.product for product details
+    No Playwright required — pure HTTP requests returning JSON.
 
-    Prices in the JSON are in INR (rupees), NOT paisa.
+    Prices in the API are in INR (rupees), NOT paisa. Spider converts to paisa.
 
     Spider arguments:
       job_id        — UUID of a ScraperJob row.
-      category_urls — comma-separated override URLs.
-      max_pages     — override MAX_LISTING_PAGES.
+      category_urls — comma-separated override query terms or API URLs.
+      max_pages     — override max pages per query.
     """
 
     name = "reliance_digital"
     allowed_domains = ["reliancedigital.in", "www.reliancedigital.in"]
 
-    QUICK_MODE_CATEGORIES = 6
+    QUICK_MODE_QUERIES = 4
 
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
-        "DOWNLOAD_DELAY": 2,
-        "CONCURRENT_REQUESTS": 6,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 3,
-        "RETRY_TIMES": 2,
+        "DOWNLOAD_DELAY": 1.5,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
+        "CONCURRENT_REQUESTS": 4,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
+        "RETRY_TIMES": 3,
         "RETRY_HTTP_CODES": [500, 502, 503, 504, 408, 429],
-        "HTTPERROR_ALLOWED_CODES": [403, 429, 503],
+        "HTTPERROR_ALLOWED_CODES": [403, 429],
     }
 
     # ------------------------------------------------------------------
@@ -216,428 +132,413 @@ class RelianceDigitalSpider(BaseWhydudSpider):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.job_id = job_id
-        self._category_urls: list[str] = (
+        self._override_queries: list[str] = (
             [u.strip() for u in category_urls.split(",") if u.strip()]
             if category_urls
             else []
         )
         self._max_pages_override: int | None = int(max_pages) if max_pages else None
-        self._pages_followed: dict[str, int] = {}
-        self._max_pages_map: dict[str, int] = {}
 
         # Stats
-        self._listing_pages_scraped: int = 0
-        self._product_pages_scraped: int = 0
+        self._api_pages_fetched: int = 0
         self._products_extracted: int = 0
 
-    def closed(self, reason):
+    def closed(self, reason: str) -> None:
         """Log final scrape statistics."""
-        total = self._product_pages_scraped + self.items_failed
-        rate = (self._product_pages_scraped / total * 100) if total > 0 else 0
         self.logger.info(
-            f"Reliance Digital spider finished ({reason}): "
-            f"listings={self._listing_pages_scraped}, "
-            f"product_attempts={total}, "
-            f"products_ok={self._product_pages_scraped} ({rate:.0f}%), "
-            f"failed={self.items_failed}"
+            f"Reliance Digital API spider finished ({reason}): "
+            f"api_pages={self._api_pages_fetched}, "
+            f"products_extracted={self._products_extracted}, "
+            f"items_scraped={self.items_scraped}, "
+            f"items_failed={self.items_failed}"
         )
 
     # ------------------------------------------------------------------
-    # Stealth helpers
+    # Request helpers
     # ------------------------------------------------------------------
 
-    async def _apply_stealth(self, page, request):
-        """Apply playwright-stealth scripts before navigation."""
-        try:
-            await self.STEALTH.apply_stealth_async(page)
-            page.set_default_navigation_timeout(60000)
-            page.set_default_timeout(45000)
-        except Exception as e:
-            self.logger.warning(f"Stealth setup issue: {e}")
+    def _api_headers(self) -> dict[str, str]:
+        """Build minimal headers for the JSON API."""
+        return {
+            "User-Agent": self._random_ua(),
+            "Accept": "application/json",
+            "Accept-Language": "en-IN,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+        }
+
+    @staticmethod
+    def _build_api_url(query: str, page: int) -> str:
+        """Construct the API URL for a search query and page number."""
+        q = query.replace(" ", "%20")
+        return f"{API_BASE}?q={q}&page={page}&pageSize={PAGE_SIZE}"
 
     # ------------------------------------------------------------------
     # start_requests
     # ------------------------------------------------------------------
 
     def start_requests(self):
-        """Emit requests for category listing pages."""
-        url_pairs = self._load_urls()
-        random.shuffle(url_pairs)
+        """Emit API requests for each seed query."""
+        queries = self._load_queries()
+        random.shuffle(queries)
 
-        for url, max_pg in url_pairs:
-            base = self._strip_page_params(url)
-            self._max_pages_map[base] = max_pg
-
-            self.logger.info(f"Queuing category ({max_pg} pages): {url}")
+        for query, category_slug, max_pg in queries:
+            url = self._build_api_url(query, 1)
+            self.logger.info(f"Queuing API query: '{query}' (max {max_pg} pages)")
             yield scrapy.Request(
                 url,
-                callback=self.parse_listing_page,
+                callback=self.parse_api_response,
                 errback=self.handle_error,
-                headers=self._make_headers(),
+                headers=self._api_headers(),
                 meta={
-                    "category_slug": self._resolve_category_from_url(url),
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                        PageMethod("wait_for_timeout", 3000),
-                    ],
+                    "category_slug": category_slug,
+                    "query": query,
+                    "current_page": 1,
+                    "max_pages": max_pg,
+                    "playwright": False,
                 },
                 dont_filter=True,
             )
 
-        self.logger.info(f"Queued {len(url_pairs)} categories")
+        self.logger.info(f"Queued {len(queries)} seed queries")
 
-    def _load_urls(self) -> list[tuple[str, int]]:
-        """Resolve the (url, max_pages) list to crawl."""
-        fallback = self._max_pages_override or MAX_LISTING_PAGES
+    def _load_queries(self) -> list[tuple[str, str, int]]:
+        """Resolve the (query, category_slug, max_pages) list to crawl."""
+        fallback_max = self._max_pages_override or 5
 
-        if self._category_urls:
-            return [(u, fallback) for u in self._category_urls]
+        if self._override_queries:
+            return [
+                (q, self._resolve_category(q), fallback_max)
+                for q in self._override_queries
+            ]
 
         if self.job_id:
             try:
                 from apps.scraping.models import ScraperJob
                 job = ScraperJob.objects.get(id=self.job_id)
-                self.logger.info(f"Running for job {self.job_id}, marketplace: {job.marketplace.slug}")
+                self.logger.info(
+                    f"Running for job {self.job_id}, marketplace: {job.marketplace.slug}"
+                )
             except Exception as exc:
                 self.logger.warning(f"Could not load ScraperJob {self.job_id}: {exc}")
 
         if self._max_pages_override is not None:
-            if self._max_pages_override <= 3:
+            if self._max_pages_override <= 2:
                 self.logger.info(
-                    f"Quick mode: using first {self.QUICK_MODE_CATEGORIES} categories "
+                    f"Quick mode: using first {self.QUICK_MODE_QUERIES} queries "
                     f"(max_pages={self._max_pages_override})"
                 )
                 return [
-                    (url, self._max_pages_override)
-                    for url, _ in SEED_CATEGORY_URLS[:self.QUICK_MODE_CATEGORIES]
+                    (q, slug, self._max_pages_override)
+                    for q, slug, _ in SEED_QUERIES[:self.QUICK_MODE_QUERIES]
                 ]
-            return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
-        return list(SEED_CATEGORY_URLS)
+            return [
+                (q, slug, self._max_pages_override)
+                for q, slug, _ in SEED_QUERIES
+            ]
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+        return list(SEED_QUERIES)
 
-    def _strip_page_params(self, url: str) -> str:
-        """Remove page_no and page_size parameters from URL."""
-        base = re.sub(r"[?&]page_no=\d+", "", url)
-        base = re.sub(r"[?&]page_size=\d+", "", base)
-        return base.rstrip("?&")
-
-    def _resolve_category_from_url(self, url: str) -> str | None:
-        """Extract whydud category slug from URL path/params."""
-        url_lower = url.lower()
+    def _resolve_category(self, query: str) -> str:
+        """Resolve a query string to a Whydud category slug."""
+        q_lower = query.lower().strip()
+        if q_lower in KEYWORD_CATEGORY_MAP:
+            return KEYWORD_CATEGORY_MAP[q_lower]
         for keyword, slug in KEYWORD_CATEGORY_MAP.items():
-            if keyword.replace(" ", "-") in url_lower:
+            if keyword in q_lower or q_lower in keyword:
                 return slug
-        return None
+        return ""
 
-    def _extract_initial_state(self, response) -> dict | None:
-        """Extract window.__INITIAL_STATE__ JSON from page source."""
-        match = re.search(
-            r"window\.__INITIAL_STATE__\s*=\s*(\{.+?\})\s*;?\s*</script>",
-            response.text,
-            re.DOTALL,
-        )
-        if not match:
-            return None
-        try:
-            return json.loads(match.group(1))
-        except (json.JSONDecodeError, ValueError):
-            self.logger.warning(f"Failed to parse __INITIAL_STATE__ on {response.url}")
-            return None
+    # ------------------------------------------------------------------
+    # API response parsing
+    # ------------------------------------------------------------------
 
-    def _parse_price_rupees(self, value) -> Decimal | None:
-        """Parse a price value (in rupees) to Decimal in paisa."""
-        if value is None:
-            return None
-        try:
-            rupees = Decimal(str(value))
-            if rupees <= 0:
-                return None
-            return rupees * 100  # convert to paisa
-        except (InvalidOperation, ValueError, TypeError):
-            return None
+    def parse_api_response(self, response):
+        """Parse the JSON API response and yield ProductItems."""
+        self._api_pages_fetched += 1
 
-    def _is_blocked(self, response) -> bool:
-        """Detect if site served a block/error page."""
         if response.status in (403, 429):
-            return True
-        title = (response.css("title::text").get() or "").strip().lower()
-        if "access denied" in title or "blocked" in title:
-            return True
-        return False
-
-    # ------------------------------------------------------------------
-    # Phase 1: Listing pages
-    # ------------------------------------------------------------------
-
-    def parse_listing_page(self, response):
-        """Extract products from listing page via __INITIAL_STATE__."""
-        self._listing_pages_scraped += 1
-
-        if self._is_blocked(response):
-            self.logger.warning(f"Blocked on listing {response.url} — skipping")
+            self.logger.warning(
+                f"Rate limited ({response.status}) on {response.url} — stopping query"
+            )
             return
 
-        category_slug = response.meta.get("category_slug")
-
-        # Extract from __INITIAL_STATE__
-        data = self._extract_initial_state(response)
-        products = []
-        if data:
-            plp = data.get("productListingPage") or {}
-            pl = plp.get("productlists") or {}
-            items = pl.get("items") or []
-            if isinstance(items, list):
-                products = items
-
-        if products:
-            self.logger.info(f"Found {len(products)} products on {response.url}")
-            for prod in products:
-                slug = prod.get("slug", "")
-                if not slug:
-                    continue
-                product_url = f"https://www.reliancedigital.in/product/{slug}"
-                yield scrapy.Request(
-                    product_url,
-                    callback=self.parse_product_page,
-                    errback=self.handle_error,
-                    headers=self._make_headers(),
-                    meta={
-                        "category_slug": category_slug,
-                        "listing_data": prod,
-                        "playwright": True,
-                        "playwright_page_init_callback": self._apply_stealth,
-                        "playwright_page_methods": [
-                            PageMethod("wait_for_load_state", "domcontentloaded"),
-                            PageMethod("wait_for_timeout", random.randint(2000, 4000)),
-                        ],
-                    },
-                )
-        else:
-            # Try HTML fallback — look for product cards/links
-            links = response.css("a[href*='/product/']::attr(href)").getall()
-            seen = set()
-            for href in links:
-                full_url = response.urljoin(href)
-                if full_url not in seen and "/product/" in full_url:
-                    seen.add(full_url)
-                    yield scrapy.Request(
-                        full_url,
-                        callback=self.parse_product_page,
-                        errback=self.handle_error,
-                        headers=self._make_headers(),
-                        meta={
-                            "category_slug": category_slug,
-                            "playwright": True,
-                            "playwright_page_init_callback": self._apply_stealth,
-                            "playwright_page_methods": [
-                                PageMethod("wait_for_load_state", "domcontentloaded"),
-                                PageMethod("wait_for_timeout", random.randint(2000, 4000)),
-                            ],
-                        },
-                    )
-            if not links:
-                self.logger.warning(f"No products found on {response.url}")
-                return
-
-        # Pagination
-        base_url = self._strip_page_params(response.url)
-        pages_so_far = self._pages_followed.get(base_url, 1)
-        max_for_category = self._max_pages_map.get(base_url, MAX_LISTING_PAGES)
-
-        if pages_so_far < max_for_category:
-            next_page = pages_so_far + 1
-            separator = "&" if "?" in base_url else "?"
-            next_url = f"{base_url}{separator}page_no={next_page}&page_size={PAGE_SIZE}"
-            self._pages_followed[base_url] = next_page
-
-            yield scrapy.Request(
-                next_url,
-                callback=self.parse_listing_page,
-                errback=self.handle_error,
-                headers=self._make_headers(),
-                meta={
-                    "category_slug": category_slug,
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                        PageMethod("wait_for_timeout", 3000),
-                    ],
-                },
-            )
-
-    # ------------------------------------------------------------------
-    # Phase 2: Product detail pages
-    # ------------------------------------------------------------------
-
-    def parse_product_page(self, response):
-        """Extract product data from detail page."""
-        if self._is_blocked(response):
-            self.logger.warning(f"Blocked on product {response.url}")
+        try:
+            data = response.json()
+        except (ValueError, AttributeError):
+            self.logger.error(f"Invalid JSON from {response.url}")
             self.items_failed += 1
             return
 
-        category_slug = response.meta.get("category_slug")
+        category_slug = response.meta["category_slug"]
+        query = response.meta["query"]
+        current_page = response.meta["current_page"]
+        max_pages = response.meta["max_pages"]
 
-        # Strategy 1: __INITIAL_STATE__ → productDetailsPage
-        data = self._extract_initial_state(response)
-        if data:
-            pdp = data.get("productDetailsPage") or {}
-            product = pdp.get("product")
-            if product and product.get("name"):
-                item = self._parse_from_state(product, response.url, category_slug)
-                if item:
-                    self._product_pages_scraped += 1
-                    self._products_extracted += 1
-                    self.items_scraped += 1
-                    yield item
-                    return
-
-        # Strategy 2: JSON-LD
-        item = self._parse_from_json_ld(response, category_slug)
-        if item:
-            self._product_pages_scraped += 1
-            self._products_extracted += 1
-            self.items_scraped += 1
-            yield item
+        # Extract products from response
+        items = data.get("items") or []
+        if not items:
+            self.logger.info(
+                f"No products on page {current_page} for '{query}' — stopping"
+            )
             return
 
-        self.logger.warning(f"Could not extract product data from {response.url}")
-        self.items_failed += 1
+        self.logger.info(
+            f"Query '{query}' page {current_page}: {len(items)} products"
+        )
+
+        for product in items:
+            item = self._parse_product(product, category_slug)
+            if item:
+                self._products_extracted += 1
+                self.items_scraped += 1
+                yield item
+
+        # Pagination — follow if has_next and within page limit
+        page_info = data.get("page") or {}
+        has_next = page_info.get("has_next", False)
+
+        if has_next and current_page < max_pages:
+            next_page = current_page + 1
+            next_url = self._build_api_url(query, next_page)
+            yield scrapy.Request(
+                next_url,
+                callback=self.parse_api_response,
+                errback=self.handle_error,
+                headers=self._api_headers(),
+                meta={
+                    "category_slug": category_slug,
+                    "query": query,
+                    "current_page": next_page,
+                    "max_pages": max_pages,
+                    "playwright": False,
+                },
+                dont_filter=True,
+            )
 
     # ------------------------------------------------------------------
-    # Extraction: __INITIAL_STATE__ (primary)
+    # Product extraction from API JSON
     # ------------------------------------------------------------------
 
-    def _parse_from_state(
-        self, product: dict, url: str, category_slug: str | None,
-    ) -> ProductItem | None:
-        """Extract product data from __INITIAL_STATE__.productDetailsPage.product."""
+    def _parse_product(self, product: dict, category_slug: str) -> ProductItem | None:
+        """Extract a ProductItem from a single API product object."""
         name = product.get("name")
-        if not name:
+        uid = product.get("uid")
+        if not name or not uid:
             return None
 
-        uid = product.get("uid")
-        if not uid:
-            return None
         external_id = str(uid)
 
-        # Prices — in rupees, convert to paisa
+        # Prices — API returns in rupees, convert to paisa
         price_data = product.get("price") or {}
-        selling_price = self._parse_price_rupees(
+        effective = self._price_to_paisa(
             (price_data.get("effective") or {}).get("min")
-            or (price_data.get("selling") or {}).get("min")
         )
-        mrp = self._parse_price_rupees(
+        marked = self._price_to_paisa(
             (price_data.get("marked") or {}).get("min")
         )
 
         # Brand
         brand_data = product.get("brand") or {}
-        brand = brand_data.get("name") if isinstance(brand_data, dict) else str(brand_data)
+        brand = brand_data.get("name", "") if isinstance(brand_data, dict) else ""
 
-        # Images
+        # URL construction
+        slug = product.get("slug", "")
+        url = f"https://www.reliancedigital.in/{slug}/p/{uid}" if slug else ""
+        if not url:
+            return None
+
+        # Images from medias array
         images = []
         for media in product.get("medias") or []:
             img_url = media.get("url", "")
-            if img_url and media.get("type") == "image":
+            if img_url:
                 if img_url.startswith("//"):
                     img_url = "https:" + img_url
                 images.append(img_url)
 
-        # Specs from attributes
+        # Specs from attributes — only consumer-facing fields
         specs = {}
         attrs = product.get("attributes") or {}
-        for key, val in attrs.items():
-            if key and val and str(val).strip():
-                specs[key.replace("_", " ").title()] = str(val)
+        # Map of API attribute key → display label
+        spec_keys = {
+            # Identifiers
+            "ean": "EAN",
+            "model": "Model",
+            "model-name": "Model Name",
+            "series": "Series",
+            # Storage & Memory
+            "internal-storage": "Internal Storage",
+            "ram": "RAM",
+            "storage": "Storage",
+            # Display
+            "display_type": "Display Type",
+            "screen_size_diagonal": "Screen Size",
+            "screen_resolution": "Screen Resolution",
+            "resolution": "Resolution",
+            "refresh_rate": "Refresh Rate",
+            # Processor & Performance
+            "processor": "Processor",
+            "graphics": "Graphics",
+            # Camera
+            "camera": "Camera",
+            "front_camera": "Front Camera",
+            "rear_camera": "Rear Camera",
+            "selfie_camera": "Front Camera",
+            # Battery & Power
+            "battery_capacity": "Battery Capacity",
+            "standby_time": "Standby Time",
+            "talk_time": "Talk Time",
+            "wattage": "Wattage",
+            # Connectivity
+            "operating_system": "Operating System",
+            "cellular_technology": "Network",
+            "sim_type": "SIM Type",
+            "bluetooth": "Bluetooth",
+            "bluetooth_version": "Bluetooth Version",
+            "wi_fi": "Wi-Fi",
+            "wi-fi": "Wi-Fi",
+            "hdmi": "HDMI",
+            "usb": "USB",
+            "connectivity": "Connectivity",
+            "nfc": "NFC",
+            # Audio & Media
+            "audio_formats": "Audio Formats",
+            "video_formats": "Video Formats",
+            "noise_cancellation": "Noise Cancellation",
+            "driver_size": "Driver Size",
+            "impedance": "Impedance",
+            "frequency_response": "Frequency Response",
+            "microphone": "Microphone",
+            # Physical
+            "color": "Color",
+            "colour": "Color",
+            "net-weight": "Weight",
+            "weight": "Weight",
+            "item-weight": "Weight",
+            "dimensions": "Dimensions",
+            "water_resistant": "Water Resistant",
+            "fingerprint_recognition": "Fingerprint",
+            "sensors": "Sensors",
+            # Appliance-specific
+            "capacity": "Capacity",
+            "energy_rating": "Energy Rating",
+            "star_rating": "Star Rating",
+            # Meta
+            "warranty": "Warranty",
+            "country_of_origin": "Country of Origin",
+            "country-of-origin": "Country of Origin",
+            "manufacturer": "Manufacturer",
+            "in_the_box": "In The Box",
+            "in-the-box": "In The Box",
+        }
+        for api_key, display_key in spec_keys.items():
+            val = attrs.get(api_key)
+            if val and isinstance(val, (str, int, float)) and str(val).strip():
+                specs[display_key] = str(val).strip()
 
-        # Grouped attributes for additional specs
+        # Dimensions from individual item-height/width/length
+        if "Dimensions" not in specs:
+            h = attrs.get("item-height", "")
+            w = attrs.get("item-width", "")
+            l = attrs.get("item-length", "")
+            parts = [f"{v}" for v in (l, w, h) if v]
+            if len(parts) >= 2:
+                specs["Dimensions"] = " x ".join(parts)
+
+        # Grouped attributes — these are already curated by Fynd
         for group in product.get("grouped_attributes") or []:
             for detail in group.get("details") or []:
                 key = detail.get("key", "")
                 val = detail.get("value", "")
-                if key and val and key not in specs:
+                if key and val and isinstance(val, (str, int, float)) and key not in specs:
                     specs[key] = str(val)
 
-        # Rating
-        rating = None
-        review_count = None
-        rating_val = product.get("rating")
-        if rating_val and str(rating_val) not in ("0", "0.0", "null", "None"):
-            try:
-                rating = Decimal(str(rating_val))
-            except (InvalidOperation, ValueError):
-                pass
-        count_val = product.get("rating_count")
-        if count_val and str(count_val) not in ("0", "null", "None"):
-            try:
-                review_count = int(count_val)
-            except (ValueError, TypeError):
-                pass
-
         # Stock
-        in_stock = product.get("is_available", True) and product.get("sellable", True)
+        in_stock = product.get("sellable", True)
 
-        # Categories
-        if not category_slug:
-            cat_map = product.get("category_map") or {}
-            for level in ("l3", "l2", "l1"):
-                cat_name = (cat_map.get(level) or {}).get("name", "").lower()
-                for kw, slug in KEYWORD_CATEGORY_MAP.items():
-                    if kw in cat_name.replace(" ", "-"):
-                        category_slug = slug
+        # Categories from API
+        resolved_category = category_slug
+        if not resolved_category:
+            categories = product.get("categories") or []
+            for cat in categories:
+                cat_name = (cat.get("name") or "").lower()
+                for kw, slug_val in KEYWORD_CATEGORY_MAP.items():
+                    if kw in cat_name:
+                        resolved_category = slug_val
                         break
-                if category_slug:
+                if resolved_category:
                     break
 
-        # Breadcrumbs
-        breadcrumbs = []
-        cat_map = product.get("category_map") or {}
-        for level in ("l1", "l2", "l3"):
-            cat_name = (cat_map.get(level) or {}).get("name")
-            if cat_name:
-                breadcrumbs.append(cat_name)
+        # Breadcrumbs from categories
+        breadcrumbs = [
+            cat.get("name", "")
+            for cat in (product.get("categories") or [])
+            if cat.get("name")
+        ]
 
-        # Description
-        description = product.get("description") or product.get("short_description")
+        # Country of origin — top-level field takes precedence
+        country = (
+            product.get("country_of_origin")
+            or attrs.get("country_of_origin")
+            or attrs.get("country-of-origin")
+        )
+
+        # Description — attrs.description is HTML, strip tags for clean text
+        raw_desc = attrs.get("description") or attrs.get("product_details") or ""
+        description = self._strip_html(raw_desc) if raw_desc else None
+
+        # About bullets — key-features contains <li> items
+        about_bullets = []
+        key_features = attrs.get("key-features") or ""
+        if key_features:
+            about_bullets = re.findall(r"<li>(.*?)</li>", key_features, re.DOTALL)
+            about_bullets = [self._strip_html(b).strip() for b in about_bullets if b.strip()]
 
         # Warranty
         warranty = attrs.get("warranty") or specs.get("Warranty")
 
+        # Weight
+        weight = (
+            specs.get("Weight")
+            or attrs.get("net-weight")
+            or attrs.get("item-weight")
+            or attrs.get("weight")
+        )
+
         # Model
-        model_number = attrs.get("model") or specs.get("Model")
+        model_number = attrs.get("model") or attrs.get("model-name") or attrs.get("manufacturer-part-number")
 
-        # Weight/Dimensions from grouped_attributes
-        weight = specs.get("Weight") or specs.get("Product Weight") or specs.get("Net Weight")
-        dimensions = specs.get("Dimensions") or specs.get("Product Dimensions")
+        # Manufacturer
+        manufacturer = attrs.get("manufacturer") or brand
 
-        slug = product.get("slug", "")
-        product_url = f"https://www.reliancedigital.in/product/{slug}" if slug else url
+        # Item code as SKU in specs
+        item_code = product.get("item_code")
+        if item_code:
+            specs["SKU"] = str(item_code)
+
+        # Discount string
+        discount = product.get("discount")
+        if discount:
+            specs["Discount"] = str(discount)
 
         return ProductItem(
             marketplace_slug=MARKETPLACE_SLUG,
             external_id=external_id,
-            url=product_url,
+            url=url,
             title=name,
             brand=brand if brand else None,
-            price=selling_price,
-            mrp=mrp,
+            price=effective,
+            mrp=marked,
             images=images,
-            rating=rating,
-            review_count=review_count,
+            rating=None,
+            review_count=None,
             specs=specs,
             seller_name="Reliance Digital",
             seller_rating=None,
             in_stock=in_stock,
             fulfilled_by="Reliance Digital",
-            category_slug=category_slug,
-            about_bullets=[],
+            category_slug=resolved_category or None,
+            about_bullets=about_bullets,
             offer_details=[],
             raw_html_path=None,
             description=description,
@@ -646,110 +547,39 @@ class RelianceDigitalSpider(BaseWhydudSpider):
             return_policy=None,
             breadcrumbs=breadcrumbs,
             variant_options=[],
-            country_of_origin=specs.get("Country Of Origin"),
-            manufacturer=specs.get("Manufacturer") or brand,
-            model_number=model_number,
-            weight=weight,
-            dimensions=dimensions,
+            country_of_origin=str(country) if country else None,
+            manufacturer=str(manufacturer) if manufacturer else None,
+            model_number=str(model_number) if model_number else None,
+            weight=str(weight) if weight else None,
+            dimensions=specs.get("Dimensions"),
         )
 
     # ------------------------------------------------------------------
-    # Extraction: JSON-LD (fallback)
+    # Text helpers
     # ------------------------------------------------------------------
 
-    def _parse_from_json_ld(
-        self, response, category_slug: str | None,
-    ) -> ProductItem | None:
-        """Extract product data from JSON-LD structured data."""
-        ld_scripts = response.css('script[type="application/ld+json"]::text').getall()
-        for script_text in ld_scripts:
-            try:
-                ld_data = json.loads(script_text)
-            except (json.JSONDecodeError, ValueError):
-                continue
+    _HTML_TAG_RE = re.compile(r"<[^>]+>")
+    _MULTI_SPACE_RE = re.compile(r"\s+")
 
-            if isinstance(ld_data, list):
-                for item in ld_data:
-                    if item.get("@type") == "Product":
-                        ld_data = item
-                        break
-                else:
-                    continue
+    @classmethod
+    def _strip_html(cls, text: str) -> str:
+        """Remove HTML tags and collapse whitespace."""
+        clean = cls._HTML_TAG_RE.sub(" ", text)
+        return cls._MULTI_SPACE_RE.sub(" ", clean).strip()
 
-            if ld_data.get("@type") != "Product":
-                continue
+    # ------------------------------------------------------------------
+    # Price helpers
+    # ------------------------------------------------------------------
 
-            name = ld_data.get("name")
-            if not name:
-                continue
-
-            product_id = ld_data.get("productID")
-            if not product_id:
-                # Try to extract from URL
-                match = PRODUCT_UID_RE.search(response.url)
-                product_id = match.group(1) if match else None
-            if not product_id:
-                continue
-
-            offers = ld_data.get("offers") or {}
-            price = self._parse_price_rupees(offers.get("price"))
-
-            brand_data = ld_data.get("brand") or {}
-            brand = brand_data.get("name") if isinstance(brand_data, dict) else str(brand_data) if brand_data else None
-
-            images = ld_data.get("image") or []
-            if isinstance(images, str):
-                images = [images]
-
-            rating = None
-            review_count = None
-            agg_rating = ld_data.get("aggregateRating") or {}
-            if agg_rating.get("ratingValue"):
-                try:
-                    rating = Decimal(str(agg_rating["ratingValue"]))
-                except (InvalidOperation, ValueError):
-                    pass
-            if agg_rating.get("ratingCount"):
-                try:
-                    review_count = int(agg_rating["ratingCount"])
-                except (ValueError, TypeError):
-                    pass
-
-            in_stock = True
-            availability = offers.get("availability", "")
-            if "OutOfStock" in availability:
-                in_stock = False
-
-            return ProductItem(
-                marketplace_slug=MARKETPLACE_SLUG,
-                external_id=str(product_id),
-                url=response.url,
-                title=name,
-                brand=brand,
-                price=price,
-                mrp=None,
-                images=images,
-                rating=rating,
-                review_count=review_count,
-                specs={},
-                seller_name="Reliance Digital",
-                seller_rating=None,
-                in_stock=in_stock,
-                fulfilled_by="Reliance Digital",
-                category_slug=category_slug,
-                about_bullets=[],
-                offer_details=[],
-                raw_html_path=None,
-                description=ld_data.get("description"),
-                warranty=None,
-                delivery_info=None,
-                return_policy=None,
-                breadcrumbs=[],
-                variant_options=[],
-                country_of_origin=None,
-                manufacturer=None,
-                model_number=None,
-                weight=None,
-                dimensions=None,
-            )
-        return None
+    @staticmethod
+    def _price_to_paisa(value) -> Decimal | None:
+        """Convert a price in rupees (from API) to Decimal in paisa."""
+        if value is None:
+            return None
+        try:
+            rupees = Decimal(str(value))
+            if rupees <= 0:
+                return None
+            return rupees * 100
+        except (InvalidOperation, ValueError, TypeError):
+            return None

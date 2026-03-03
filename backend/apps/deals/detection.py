@@ -30,7 +30,7 @@ def _get_avg_price_30d(listing_id: str, window_start) -> Decimal | None:
             time__gte=window_start,
             in_stock=True,
         )
-        .aggregate(avg_price=Avg("price"), snap_count=Count("id"))
+        .aggregate(avg_price=Avg("price"), snap_count=Count("time"))
     )
     if result["snap_count"] < DealDetectionConfig.min_snapshots_for_avg():
         return None

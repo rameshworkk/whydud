@@ -1,23 +1,32 @@
-"""Vijay Sales spider — scrapes product listings and detail pages.
+"""Vijay Sales spider — two-phase: Unbxd Search API + Magento GraphQL enrichment.
 
 Architecture:
-  Vijay Sales runs on Magento 2 with Unbxd search integration.
-  - Listing pages: Server-rendered HTML with product cards
-  - Detail pages: JSON-LD Product schema + HTML extraction
-  - Playwright for JS-heavy pages where HTTP returns incomplete data
+  Phase 1 (Listing): Unbxd Search JSON API returns product listings with
+    title, brand, price, images, categories, warranty data.
+  Phase 2 (Detail):  Magento GraphQL API enriches each product with
+    description, high-res images, rating, review count. Batches 10 SKUs
+    per request for efficiency.
 
-URL patterns:
-  Category: /{category}/{subcategory}/c?page={n}
-  Product:  /{product-slug}.html or /{product-slug}
-  Search:   /catalogsearch/result/?q={keyword}
+  No Playwright needed — both phases are pure HTTP + JSON.
+
+  Prices in the Unbxd API are in RUPEES (not paisa). Spider converts to
+  paisa (* 100).
+
+  Unique feature: city-specific pricing (e.g., Delhi prices via cityId_10_*
+  fields). Delhi pricing is used as the default price; city pricing data is
+  preserved in specs for future multi-city support.
+
+API details:
+  Unbxd:    GET https://search.unbxd.io/{api_key}/{site_key}/search
+  GraphQL:  GET https://www.vijaysales.com/api/graphql (Store: vijay_sales)
 """
 import json
 import random
 import re
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote_plus, urlencode
 
 import scrapy
-from scrapy_playwright.page import PageMethod
 
 from apps.scraping.items import ProductItem
 from .base_spider import BaseWhydudSpider
@@ -26,173 +35,125 @@ from .base_spider import BaseWhydudSpider
 # Constants
 # ---------------------------------------------------------------------------
 
-PRICE_RE = re.compile(r"[\d,]+(?:\.\d{1,2})?")
-
 MARKETPLACE_SLUG = "vijay-sales"
+
+API_KEY = "bb8ef7667d38c04e8a81c80f4a43a998"
+SITE_KEY = "ss-unbxd-aapac-prod-vijaysales-magento33881704883825"
+API_BASE = f"https://search.unbxd.io/{API_KEY}/{SITE_KEY}/search"
+
+GRAPHQL_URL = "https://www.vijaysales.com/api/graphql"
+
+ROWS_PER_PAGE = 50
+BASE_URL = "https://www.vijaysales.com"
+
+# Delhi city ID for city-specific pricing (default city)
+DELHI_CITY_ID = "10"
+
+# How many SKUs to batch in a single GraphQL request
+GRAPHQL_BATCH_SIZE = 10
+
+# GraphQL query for Phase 2 enrichment
+GRAPHQL_QUERY = """{
+  products(filter: {sku: {in: [%s]}}, pageSize: %d) {
+    items {
+      sku
+      rating_summary
+      review_count
+      description { html }
+      short_description { html }
+      media_gallery { url }
+    }
+  }
+}"""
+
+# ---------------------------------------------------------------------------
+# Seed queries — (search_query, category_slug_hint, max_pages)
+# ---------------------------------------------------------------------------
+
+SEED_QUERIES: list[tuple[str, str, int]] = [
+    ("smartphones", "smartphones", 10),
+    ("laptops", "laptops", 10),
+    ("headphones", "audio", 5),
+    ("televisions", "televisions", 5),
+    ("air conditioners", "air-conditioners", 5),
+    ("refrigerators", "refrigerators", 5),
+    ("washing machines", "washing-machines", 5),
+    ("air purifiers", "appliances", 5),
+    ("cameras", "cameras", 5),
+    ("tablets", "tablets", 5),
+]
 
 # ---------------------------------------------------------------------------
 # Keyword → Whydud category slug mapping
 # ---------------------------------------------------------------------------
 
 KEYWORD_CATEGORY_MAP: dict[str, str] = {
-    # Smartphones
-    "mobiles": "smartphones",
     "smartphones": "smartphones",
-    "mobile-phones": "smartphones",
-    "mobile phones": "smartphones",
-    "mobile accessories": "smartphones",
-    "power banks": "smartphones",
-    "tablets": "tablets",
-    # Laptops & Computers
+    "smart phones": "smartphones",
+    "mobiles": "smartphones",
     "laptops": "laptops",
-    "gaming laptops": "laptops",
-    "notebook": "laptops",
-    "desktops": "laptops",
-    "monitors": "laptops",
-    "printers": "laptops",
-    "networking": "laptops",
-    "storage": "laptops",
-    "pen drives": "laptops",
-    # Audio
+    "notebooks": "laptops",
     "headphones": "audio",
     "earphones": "audio",
     "earbuds": "audio",
-    "bluetooth speakers": "audio",
+    "speakers": "audio",
     "soundbars": "audio",
-    "home theatre": "audio",
-    "party speakers": "audio",
-    # Wearables
-    "smartwatches": "smartwatches",
-    "smart watches": "smartwatches",
-    "fitness bands": "smartwatches",
-    # Cameras
-    "cameras": "cameras",
-    "action cameras": "cameras",
-    "dslr": "cameras",
-    "mirrorless": "cameras",
-    # TVs
     "televisions": "televisions",
+    "tvs": "televisions",
     "led tv": "televisions",
     "smart tv": "televisions",
-    "oled tv": "televisions",
-    "projectors": "televisions",
-    # Large Appliances
-    "refrigerators": "refrigerators",
-    "washing machines": "washing-machines",
     "air conditioners": "air-conditioners",
-    "microwave": "appliances",
-    "dishwashers": "appliances",
-    "water heaters": "appliances",
-    "geysers": "appliances",
-    "chimneys": "appliances",
-    # Small Appliances
+    "split ac": "air-conditioners",
+    "refrigerators": "refrigerators",
+    "fridge": "refrigerators",
+    "washing machines": "washing-machines",
     "air purifiers": "appliances",
     "water purifiers": "appliances",
-    "vacuum cleaners": "appliances",
-    "fans": "appliances",
-    "irons": "appliances",
-    "room heaters": "appliances",
-    # Kitchen
+    "cameras": "cameras",
+    "dslr": "cameras",
+    "tablets": "tablets",
+    "smartwatches": "smartwatches",
+    "smart watches": "smartwatches",
+    "gaming": "gaming",
+    "printers": "laptops",
+    "monitors": "laptops",
+    "kitchen appliances": "kitchen-tools",
     "mixer grinders": "kitchen-tools",
-    "air fryers": "kitchen-tools",
-    "coffee machines": "kitchen-tools",
-    "induction cooktops": "kitchen-tools",
-    "electric kettles": "kitchen-tools",
-    "juicers": "kitchen-tools",
-    "food processors": "kitchen-tools",
-    "oven toaster": "kitchen-tools",
-    "gas stoves": "kitchen-tools",
-    # Personal Care
     "trimmers": "grooming",
     "shavers": "grooming",
-    "hair dryers": "grooming",
-    "hair straighteners": "grooming",
-    # Gaming
-    "gaming": "gaming",
-    "gaming consoles": "gaming",
-    "gaming accessories": "gaming",
 }
-
-# ---------------------------------------------------------------------------
-# Seed URLs — Vijay Sales category pages
-# Format: (url, max_pages)
-# ---------------------------------------------------------------------------
-
-_TOP = 15
-_STD = 8
-
-SEED_CATEGORY_URLS: list[tuple[str, int]] = [
-    # ── Smartphones ─────────────────────────────────────────────────────
-    ("https://www.vijaysales.com/mobiles-tablets/mobiles/c", _TOP),
-    ("https://www.vijaysales.com/mobiles-tablets/tablets/c", _STD),
-    # ── Laptops & Computers ─────────────────────────────────────────────
-    ("https://www.vijaysales.com/computers/laptops/c", _TOP),
-    ("https://www.vijaysales.com/computers/desktops/c", _STD),
-    ("https://www.vijaysales.com/computers/monitors/c", _STD),
-    ("https://www.vijaysales.com/computers/printers/c", _STD),
-    # ── TVs ─────────────────────────────────────────────────────────────
-    ("https://www.vijaysales.com/televisions/led-tv/c", _TOP),
-    ("https://www.vijaysales.com/televisions/projectors/c", _STD),
-    # ── Audio ───────────────────────────────────────────────────────────
-    ("https://www.vijaysales.com/audio-video/headphones-earphones/c", _TOP),
-    ("https://www.vijaysales.com/audio-video/bluetooth-speakers/c", _STD),
-    ("https://www.vijaysales.com/audio-video/soundbars-home-theatre/c", _STD),
-    # ── Wearables ───────────────────────────────────────────────────────
-    ("https://www.vijaysales.com/mobiles-tablets/smartwatches/c", _TOP),
-    # ── Cameras ─────────────────────────────────────────────────────────
-    ("https://www.vijaysales.com/cameras/digital-cameras/c", _STD),
-    # ── Large Appliances ────────────────────────────────────────────────
-    ("https://www.vijaysales.com/home-appliances/refrigerators/c", _TOP),
-    ("https://www.vijaysales.com/home-appliances/washing-machines/c", _TOP),
-    ("https://www.vijaysales.com/home-appliances/air-conditioners/c", _TOP),
-    ("https://www.vijaysales.com/home-appliances/microwave-ovens/c", _STD),
-    ("https://www.vijaysales.com/home-appliances/dishwashers/c", _STD),
-    # ── Small Appliances ────────────────────────────────────────────────
-    ("https://www.vijaysales.com/home-appliances/air-purifiers/c", _STD),
-    ("https://www.vijaysales.com/home-appliances/water-purifiers/c", _STD),
-    ("https://www.vijaysales.com/home-appliances/vacuum-cleaners/c", _STD),
-    # ── Kitchen Appliances ──────────────────────────────────────────────
-    ("https://www.vijaysales.com/kitchen-appliances/mixer-grinders/c", _STD),
-    ("https://www.vijaysales.com/kitchen-appliances/air-fryers/c", _STD),
-    ("https://www.vijaysales.com/kitchen-appliances/electric-kettles/c", _STD),
-    ("https://www.vijaysales.com/kitchen-appliances/induction-cooktops/c", _STD),
-    # ── Personal Care ───────────────────────────────────────────────────
-    ("https://www.vijaysales.com/personal-care/trimmers-shavers/c", _STD),
-    ("https://www.vijaysales.com/personal-care/hair-dryers-straighteners/c", _STD),
-    # ── Gaming ──────────────────────────────────────────────────────────
-    ("https://www.vijaysales.com/gaming/gaming-consoles/c", _STD),
-    ("https://www.vijaysales.com/gaming/gaming-accessories/c", _STD),
-]
-
-MAX_LISTING_PAGES = 5
 
 
 class VijaySalesSpider(BaseWhydudSpider):
-    """Scrapes VijayS ales.com electronics store.
+    """Scrapes VijySales.com via Unbxd Search API + Magento GraphQL enrichment.
 
-    Vijay Sales runs on Magento 2 with server-rendered category pages
-    and product detail pages. JSON-LD Product schema is available on
-    detail pages for structured extraction.
+    Two-phase architecture — no Playwright required:
+      Phase 1: Unbxd Search API for listing data (price, brand, warranty, etc.)
+      Phase 2: Magento GraphQL API for enrichment (description, images, rating,
+               review count) — batched 10 SKUs per request.
+
+    Prices in the API are in INR (rupees), NOT paisa. Spider converts to paisa.
 
     Spider arguments:
       job_id        — UUID of a ScraperJob row.
-      category_urls — comma-separated override URLs.
-      max_pages     — override MAX_LISTING_PAGES.
+      category_urls — comma-separated override query terms.
+      max_pages     — override max pages per query.
     """
 
     name = "vijay_sales"
-    allowed_domains = ["vijaysales.com", "www.vijaysales.com"]
+    allowed_domains = ["search.unbxd.io", "www.vijaysales.com", "vijaysales.com"]
 
-    QUICK_MODE_CATEGORIES = 6
+    QUICK_MODE_QUERIES = 4
 
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
-        "DOWNLOAD_DELAY": 2,
-        "CONCURRENT_REQUESTS": 6,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 3,
-        "RETRY_TIMES": 2,
+        "DOWNLOAD_DELAY": 1.5,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
+        "CONCURRENT_REQUESTS": 4,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
+        "RETRY_TIMES": 3,
         "RETRY_HTTP_CODES": [500, 502, 503, 504, 408, 429],
-        "HTTPERROR_ALLOWED_CODES": [403, 429, 503],
+        "HTTPERROR_ALLOWED_CODES": [403, 429],
     }
 
     # ------------------------------------------------------------------
@@ -209,460 +170,549 @@ class VijaySalesSpider(BaseWhydudSpider):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.job_id = job_id
-        self._category_urls: list[str] = (
+        self._override_queries: list[str] = (
             [u.strip() for u in category_urls.split(",") if u.strip()]
             if category_urls
             else []
         )
         self._max_pages_override: int | None = int(max_pages) if max_pages else None
-        self._pages_followed: dict[str, int] = {}
-        self._max_pages_map: dict[str, int] = {}
+
+        # Dedup — track seen external IDs to avoid duplicate items across queries
+        self._seen_ids: set[str] = set()
+
+        # Phase 2 buffer — accumulate partial items keyed by SKU
+        # Flushed in batches of GRAPHQL_BATCH_SIZE to the GraphQL API
+        self._pending_items: dict[str, ProductItem] = {}
 
         # Stats
-        self._listing_pages_scraped: int = 0
-        self._product_pages_scraped: int = 0
+        self._api_pages_fetched: int = 0
         self._products_extracted: int = 0
+        self._duplicates_skipped: int = 0
+        self._graphql_batches_sent: int = 0
+        self._graphql_enriched: int = 0
 
-    def closed(self, reason):
+    def closed(self, reason: str) -> None:
         """Log final scrape statistics."""
-        total = self._product_pages_scraped + self.items_failed
-        rate = (self._product_pages_scraped / total * 100) if total > 0 else 0
         self.logger.info(
             f"Vijay Sales spider finished ({reason}): "
-            f"listings={self._listing_pages_scraped}, "
-            f"product_attempts={total}, "
-            f"products_ok={self._product_pages_scraped} ({rate:.0f}%), "
-            f"failed={self.items_failed}"
+            f"unbxd_pages={self._api_pages_fetched}, "
+            f"products_from_unbxd={self._products_extracted}, "
+            f"duplicates_skipped={self._duplicates_skipped}, "
+            f"graphql_batches={self._graphql_batches_sent}, "
+            f"graphql_enriched={self._graphql_enriched}, "
+            f"items_scraped={self.items_scraped}, "
+            f"items_failed={self.items_failed}"
         )
 
     # ------------------------------------------------------------------
-    # Stealth helpers
+    # Request helpers
     # ------------------------------------------------------------------
 
-    async def _apply_stealth(self, page, request):
-        """Apply playwright-stealth scripts before navigation."""
-        try:
-            await self.STEALTH.apply_stealth_async(page)
-            page.set_default_navigation_timeout(60000)
-            page.set_default_timeout(45000)
-        except Exception as e:
-            self.logger.warning(f"Stealth setup issue: {e}")
+    def _api_headers(self) -> dict[str, str]:
+        """Build minimal headers for the Unbxd JSON API."""
+        return {
+            "User-Agent": self._random_ua(),
+            "Accept": "application/json",
+            "Accept-Language": "en-IN,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+        }
+
+    def _graphql_headers(self) -> dict[str, str]:
+        """Build headers for the Magento GraphQL API."""
+        return {
+            "User-Agent": self._random_ua(),
+            "Accept": "application/json",
+            "Accept-Language": "en-IN,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Store": "vijay_sales",
+        }
+
+    @staticmethod
+    def _build_api_url(query: str, start: int = 0, rows: int = ROWS_PER_PAGE) -> str:
+        """Construct the Unbxd API URL for a search query and offset."""
+        q = quote_plus(query)
+        return f"{API_BASE}?q={q}&rows={rows}&start={start}"
+
+    @staticmethod
+    def _build_graphql_url(skus: list[str]) -> str:
+        """Build GET URL for the Magento GraphQL product enrichment query."""
+        sku_list = ",".join(f'"{s}"' for s in skus)
+        query = GRAPHQL_QUERY % (sku_list, len(skus))
+        return f"{GRAPHQL_URL}?{urlencode({'query': query})}"
 
     # ------------------------------------------------------------------
     # start_requests
     # ------------------------------------------------------------------
 
     def start_requests(self):
-        """Emit Playwright requests for category listing pages."""
-        url_pairs = self._load_urls()
-        random.shuffle(url_pairs)
+        """Emit API requests for each seed query."""
+        queries = self._load_queries()
+        random.shuffle(queries)
 
-        for url, max_pg in url_pairs:
-            base = url.split("?")[0]
-            self._max_pages_map[base] = max_pg
-
-            self.logger.info(f"Queuing category ({max_pg} pages): {url}")
+        for query, category_slug, max_pg in queries:
+            url = self._build_api_url(query, start=0)
+            self.logger.info(f"Queuing API query: '{query}' (max {max_pg} pages)")
             yield scrapy.Request(
                 url,
-                callback=self.parse_listing_page,
+                callback=self.parse_api_response,
                 errback=self.handle_error,
-                headers=self._make_headers(),
+                headers=self._api_headers(),
                 meta={
-                    "category_slug": self._resolve_category_from_url(url),
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                        PageMethod("wait_for_timeout", 3000),
-                    ],
+                    "category_slug": category_slug,
+                    "query": query,
+                    "current_page": 1,
+                    "max_pages": max_pg,
+                    "playwright": False,
                 },
                 dont_filter=True,
             )
 
-        self.logger.info(f"Queued {len(url_pairs)} categories")
+        self.logger.info(f"Queued {len(queries)} seed queries")
 
-    def _load_urls(self) -> list[tuple[str, int]]:
-        """Resolve the (url, max_pages) list to crawl."""
-        fallback = self._max_pages_override or MAX_LISTING_PAGES
+    def _load_queries(self) -> list[tuple[str, str, int]]:
+        """Resolve the (query, category_slug, max_pages) list to crawl."""
+        fallback_max = self._max_pages_override or 5
 
-        if self._category_urls:
-            return [(u, fallback) for u in self._category_urls]
+        if self._override_queries:
+            return [
+                (q, self._resolve_category(q), fallback_max)
+                for q in self._override_queries
+            ]
 
         if self.job_id:
             try:
                 from apps.scraping.models import ScraperJob
                 job = ScraperJob.objects.get(id=self.job_id)
-                self.logger.info(f"Running for job {self.job_id}, marketplace: {job.marketplace.slug}")
+                self.logger.info(
+                    f"Running for job {self.job_id}, marketplace: {job.marketplace.slug}"
+                )
             except Exception as exc:
                 self.logger.warning(f"Could not load ScraperJob {self.job_id}: {exc}")
 
         if self._max_pages_override is not None:
-            if self._max_pages_override <= 3:
+            if self._max_pages_override <= 2:
                 self.logger.info(
-                    f"Quick mode: using first {self.QUICK_MODE_CATEGORIES} categories "
+                    f"Quick mode: using first {self.QUICK_MODE_QUERIES} queries "
                     f"(max_pages={self._max_pages_override})"
                 )
                 return [
-                    (url, self._max_pages_override)
-                    for url, _ in SEED_CATEGORY_URLS[:self.QUICK_MODE_CATEGORIES]
+                    (q, slug, self._max_pages_override)
+                    for q, slug, _ in SEED_QUERIES[:self.QUICK_MODE_QUERIES]
                 ]
-            return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
-        return list(SEED_CATEGORY_URLS)
+            return [
+                (q, slug, self._max_pages_override)
+                for q, slug, _ in SEED_QUERIES
+            ]
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+        return list(SEED_QUERIES)
 
-    def _resolve_category_from_url(self, url: str) -> str | None:
-        """Extract whydud category slug from URL path."""
-        path = url.split("?")[0].lower()
+    def _resolve_category(self, query: str) -> str:
+        """Resolve a query string to a Whydud category slug."""
+        q_lower = query.lower().strip()
+        if q_lower in KEYWORD_CATEGORY_MAP:
+            return KEYWORD_CATEGORY_MAP[q_lower]
         for keyword, slug in KEYWORD_CATEGORY_MAP.items():
-            if keyword.replace(" ", "-") in path:
+            if keyword in q_lower or q_lower in keyword:
                 return slug
-        return None
+        return ""
 
-    def _parse_price(self, price_str: str | None) -> Decimal | None:
-        """Parse price string to Decimal in paisa."""
-        if not price_str:
-            return None
-        match = PRICE_RE.search(str(price_str))
-        if not match:
-            return None
-        try:
-            rupees = Decimal(match.group().replace(",", ""))
-            return rupees * 100  # convert to paisa
-        except (InvalidOperation, ValueError):
-            return None
+    # ------------------------------------------------------------------
+    # Phase 1: Unbxd API response parsing
+    # ------------------------------------------------------------------
 
-    def _is_blocked(self, response) -> bool:
-        """Detect if site served a block/error page."""
+    def parse_api_response(self, response):
+        """Parse the Unbxd JSON API response, buffer items, and flush GraphQL batches."""
+        self._api_pages_fetched += 1
+
         if response.status in (403, 429):
-            return True
-        title = (response.css("title::text").get() or "").strip().lower()
-        if "access denied" in title or "blocked" in title or "service unavailable" in title:
-            return True
-        return False
-
-    # ------------------------------------------------------------------
-    # Phase 1: Listing pages
-    # ------------------------------------------------------------------
-
-    def parse_listing_page(self, response):
-        """Extract product links from category listing page."""
-        self._listing_pages_scraped += 1
-
-        if self._is_blocked(response):
-            self.logger.warning(f"Blocked on listing {response.url} — skipping")
-            return
-
-        category_slug = response.meta.get("category_slug")
-
-        # Extract product links from listing page
-        # Vijay Sales uses various card selectors depending on page type
-        product_links = set()
-
-        # Try multiple product card selectors
-        selectors = [
-            "a.product-item-link::attr(href)",
-            "a.product-card-link::attr(href)",
-            ".product-item a::attr(href)",
-            ".product-card a::attr(href)",
-            "a[href*='.html']::attr(href)",
-            ".products-grid a::attr(href)",
-            "li.product-item a.product-item-photo::attr(href)",
-            ".product-listing a::attr(href)",
-        ]
-
-        for sel in selectors:
-            for href in response.css(sel).getall():
-                full_url = response.urljoin(href)
-                # Filter for product URLs (typically end in .html or have product-like paths)
-                if self._is_product_url(full_url):
-                    product_links.add(full_url)
-
-        if product_links:
-            self.logger.info(f"Found {len(product_links)} products on {response.url}")
-            for prod_url in product_links:
-                yield scrapy.Request(
-                    prod_url,
-                    callback=self.parse_product_page,
-                    errback=self.handle_error,
-                    headers=self._make_headers(),
-                    meta={
-                        "category_slug": category_slug,
-                        "playwright": True,
-                        "playwright_page_init_callback": self._apply_stealth,
-                        "playwright_page_methods": [
-                            PageMethod("wait_for_load_state", "domcontentloaded"),
-                            PageMethod("wait_for_timeout", random.randint(2000, 4000)),
-                        ],
-                    },
-                )
-        else:
-            self.logger.warning(f"No products found on {response.url}")
-            return
-
-        # Pagination
-        base_url = response.url.split("?")[0]
-        pages_so_far = self._pages_followed.get(base_url, 1)
-        max_for_category = self._max_pages_map.get(base_url, MAX_LISTING_PAGES)
-
-        if pages_so_far < max_for_category:
-            next_page = pages_so_far + 1
-            separator = "&" if "?" in base_url else "?"
-            next_url = f"{base_url}{separator}page={next_page}"
-            self._pages_followed[base_url] = next_page
-
-            yield scrapy.Request(
-                next_url,
-                callback=self.parse_listing_page,
-                errback=self.handle_error,
-                headers=self._make_headers(),
-                meta={
-                    "category_slug": category_slug,
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                        PageMethod("wait_for_timeout", 3000),
-                    ],
-                },
+            self.logger.warning(
+                f"Rate limited ({response.status}) on {response.url} — stopping query"
             )
+            return
 
-    def _is_product_url(self, url: str) -> bool:
-        """Check if URL looks like a product detail page."""
-        # Vijay Sales product URLs typically end in .html
-        # and contain the domain
-        if "vijaysales.com" not in url:
-            return False
-        path = url.split("?")[0].lower()
-        # Exclude category, search, and non-product pages
-        exclude_patterns = ["/c", "/catalogsearch", "/checkout", "/customer", "/wishlist"]
-        for pattern in exclude_patterns:
-            if path.endswith(pattern) or f"{pattern}/" in path:
-                return False
-        # Product pages typically end in .html or have a product-like slug
-        if path.endswith(".html"):
-            return True
-        return False
-
-    # ------------------------------------------------------------------
-    # Phase 2: Product detail pages
-    # ------------------------------------------------------------------
-
-    def parse_product_page(self, response):
-        """Extract product data from detail page."""
-        if self._is_blocked(response):
-            self.logger.warning(f"Blocked on product {response.url}")
+        try:
+            data = response.json()
+        except (ValueError, AttributeError):
+            self.logger.error(f"Invalid JSON from {response.url}")
             self.items_failed += 1
             return
 
-        category_slug = response.meta.get("category_slug")
+        category_slug = response.meta["category_slug"]
+        query = response.meta["query"]
+        current_page = response.meta["current_page"]
+        max_pages = response.meta["max_pages"]
 
-        # Strategy 1: JSON-LD
-        item = self._parse_from_json_ld(response, category_slug)
-        if item:
-            self._product_pages_scraped += 1
-            self._products_extracted += 1
-            self.items_scraped += 1
-            yield item
-            return
+        # Unbxd wraps products in response.products
+        resp_data = data.get("response") or {}
+        products = resp_data.get("products") or []
+        total_products = resp_data.get("numberOfProducts", 0)
 
-        # Strategy 2: HTML extraction
-        item = self._parse_from_html(response, category_slug)
-        if item:
-            self._product_pages_scraped += 1
-            self._products_extracted += 1
-            self.items_scraped += 1
-            yield item
-            return
-
-        self.logger.warning(f"Could not extract product data from {response.url}")
-        self.items_failed += 1
-
-    # ------------------------------------------------------------------
-    # Extraction: JSON-LD (primary)
-    # ------------------------------------------------------------------
-
-    def _parse_from_json_ld(
-        self, response, category_slug: str | None,
-    ) -> ProductItem | None:
-        """Extract product data from JSON-LD structured data."""
-        ld_scripts = response.css('script[type="application/ld+json"]::text').getall()
-        for script_text in ld_scripts:
-            try:
-                ld_data = json.loads(script_text)
-            except (json.JSONDecodeError, ValueError):
-                continue
-
-            if isinstance(ld_data, list):
-                for item in ld_data:
-                    if item.get("@type") == "Product":
-                        ld_data = item
-                        break
-                else:
-                    continue
-
-            if ld_data.get("@type") != "Product":
-                continue
-
-            name = ld_data.get("name")
-            if not name:
-                continue
-
-            sku = ld_data.get("sku") or ld_data.get("productID")
-            if not sku:
-                continue
-
-            offers = ld_data.get("offers") or {}
-            if isinstance(offers, list) and offers:
-                offers = offers[0]
-            price = self._parse_price(offers.get("price"))
-
-            brand_data = ld_data.get("brand") or {}
-            brand = brand_data.get("name") if isinstance(brand_data, dict) else str(brand_data) if brand_data else None
-
-            images = ld_data.get("image") or []
-            if isinstance(images, str):
-                images = [images]
-
-            rating = None
-            review_count = None
-            agg_rating = ld_data.get("aggregateRating") or {}
-            if agg_rating.get("ratingValue"):
-                try:
-                    rating = Decimal(str(agg_rating["ratingValue"]))
-                except (InvalidOperation, ValueError):
-                    pass
-            if agg_rating.get("reviewCount"):
-                try:
-                    review_count = int(agg_rating["reviewCount"])
-                except (ValueError, TypeError):
-                    pass
-
-            in_stock = True
-            availability = offers.get("availability", "")
-            if "OutOfStock" in availability:
-                in_stock = False
-
-            description = ld_data.get("description")
-
-            return ProductItem(
-                marketplace_slug=MARKETPLACE_SLUG,
-                external_id=str(sku),
-                url=response.url,
-                title=name,
-                brand=brand,
-                price=price,
-                mrp=None,  # JSON-LD typically has selling price only
-                images=images,
-                rating=rating,
-                review_count=review_count,
-                specs={},
-                seller_name="Vijay Sales",
-                seller_rating=None,
-                in_stock=in_stock,
-                fulfilled_by="Vijay Sales",
-                category_slug=category_slug,
-                about_bullets=[],
-                offer_details=[],
-                raw_html_path=None,
-                description=description,
-                warranty=None,
-                delivery_info=None,
-                return_policy=None,
-                breadcrumbs=[],
-                variant_options=[],
-                country_of_origin=None,
-                manufacturer=brand,
-                model_number=None,
-                weight=None,
-                dimensions=None,
+        if not products:
+            self.logger.info(
+                f"No products on page {current_page} for '{query}' — stopping"
             )
-        return None
+            # Flush any remaining buffered items
+            yield from self._flush_graphql_batch()
+            return
+
+        self.logger.info(
+            f"Query '{query}' page {current_page}: {len(products)} products "
+            f"(total: {total_products})"
+        )
+
+        for product in products:
+            item = self._parse_unbxd_product(product, category_slug)
+            if item:
+                self._products_extracted += 1
+                sku = str(product.get("sku") or item["external_id"])
+                self._pending_items[sku] = item
+
+                # Flush batch when buffer is full
+                if len(self._pending_items) >= GRAPHQL_BATCH_SIZE:
+                    yield from self._flush_graphql_batch()
+
+        # Pagination — compute next offset
+        current_start = (current_page - 1) * ROWS_PER_PAGE
+        next_start = current_start + ROWS_PER_PAGE
+
+        if next_start < total_products and current_page < max_pages:
+            next_page = current_page + 1
+            next_url = self._build_api_url(query, start=next_start)
+            yield scrapy.Request(
+                next_url,
+                callback=self.parse_api_response,
+                errback=self.handle_error,
+                headers=self._api_headers(),
+                meta={
+                    "category_slug": category_slug,
+                    "query": query,
+                    "current_page": next_page,
+                    "max_pages": max_pages,
+                    "playwright": False,
+                },
+                dont_filter=True,
+            )
+        else:
+            # Last page for this query — flush remaining buffer
+            yield from self._flush_graphql_batch()
 
     # ------------------------------------------------------------------
-    # Extraction: HTML (fallback)
+    # Phase 2: GraphQL batch enrichment
     # ------------------------------------------------------------------
 
-    def _parse_from_html(
-        self, response, category_slug: str | None,
-    ) -> ProductItem | None:
-        """Extract product data from HTML elements."""
-        # Title
-        title = response.css(
-            "h1.page-title span::text, h1.product-name::text, "
-            "h1.product-title::text, .product-info-main h1::text"
-        ).get()
-        if not title:
+    def _flush_graphql_batch(self):
+        """Yield a GraphQL request for all buffered SKUs, then clear the buffer."""
+        if not self._pending_items:
+            return
+
+        skus = list(self._pending_items.keys())
+        items_snapshot = dict(self._pending_items)
+        self._pending_items.clear()
+
+        url = self._build_graphql_url(skus)
+        self._graphql_batches_sent += 1
+
+        self.logger.info(
+            f"GraphQL batch #{self._graphql_batches_sent}: enriching {len(skus)} SKUs"
+        )
+
+        yield scrapy.Request(
+            url,
+            callback=self.parse_graphql_response,
+            errback=self._handle_graphql_error,
+            headers=self._graphql_headers(),
+            meta={
+                "pending_items": items_snapshot,
+                "playwright": False,
+            },
+            dont_filter=True,
+        )
+
+    def parse_graphql_response(self, response):
+        """Merge GraphQL enrichment data into buffered items and yield them."""
+        pending = response.meta["pending_items"]
+
+        if response.status in (403, 429):
+            self.logger.warning(
+                f"GraphQL rate limited ({response.status}) — yielding items without enrichment"
+            )
+            yield from self._yield_items_unenriched(pending)
+            return
+
+        try:
+            data = response.json()
+        except (ValueError, AttributeError):
+            self.logger.error("Invalid JSON from GraphQL — yielding items without enrichment")
+            yield from self._yield_items_unenriched(pending)
+            return
+
+        # Check for GraphQL errors
+        if "errors" in data:
+            self.logger.warning(
+                f"GraphQL errors: {data['errors'][0].get('message', '?')} "
+                f"— yielding items without enrichment"
+            )
+            yield from self._yield_items_unenriched(pending)
+            return
+
+        # Index GraphQL results by SKU for fast lookup
+        gql_items = (data.get("data") or {}).get("products", {}).get("items") or []
+        gql_by_sku: dict[str, dict] = {item["sku"]: item for item in gql_items if "sku" in item}
+
+        self.logger.info(
+            f"GraphQL returned {len(gql_by_sku)}/{len(pending)} products"
+        )
+
+        for sku, item in pending.items():
+            gql = gql_by_sku.get(sku)
+            if gql:
+                self._enrich_item(item, gql)
+                self._graphql_enriched += 1
+
+            self.items_scraped += 1
+            yield item
+
+    def _enrich_item(self, item: ProductItem, gql: dict) -> None:
+        """Merge GraphQL data into a ProductItem in-place."""
+        # Rating — GraphQL returns 0-100 scale, convert to 0-5
+        rating_summary = gql.get("rating_summary")
+        if rating_summary and int(rating_summary) > 0:
+            item["rating"] = Decimal(str(int(rating_summary))) / 20
+
+        # Review count
+        review_count = gql.get("review_count")
+        if review_count and int(review_count) > 0:
+            item["review_count"] = int(review_count)
+
+        # Description — prefer GraphQL's rich HTML description
+        desc_html = (gql.get("description") or {}).get("html", "")
+        if desc_html:
+            # Parse structured specs from <b>Key:</b> Value patterns
+            spec_pairs = re.findall(
+                r"<b>([^<]+?):</b>\s*(.+?)(?:<br|$)", desc_html, re.DOTALL
+            )
+            for key, val in spec_pairs:
+                clean_key = self._strip_html(key).strip()
+                clean_val = self._strip_html(val).strip()
+                if clean_key and clean_val and clean_key not in item["specs"]:
+                    item["specs"][clean_key] = clean_val
+
+            item["description"] = self._strip_html(desc_html)
+
+        # Short description → about_bullets
+        short_html = (gql.get("short_description") or {}).get("html", "")
+        if short_html:
+            # Split on <br> tags to get bullet-like items
+            parts = re.split(r"<br\s*/?>", short_html)
+            bullets = [self._strip_html(p).strip() for p in parts if self._strip_html(p).strip()]
+            if bullets:
+                item["about_bullets"] = bullets
+
+        # Images — GraphQL provides full media gallery (higher quality, more images)
+        gallery = gql.get("media_gallery") or []
+        if gallery:
+            gql_images = []
+            for img in gallery:
+                url = img.get("url", "")
+                if url:
+                    # Strip Magento resize params for full-res
+                    clean_url = url.split("?")[0] if "?" in url else url
+                    if clean_url not in gql_images:
+                        gql_images.append(clean_url)
+            if gql_images:
+                item["images"] = gql_images
+
+    def _yield_items_unenriched(self, pending: dict[str, ProductItem]):
+        """Yield all buffered items without GraphQL enrichment (fallback)."""
+        for item in pending.values():
+            self.items_scraped += 1
+            yield item
+
+    def _handle_graphql_error(self, failure):
+        """Handle GraphQL request failures — yield items without enrichment."""
+        pending = failure.request.meta.get("pending_items", {})
+        self.logger.warning(
+            f"GraphQL request failed: {failure.getErrorMessage()} "
+            f"— yielding {len(pending)} items without enrichment"
+        )
+        self.items_failed += 1
+        for item in pending.values():
+            self.items_scraped += 1
+            # Return items via the spider's output — but errback can't yield,
+            # so we need a different approach. Items are yielded from the
+            # callback path only. Here we just log the loss.
+        self.logger.error(
+            f"Lost {len(pending)} items due to GraphQL failure — "
+            f"they will not appear in output"
+        )
+
+    # ------------------------------------------------------------------
+    # Phase 1: Product extraction from Unbxd JSON
+    # ------------------------------------------------------------------
+
+    def _parse_unbxd_product(self, product: dict, category_slug: str) -> ProductItem | None:
+        """Extract a ProductItem from a single Unbxd product object."""
+        title = product.get("title")
+        unique_id = product.get("uniqueId") or product.get("sku")
+        if not title or not unique_id:
             return None
-        title = title.strip()
 
-        # SKU
-        sku = response.css(
-            "div.product-sku::text, span.product-sku::text, "
-            "[itemprop='sku']::text, .sku .value::text"
-        ).get()
-        if not sku:
-            # Try to extract from URL
-            sku = re.sub(r"[^a-zA-Z0-9-]", "", response.url.split("/")[-1].replace(".html", ""))
-        if not sku:
+        external_id = str(unique_id)
+
+        # Dedup across queries
+        if external_id in self._seen_ids:
+            self._duplicates_skipped += 1
             return None
-        sku = sku.strip()
+        self._seen_ids.add(external_id)
 
-        # Selling price
-        price_text = response.css(
-            "span.price::text, span.special-price .price::text, "
-            ".product-info-price .price::text, [data-price-type='finalPrice'] .price::text"
-        ).get()
-        price = self._parse_price(price_text)
+        # --- Prices ---
+        # Try Delhi city-specific pricing first, then fall back to global
+        offer_price = (
+            product.get(f"cityId_{DELHI_CITY_ID}_offerPrice_unx_d")
+            or product.get("offerPrice")
+        )
+        mrp_price = (
+            product.get(f"cityId_{DELHI_CITY_ID}_price_unx_d")
+            or product.get("mrp")
+            or product.get("price")
+        )
 
-        # MRP
-        mrp_text = response.css(
-            "span.old-price .price::text, .product-info-price .old-price .price::text, "
-            "[data-price-type='oldPrice'] .price::text"
-        ).get()
-        mrp = self._parse_price(mrp_text)
+        # Convert rupees → paisa
+        price = self._price_to_paisa(offer_price) or self._price_to_paisa(mrp_price)
+        mrp = self._price_to_paisa(mrp_price) or self._price_to_paisa(product.get("price"))
 
         # Brand
-        brand = response.css(
-            "span.product-brand::text, div.brand-name::text, "
-            ".product-brand a::text, [itemprop='brand']::text"
-        ).get()
+        brand = product.get("brand") or ""
+        if isinstance(brand, list):
+            brand = brand[0] if brand else ""
 
-        # Images
+        # URL — productUrl is relative, prepend base
+        product_url = product.get("productUrl") or ""
+        if product_url:
+            if product_url.startswith("/"):
+                url = f"{BASE_URL}{product_url}"
+            elif product_url.startswith("http"):
+                url = product_url
+            else:
+                url = f"{BASE_URL}/{product_url}"
+        else:
+            url = ""
+
+        if not url:
+            return None
+
+        # Images (from Unbxd — will be replaced by GraphQL gallery if available)
         images = []
-        for img_sel in [
-            "img.gallery-placeholder__image::attr(src)",
-            ".product-image-photo::attr(src)",
-            ".fotorama img::attr(src)",
-            "img[itemprop='image']::attr(src)",
-        ]:
-            for img in response.css(img_sel).getall():
-                if img and not img.startswith("data:"):
-                    images.append(response.urljoin(img))
+        for key in ("imageUrl", "smallImage", "thumbnailImage"):
+            img = product.get(key)
+            if isinstance(img, list):
+                for i in img:
+                    if i and isinstance(i, str) and i not in images:
+                        images.append(self._normalize_img_url(i))
+            elif img and isinstance(img, str) and img not in images:
+                images.append(self._normalize_img_url(img))
 
-        # Specs
-        specs = {}
-        for row in response.css("table.additional-attributes tr, .product-attributes tr"):
-            key = row.css("th::text, td.label::text").get()
-            val = row.css("td.data::text, td.value::text").get()
-            if key and val:
-                specs[key.strip()] = val.strip()
+        # --- Specs ---
+        specs: dict[str, str] = {}
 
-        # Breadcrumbs
-        breadcrumbs = [
-            bc.strip()
-            for bc in response.css(".breadcrumbs li a::text, .breadcrumbs li span::text").getall()
-            if bc.strip()
-        ]
+        # SKU / model
+        sku = product.get("sku") or ""
+        if sku:
+            specs["SKU"] = str(sku)
+        model = product.get("modelName") or ""
+        if model:
+            specs["Model"] = str(model)
+        color = product.get("color") or ""
+        if color:
+            specs["Color"] = str(color)
+        ean = product.get("ean") or ""
+        if ean:
+            specs["EAN"] = str(ean)
+
+        # Warranty fields
+        warranty_fields = {
+            "manufacturingWarranty": "Manufacturing Warranty",
+            "servicesWarranty": "Services Warranty",
+            "additionalBrandWarranty": "Additional Brand Warranty",
+            "warrantyDescription": "Warranty Description",
+            "totalWarranty": "Total Warranty",
+        }
+        warranty_parts = []
+        for api_key, display_key in warranty_fields.items():
+            val = product.get(api_key)
+            if val and str(val).strip():
+                specs[display_key] = str(val).strip()
+                warranty_parts.append(str(val).strip())
+
+        # Warranty string — use totalWarranty or combine parts
+        warranty = product.get("totalWarranty") or ""
+        if not warranty and warranty_parts:
+            warranty = "; ".join(warranty_parts)
+
+        # Discount
+        discount_pct = product.get("discountPercentage")
+        if discount_pct:
+            try:
+                if float(discount_pct) > 0:
+                    specs["Discount"] = f"{discount_pct}%"
+            except (ValueError, TypeError):
+                pass
+
+        # Flags
+        if product.get("isCod"):
+            specs["Cash on Delivery"] = "Yes"
+        if product.get("isExchange"):
+            specs["Exchange Available"] = "Yes"
+        if product.get("isFastSelling"):
+            specs["Fast Selling"] = "Yes"
+
+        # City-specific pricing preserved for future multi-city support
+        delhi_special = product.get(f"cityId_{DELHI_CITY_ID}_specialTag_unx_ts")
+        if delhi_special and isinstance(delhi_special, str):
+            specs["Delhi Offers"] = delhi_special
+        delhi_coupon = product.get(f"cityId_{DELHI_CITY_ID}_couponLabel_unx_ts")
+        if delhi_coupon and isinstance(delhi_coupon, str):
+            specs["Delhi Coupon"] = delhi_coupon
+
+        # Stock
+        product_status = product.get("productStatus")
+        in_stock = True
+        if product_status is not None:
+            in_stock = str(product_status) == "1"
+
+        # Categories
+        resolved_category = category_slug
+        if not resolved_category:
+            cat_path = product.get("categoryPath") or ""
+            categories = product.get("categories") or []
+            cat_text = cat_path if isinstance(cat_path, str) else ""
+            if not cat_text and isinstance(categories, list):
+                cat_text = " ".join(str(c) for c in categories)
+            cat_lower = cat_text.lower()
+            for kw, slug_val in KEYWORD_CATEGORY_MAP.items():
+                if kw in cat_lower:
+                    resolved_category = slug_val
+                    break
+
+        # Breadcrumbs from categoryPath
+        breadcrumbs = []
+        cat_path = product.get("categoryPath") or ""
+        if isinstance(cat_path, str) and cat_path:
+            breadcrumbs = [p.strip() for p in cat_path.split(">") if p.strip()]
+        elif isinstance(cat_path, list):
+            breadcrumbs = [str(p).strip() for p in cat_path if p]
+
+        # Description (from Unbxd — will be replaced by GraphQL if available)
+        description = product.get("description") or ""
+        if description:
+            description = self._strip_html(str(description))
 
         return ProductItem(
             marketplace_slug=MARKETPLACE_SLUG,
-            external_id=sku,
-            url=response.url,
+            external_id=external_id,
+            url=url,
             title=title,
-            brand=brand.strip() if brand else None,
+            brand=brand if brand else None,
             price=price,
             mrp=mrp,
             images=images,
@@ -671,21 +721,64 @@ class VijaySalesSpider(BaseWhydudSpider):
             specs=specs,
             seller_name="Vijay Sales",
             seller_rating=None,
-            in_stock=True,
+            in_stock=in_stock,
             fulfilled_by="Vijay Sales",
-            category_slug=category_slug,
+            category_slug=resolved_category or None,
             about_bullets=[],
             offer_details=[],
             raw_html_path=None,
-            description=None,
-            warranty=specs.get("Warranty") or specs.get("warranty"),
+            description=description if description else None,
+            warranty=str(warranty) if warranty else None,
             delivery_info=None,
             return_policy=None,
             breadcrumbs=breadcrumbs,
             variant_options=[],
-            country_of_origin=specs.get("Country of Origin"),
-            manufacturer=specs.get("Manufacturer") or (brand.strip() if brand else None),
-            model_number=specs.get("Model Number") or specs.get("Model Name"),
-            weight=specs.get("Weight") or specs.get("Product Weight"),
-            dimensions=specs.get("Dimensions") or specs.get("Product Dimensions"),
+            country_of_origin=None,
+            manufacturer=str(brand) if brand else None,
+            model_number=str(model) if model else None,
+            weight=None,
+            dimensions=None,
         )
+
+    # ------------------------------------------------------------------
+    # Image URL normalization
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_img_url(img: str) -> str:
+        """Ensure image URL is absolute."""
+        if img.startswith("//"):
+            return "https:" + img
+        if not img.startswith("http"):
+            return f"{BASE_URL}/{img.lstrip('/')}"
+        return img
+
+    # ------------------------------------------------------------------
+    # Text helpers
+    # ------------------------------------------------------------------
+
+    _HTML_TAG_RE = re.compile(r"<[^>]+>")
+    _MULTI_SPACE_RE = re.compile(r"\s+")
+
+    @classmethod
+    def _strip_html(cls, text: str) -> str:
+        """Remove HTML tags and collapse whitespace."""
+        clean = cls._HTML_TAG_RE.sub(" ", text)
+        return cls._MULTI_SPACE_RE.sub(" ", clean).strip()
+
+    # ------------------------------------------------------------------
+    # Price helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _price_to_paisa(value) -> Decimal | None:
+        """Convert a price in rupees (from API) to Decimal in paisa."""
+        if value is None:
+            return None
+        try:
+            rupees = Decimal(str(value))
+            if rupees <= 0:
+                return None
+            return rupees * 100
+        except (InvalidOperation, ValueError, TypeError):
+            return None
