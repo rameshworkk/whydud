@@ -1446,7 +1446,8 @@ SCRAPING_PROXY_LIST=http://user:pass@gw.dataimpulse.com:823
 
 ### 2026-03-02 — Fix: Static generation timeout during Docker build
 
-**Problem**: After fixing the missing files, `next build` still failed — homepage (`/`) timed out during static page generation (3 attempts × 60s each = 330s). The homepage is an `async` server component that makes 4 API calls (products, deals, 2× trending). During Docker build, no backend is running, so `fetch()` to `http://localhost:8000` hangs indefinitely until Next.js kills the page generation.
+**Problem**: After fixing the missing files
+, `next build` still failed — homepage (`/`) timed out during static page generation (3 attempts × 60s each = 330s). The homepage is an `async` server component that makes 4 API calls (products, deals, 2× trending). During Docker build, no backend is running, so `fetch()` to `http://localhost:8000` hangs indefinitely until Next.js kills the page generation.
 
 **Fix**: Added `export const dynamic = "force-dynamic"` to:
 - `(public)/page.tsx` (homepage) — 4 async API calls
@@ -2015,3 +2016,107 @@ Added Phase 2 enrichment to the Vijay Sales spider using Magento's **open GraphQ
 - Fallback: if GraphQL fails, items are still yielded with Phase 1 data only
 - `_handle_graphql_error` errback cannot yield items (Scrapy limitation) — items are lost on request-level GraphQL failure. In practice this API is stable and never fails.
 - Some products have `rating: None` — these are products with no reviews (expected)
+
+### 2026-03-03 — Snapdeal Spider Rewrite (Search-Based + Microdata, No Playwright)
+
+**Goal**: Rewrite the Snapdeal spider to use search-based discovery with schema.org microdata extraction, eliminating all Playwright dependencies.
+
+#### What Changed
+
+**Complete rewrite of `apps/scraping/spiders/snapdeal_spider.py`**:
+
+**Old architecture** (removed):
+- Category URL-based discovery (`/products/{category}`)
+- Playwright fallback on blocked pages and for pagination
+- Hidden inputs + JS variables (`sdLogData`, `pdpConfigs`) as primary extraction
+- `scrapy_playwright.page.PageMethod` import dependency
+
+**New architecture**:
+- **Phase 1 (Listing)**: Search URL-based discovery (`/search?keyword={term}&noOfResults=20&offset={N}`)
+  - Parses `.product-tuple-listing` elements for product URLs
+  - Extracts pogId from URL path for dedup
+  - Pagination via `offset` query param (increment by 20)
+  - **CRITICAL**: Skips `/honeybot` honeypot links
+- **Phase 2 (Detail)**: Schema.org microdata extraction (`itemprop` attributes)
+  - `itemprop="name"` → title
+  - `itemprop="price"` + `itemprop="priceCurrency"` → price (rupees → paisa)
+  - `itemprop="brand"` → brand
+  - `itemprop="ratingValue"` → rating (Decimal 0-5)
+  - `itemprop="reviewCount"` / `itemprop="ratingCount"` → review count
+  - `itemprop="description"` → description
+  - `itemprop="availability"` → stock status
+  - `itemprop="image"` → product images
+  - Falls back to hidden inputs + CSS selectors when microdata sparse
+
+**Key design decisions**:
+- Pure HTTP — zero Playwright dependency (Snapdeal is fully SSR, no anti-bot)
+- Search queries instead of category URLs (per feasibility report recommendation)
+- 17 seed queries covering electronics, appliances, kitchen, grooming, wearables
+- Dedup via `_seen_ids` set (pogId-based, same as Vijay Sales pattern)
+- Follows same code structure as Reliance Digital + Vijay Sales spiders
+
+**Registration**: Already configured — `"snapdeal": "snapdeal"` in `ScrapingConfig.spider_map()`, marketplace seeded in DB
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/snapdeal_spider.py` | Complete rewrite — removed Playwright, added search-based discovery + microdata extraction |
+
+#### Run Command
+```
+cd backend
+python -m apps.scraping.runner snapdeal --max-pages 1
+```
+
+### 2026-03-03 — Nykaa Spider (HTTP-only with curl_cffi TLS Impersonation)
+
+**P1 spider** — rewrote existing Playwright-based `nykaa_spider.py` to pure HTTP with Akamai bypass.
+
+#### Problem: Akamai Bot Manager TLS Fingerprinting
+- Nykaa uses Akamai Bot Manager which checks JA3/JA4 TLS fingerprints
+- Python's ssl/urllib3/Twisted TLS handshake is blocked (403) regardless of HTTP headers
+- `curl` from same machine works fine — different TLS fingerprint
+- **Solution**: `curl_cffi` library with `impersonate='chrome120'` mimics Chrome's TLS handshake
+
+#### Problem: Stale Category URLs
+- User-provided category IDs (c/8, c/6, c/12, etc.) all returned 404
+- Existing spider's category IDs (c/5116, c/6627, etc.) redirected to wrong pages
+- **Solution**: Discovered 21 correct category URLs from nykaa.com homepage (e.g., `/makeup/face/face-foundation/c/228`, `/skin/moisturizers/face-moisturizer-day-cream/c/8395`)
+
+#### Problem: Chrome/131 UA Blocked
+- Akamai blocks Chrome/131+ `sec-ch-ua` format but allows Chrome/120
+- **Solution**: Pinned to Chrome/120 UA with `"Not_A Brand";v="8", "Chromium";v="120"` sec-ch-ua header
+
+#### Architecture
+- **Phase 1 (Listing)**: Category pages → `__PRELOADED_STATE__` → `categoryListing.listingData.products` (20/page)
+  - Pagination via `?page_no=N`, stops on `stopFurtherCall` flag or empty products
+  - Extracts product URLs as `/product-slug/p/product-id`
+- **Phase 2 (Detail)**: Product pages → `__PRELOADED_STATE__` → `productPage.product`
+  - Primary: Redux state with full product data (name, prices, brand, rating, images, manufacturer, etc.)
+  - Fallback: JSON-LD `<script type="application/ld+json">` for structured data
+  - Prices in rupees → multiplied by 100 for paisa storage
+- **CurlCffiDownloaderMiddleware**: Custom Scrapy downloader middleware that intercepts nykaa.com requests and routes through curl_cffi with `impersonate='chrome120'`
+- `json.JSONDecoder().raw_decode()` for robust `__PRELOADED_STATE__` parsing (handles trailing JS)
+
+#### Test Results (`--max-pages 1`)
+- **79 pages crawled** — ALL HTTP 200 (zero 403s)
+- **75 products extracted** — 100% success rate
+- **128 items/minute** throughput
+- Rich data: prices (paisa), ratings, review counts, images, manufacturer info, return policy, country of origin
+
+#### Dependencies Added
+- `curl_cffi>=0.14.0` added to `backend/requirements/base.txt`
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/nykaa_spider.py` | Complete rewrite — removed Playwright, HTTP-only with curl_cffi TLS impersonation, 21 verified category URLs, `__PRELOADED_STATE__` + JSON-LD extraction |
+| `requirements/base.txt` | Added `curl_cffi>=0.14.0` for Chrome TLS impersonation |
+
+#### Run Command
+```
+cd backend
+python -m apps.scraping.runner nykaa --max-pages 1
+```
