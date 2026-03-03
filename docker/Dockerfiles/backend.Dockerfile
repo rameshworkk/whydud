@@ -20,7 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # ---------------------------------------------------------------------------
 # Dependencies layer (cached separately from code)
@@ -36,7 +37,10 @@ RUN pip install -r requirements/prod.txt
 RUN python -m spacy download en_core_web_sm
 
 # Install Playwright Chromium + system deps for scraping spiders
-RUN playwright install-deps chromium && playwright install chromium
+# PLAYWRIGHT_BROWSERS_PATH is set in base ENV so browsers install to /ms-playwright
+# (a shared path accessible by any user, not root's ~/.cache)
+RUN playwright install-deps chromium && playwright install chromium \
+    && chmod -R o+rx /ms-playwright
 
 # ---------------------------------------------------------------------------
 # Development
