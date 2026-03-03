@@ -1,0 +1,218 @@
+# Whydud — Claude Project Instructions
+
+## What is Whydud
+
+Whydud is an Indian e-commerce intelligence platform that scrapes product data from Amazon India and Flipkart, tracks prices over time, calculates a "DudScore" (total cost of ownership score), and helps users find the best deals. Think of it as PCPartPicker meets CamelCamelCamel for the Indian market.
+
+**Live URL:** https://whydud.com
+**Repo:** https://github.com/rameshworkk/whydud (private)
+**Branch:** master
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 15.1 (TypeScript, Tailwind CSS, SSR with standalone output) |
+| Backend | Django 5.x + Django REST Framework |
+| Auth | django-allauth (email + Google OAuth) |
+| Task Queue | Celery + Redis broker |
+| Scheduler | Celery Beat (django_celery_beat) |
+| Database | PostgreSQL 16 + TimescaleDB (hypertables for price history) |
+| Search | Meilisearch v1.7 |
+| Cache/Sessions | Redis 7 |
+| Scraping | Scrapy + Playwright + DataImpulse rotating proxies |
+| Reverse Proxy | Caddy 2 (behind Cloudflare) |
+| CDN/SSL/LB | Cloudflare (free plan, dual A records for load balancing) |
+| VPN | WireGuard (inter-node communication) |
+| Containers | Docker + Docker Compose |
+| OS | Ubuntu 24 on Contabo VPS |
+
+---
+
+## Project Structure
+
+```
+whydud/
+├── backend/                        # Django app
+│   ├── apps/
+│   │   ├── accounts/               # User auth, profiles, subscriptions
+│   │   ├── admin_tools/            # Admin dashboard tools
+│   │   ├── community/              # User reviews, discussions
+│   │   ├── deals/                  # Deal detection and alerts
+│   │   ├── email_intel/            # Email handling (Cloudflare Workers → Django)
+│   │   ├── pricing/                # Price tracking, click tracking
+│   │   ├── products/               # Product models, categories
+│   │   ├── reviews/                # Review aggregation, fraud detection
+│   │   ├── rewards/                # User rewards engine
+│   │   ├── scoring/                # DudScore calculation
+│   │   ├── scraping/               # Scrapy spiders (Amazon, Flipkart)
+│   │   │   ├── spiders/
+│   │   │   │   ├── amazon_spider.py
+│   │   │   │   ├── flipkart_spider.py
+│   │   │   │   └── base_spider.py
+│   │   │   ├── pipelines.py
+│   │   │   ├── middlewares.py
+│   │   │   ├── playwright_handler.py
+│   │   │   └── scrapy_settings.py
+│   │   └── tco/                    # Total Cost of Ownership calculator
+│   ├── whydud/
+│   │   ├── settings/
+│   │   │   ├── base.py             # Shared settings
+│   │   │   ├── dev.py              # Local development
+│   │   │   └── prod.py             # Production
+│   │   ├── celery.py
+│   │   ├── wsgi.py
+│   │   └── urls.py
+│   └── requirements/
+│       ├── base.txt
+│       ├── prod.txt
+│       ├── dev.txt
+│       └── lock.txt                # Pinned versions from working localhost
+├── frontend/                       # Next.js app
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── (public)/           # Public pages (home, product, categories)
+│   │   │   ├── (auth)/             # Auth pages (login, register, verify)
+│   │   │   └── (dashboard)/        # User dashboard
+│   │   ├── components/
+│   │   │   ├── product/            # Product cards, price panels, etc.
+│   │   │   ├── reviews/            # Review components
+│   │   │   └── ui/                 # Shared UI components
+│   │   ├── hooks/
+│   │   ├── lib/
+│   │   │   ├── api/                # API client functions
+│   │   │   └── utils/
+│   │   └── types/
+│   ├── next.config.ts
+│   └── package.json
+├── docker/
+│   ├── Dockerfiles/
+│   │   ├── backend.Dockerfile      # Multi-stage: base → deps → production
+│   │   └── frontend.Dockerfile     # Multi-stage: base → deps → builder → production
+│   ├── Caddyfile.cloudflare        # Caddy config (HTTP only, behind Cloudflare)
+│   └── postgres/
+│       ├── init.sql                # Schema init (TimescaleDB, custom schemas)
+│       ├── primary.conf            # PostgreSQL primary replication config
+│       ├── pg_hba.conf             # PostgreSQL HBA rules
+│       └── init-replication.sql    # Creates replicator user (NOT in git)
+├── docker-compose.primary.yml      # Primary node (12GB/6CPU)
+├── docker-compose.replica.yml      # Replica node (8GB/4CPU)
+├── docker-compose.yml              # Original single-node dev compose
+├── docker-compose.dev.yml          # Local development compose
+├── INFRASTRUCTURE.md               # Full server architecture reference
+└── docs/
+    └── architecture.md
+```
+
+---
+
+## Production Infrastructure (Two-Node Active-Active)
+
+### Node 1: PRIMARY (whydud-primary)
+- **IP:** 95.111.232.70 | **WireGuard:** 10.0.0.1
+- **Specs:** 12 GB RAM / 6 vCPU (Contabo)
+- **Runs:** PostgreSQL PRIMARY, Redis (shared broker), Meilisearch, Django (3 workers), Next.js, Celery Worker (default/scoring/alerts/email queues), Celery Beat, Caddy
+
+### Node 2: REPLICA (whydud-replica)
+- **IP:** 46.250.237.93 | **WireGuard:** 10.0.0.2
+- **Specs:** 8 GB RAM / 4 vCPU (Contabo)
+- **Runs:** PostgreSQL REPLICA (streaming), Redis (local cache), Meilisearch, Django (2 workers), Next.js, Celery Scraping Worker, Caddy
+
+### Key Architecture Decisions
+- **Database writes:** Primary node writes locally. Replica node routes writes to primary via WireGuard (DATABASE_WRITE_URL env var + Django database router).
+- **Celery broker:** Both nodes use primary's Redis (10.0.0.1:6379) as the Celery broker so tasks are shared.
+- **Load balancing:** Cloudflare round-robin via dual A records (free).
+- **SSL:** Cloudflare terminates SSL. Caddy serves HTTP only on port 80.
+- **Scraping:** Only runs on replica node to avoid competing with primary database.
+
+### Deployment Commands
+```bash
+# Pull and deploy (on each node)
+cd /opt/whydud/whydud
+git pull origin master
+docker compose -f docker-compose.<primary|replica>.yml build
+docker compose -f docker-compose.<primary|replica>.yml up -d
+
+# Run migrations (PRIMARY only)
+docker compose -f docker-compose.primary.yml exec backend python manage.py migrate
+
+# View logs
+docker compose -f docker-compose.<primary|replica>.yml logs -f <service>
+
+# Run scraping (REPLICA only)
+docker compose -f docker-compose.replica.yml exec celery-scraping \
+  python -m apps.scraping.runner amazon_in --max-pages 1
+```
+
+### SSH Access
+```bash
+# Primary
+ssh -i C:\Users\rames\Downloads\whydud-key deploy@95.111.232.70
+
+# Replica
+ssh -i C:\Users\rames\Downloads\whydud-key deploy@46.250.237.93
+```
+
+---
+
+## Database Schemas
+- **public** — Django default tables
+- **users** — User profiles, preferences
+- **email_intel** — Email tracking, Cloudflare email worker data
+- **scoring** — DudScore history (TimescaleDB hypertable)
+- **tco** — Total cost of ownership calculations
+- **community** — User reviews, discussions
+- **admin** — Admin tools data
+
+---
+
+## Scraping Architecture
+- **Spiders:** Amazon India (`amazon_spider.py`), Flipkart (`flipkart_spider.py`)
+- **Engine:** Scrapy + Playwright (for JS-rendered pages)
+- **Proxies:** DataImpulse rotating residential proxies
+- **Performance:** 6-10 items/min after optimization
+- **Categories:** 90 categories across Amazon and Flipkart
+- **Queue:** Celery `scraping` queue, runs only on replica node
+
+---
+
+## Email Architecture
+- **Domain:** whyd.in (Cloudflare Email Routing)
+- **Inbound:** Cloudflare Email Workers → catch-all → webhook to Django backend
+- **Outbound:** Resend API (transactional emails)
+- **Business email:** Zoho Mail (whydud.com MX records)
+
+---
+
+## Key Environment Variables
+Both nodes use `.env` files at `/opt/whydud/.env` (symlinked to `/opt/whydud/whydud/.env`). Key differences:
+
+| Variable | Primary | Replica |
+|----------|---------|---------|
+| NODE_ROLE | primary | replica |
+| DATABASE_WRITE_URL | (not set) | postgres://...@10.0.0.1:5432/whydud |
+| CELERY_BROKER_URL | redis://...@redis:6379/0 | redis://...@10.0.0.1:6379/0 |
+| SCRAPING_PROXY_LIST | (not set) | DataImpulse proxy URL |
+
+---
+
+## Development Guidelines
+1. **Branch:** Work on `master` branch.
+2. **Backend:** Django apps are in `backend/apps/`. Each app has models, serializers, views, urls.
+3. **Frontend:** Next.js 15 with App Router. Pages in `src/app/`, components in `src/components/`.
+4. **Settings:** Use `base.py` for shared settings, `dev.py` for local, `prod.py` for production. Never hardcode secrets.
+5. **Requirements:** After adding a Python package, update `lock.txt` with `pip freeze > backend/requirements/lock.txt`.
+6. **Docker:** Backend Dockerfile uses `lock.txt` for exact version pinning. Always test `docker compose build` before pushing.
+7. **Git:** Always `git add` new files. Check `git status` before committing — untracked files cause deploy failures.
+8. **TypeScript:** `next.config.ts` has `typescript: { ignoreBuildErrors: true }` for production builds. Fix type errors eventually but they won't block deploys.
+9. **Auth pages:** All auth pages (`(auth)/*`) have `export const dynamic = "force-dynamic"` in their layout to avoid static generation issues with `useSearchParams()`.
+
+---
+
+## Known Issues / Debt
+- Some frontend components return `null` (stubs): `recently-viewed-section`, `cross-platform-price-panel`, `share-button`, `recently-viewed-tracker`, `review-sidebar`
+- 130MB VSIX file in git history (needs `git filter-branch` to clean)
+- Two author emails in git history (ramesh4nani@gmail.com and ramesh.workk@gmail.com)
+- PostgreSQL replication not yet bootstrapped on replica (pg_basebackup needed after primary stabilizes)

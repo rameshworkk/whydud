@@ -1,0 +1,16 @@
+deploy@whydud-primary:/opt/whydud/whydud$ docker compose -f docker-compose.primary.yml logs caddy --tail 20
+whydud-caddy  | {"level":"info","ts":1772464007.8622396,"msg":"maxprocs: Leaving GOMAXPROCS=6: CPU quota undefined"}
+whydud-caddy  | {"level":"info","ts":1772464007.8622851,"msg":"GOMEMLIMIT is updated","GOMEMLIMIT":120795955,"previous":9223372036854775807}
+whydud-caddy  | {"level":"info","ts":1772464007.8622904,"msg":"using config from file","file":"/etc/caddy/Caddyfile"}
+whydud-caddy  | {"level":"info","ts":1772464007.8622944,"msg":"adapted config to JSON","adapter":"caddyfile"}
+whydud-caddy  | {"level":"warn","ts":1772464007.8622973,"msg":"Caddyfile input is not formatted; run 'caddy fmt --overwrite' to fix inconsistencies","adapter":"caddyfile","file":"/etc/caddy/Caddyfile","line":5}
+whydud-caddy  | {"level":"info","ts":1772464007.8757193,"logger":"admin","msg":"admin endpoint started","address":"localhost:2019","enforce_origin":false,"origins":["//[::1]:2019","//127.0.0.1:2019","//localhost:2019"]}
+whydud-caddy  | {"level":"warn","ts":1772464007.8760474,"logger":"http.auto_https","msg":"server is listening only on the HTTP port, so no automatic HTTPS will be applied to this server","server_name":"srv0","http_port":80}
+whydud-caddy  | {"level":"warn","ts":1772464007.8767364,"logger":"http","msg":"HTTP/2 skipped because it requires TLS","network":"tcp","addr":":80"}
+whydud-caddy  | {"level":"warn","ts":1772464007.8767467,"logger":"http","msg":"HTTP/3 skipped because it requires TLS","network":"tcp","addr":":80"}
+whydud-caddy  | {"level":"info","ts":1772464007.8767507,"logger":"http.log","msg":"server running","name":"srv0","protocols":["h1","h2","h3"]}
+whydud-caddy  | {"level":"info","ts":1772464007.8770041,"msg":"autosaved config (load with --resume flag)","file":"/config/caddy/autosave.json"}
+whydud-caddy  | {"level":"info","ts":1772464007.8770134,"msg":"serving initial configuration"}
+whydud-caddy  | {"level":"info","ts":1772464007.8822372,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x2e4d3bca900"}
+whydud-caddy  | {"level":"info","ts":1772464007.9043171,"logger":"tls","msg":"cleaning storage unit","storage":"FileStorage:/data/caddy"}
+whydud-caddy  | {"level":"info","ts":1772464007.9093425,"logger":"tls","msg":"finished cleaning storage units"}

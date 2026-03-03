@@ -1508,3 +1508,148 @@ The `auth/callback/page.tsx` already had the correct pattern.
 | `deploy.sh` | New file — deployment script with pre-flight checks, staged startup, migration support |
 
 **Commit**: `e7400c4`
+
+### 2026-03-02 — Fix: TimescaleDB extension not preloaded
+
+**Problem**: Migrations failed with `function create_hypertable does not exist` because TimescaleDB extension wasn't available.
+
+**Root causes:**
+1. `init.sql` (with `CREATE EXTENSION timescaledb`) only runs on first Docker volume init — volume already existed on server
+2. `primary.conf` overrode PostgreSQL defaults but was missing `shared_preload_libraries = 'timescaledb'` — without preloading, `CREATE EXTENSION` fails
+
+**Fixes:**
+- Added `CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;` to both migration files (`pricing/0002`, `scoring/0002`) so extensions are ensured regardless of init.sql
+- Added `shared_preload_libraries = 'timescaledb'` to `docker/postgres/primary.conf`
+
+**Commits**: `feddda3`, `845d896`
+
+### 2026-03-03 — Fix: Site accessible but pages empty (DisallowedHost + Caddy HTTPS)
+
+**Problem**: All 8 containers running, Cloudflare routing traffic to server, homepage HTML loads — but all API data missing. Pages render empty/broken.
+
+**Root causes:**
+1. **`DisallowedHost: 'backend:8000'`** — Next.js SSR (server-side rendering) calls the Django backend via Docker internal hostname `http://backend:8000/api/...`. Django's `ALLOWED_HOSTS` only had `whydud.com` and `www.whydud.com`, so it rejected all internal requests with HTTP 400. Every API call from the frontend server component failed.
+2. **Cloudflare SSL mode "Flexible"** — Traffic between Cloudflare edge and origin server was unencrypted HTTP. Not a functional blocker but a security issue for production.
+
+**Fixes:**
+
+| File | Change |
+|---|---|
+| `backend/whydud/settings/prod.py` | Added `backend` and `localhost` to `ALLOWED_HOSTS` for internal Docker container-to-container requests |
+| `docker/Caddyfile.cloudflare` | Reconfigured from `:80` catchall to `whydud.com, www.whydud.com` with TLS using Cloudflare Origin Certificate — enables Full (strict) SSL mode |
+| `docker-compose.primary.yml` | Added `./docker/certs:/etc/caddy/certs:ro` volume mount for Caddy |
+| `docker-compose.replica.yml` | Same certs volume mount |
+| `.gitignore` | Added `docker/certs/` (certificates must never be in git) |
+
+**Deployment requires**: Generate Cloudflare Origin Certificate, save as `docker/certs/origin.pem` + `docker/certs/origin-key.pem` on server, set Cloudflare SSL mode to "Full (strict)"
+
+**Commit**: `7fa1b49`
+
+### 2026-03-03 — Primary Node Successfully Deployed to Production
+
+**Status**: LIVE at whydud.com
+
+**What's running (primary server — 95.111.232.70):**
+- PostgreSQL 16 + TimescaleDB (hypertables for price_snapshots, dudscore_history)
+- Redis 7 (Celery broker + cache)
+- Meilisearch v1.7 (product search + autocomplete)
+- Django 5 backend via Gunicorn (3 workers, gthread)
+- Next.js 15 frontend (standalone mode)
+- Celery worker (queues: default, scoring, alerts, email)
+- Celery beat (scheduled tasks: daily scraping, price alerts, review publishing)
+- Caddy 2 reverse proxy with Cloudflare Origin Certificate (Full strict SSL)
+
+**All 8 containers healthy.** All 27 migrations applied successfully including TimescaleDB hypertables.
+
+**Deployment issues resolved across 5 commits:**
+1. `e7400c4` — 7 critical blockers (DATABASE_URL parsing, CSRF, CORS, db_router, collectstatic, Caddyfile routes, init-replication)
+2. `feddda3` — TimescaleDB extension ensured in migrations
+3. `845d896` — shared_preload_libraries for TimescaleDB
+4. `7fa1b49` — ALLOWED_HOSTS for Docker internal SSR calls + Caddy HTTPS with origin certs
+
+**Remaining:**
+- ~~Replica node deployment (46.250.237.93) — not started~~ DONE (see 2026-03-03 entries below)
+- ~~PostgreSQL streaming replication setup between primary and replica~~ DONE
+- ~~WireGuard VPN tunnel verification (10.0.0.1 ↔ 10.0.0.2)~~ DONE
+
+### 2026-03-03 — Replica Node Deployed + PostgreSQL Streaming Replication
+
+**Status**: Replica node (46.250.237.93) LIVE — PostgreSQL streaming replication confirmed working, scraping celery worker running.
+
+**What's running (replica server — 46.250.237.93, 8GB / 4 vCPU):**
+- PostgreSQL 16 + TimescaleDB (streaming replica of primary, read-only)
+- Redis 7 (local cache, Celery broker points to primary Redis over WireGuard)
+- Meilisearch v1.7 (local index)
+- Django 5 backend via Gunicorn (2 workers)
+- Next.js 15 frontend (standalone mode)
+- Celery scraping worker (queue: scraping only)
+- Caddy 2 reverse proxy with Cloudflare Origin Certificate
+
+**PostgreSQL replication verified:**
+- WAL positions match exactly between primary and replica (`0/300A5A0`)
+- `pg_is_in_recovery()` = true on replica
+- `pg_stat_replication` shows `state='streaming'` on primary
+- Replication slot `replica_slot` active
+
+**WireGuard tunnel verified:**
+- 10.0.0.1 (primary) ↔ 10.0.0.2 (replica) — bidirectional connectivity confirmed
+- Replica connects to primary PostgreSQL (10.0.0.1:5432) for write routing
+- Replica connects to primary Redis (10.0.0.1:6379) for Celery broker
+
+### 2026-03-03 — Discord Webhook Notifications for Celery Tasks
+
+- **Created `backend/common/discord.py`** — Discord webhook utility
+  - `send_discord_notification(embed)` — sync httpx POST to `DISCORD_WEBHOOK_URL`
+  - 5s timeout, silent fail (logs warning, never crashes tasks)
+  - Rich embed formatting with colors: green=success, red=failure, yellow=retry
+- **Updated `backend/whydud/celery.py`** — registered 3 signal handlers:
+  - `@task_success.connect` → green embed with task name, result summary, runtime, worker hostname
+  - `@task_failure.connect` → red embed with task name, exception, traceback (truncated), worker hostname
+  - `@task_retry.connect` → yellow embed with task name, reason, retry count, worker hostname
+  - Filters out noisy internal Celery tasks (`celery.backend_cleanup`)
+  - Smart result formatting: dict results show key fields, long results truncated to 1000 chars
+- **Updated `backend/whydud/settings/base.py`** — added `DISCORD_WEBHOOK_URL` setting
+- **Updated both compose files** — added `DISCORD_WEBHOOK_URL` env var to celery-worker (primary) and celery-scraping (replica)
+- **Updated `.env.example`** — added `DISCORD_WEBHOOK_URL` entry
+
+### 2026-03-03 — Scraping Deployment Fixes (6 issues resolved)
+
+**1. Marketplace slug mismatch** (`seed_marketplaces.py`):
+- `seed_marketplaces` command created slugs with underscores (`amazon_in`) but entire codebase uses hyphens (`amazon-in`)
+- Fixed all 4 slugs: `amazon_in` → `amazon-in`, `reliance_digital` → `reliance-digital`, `vijay_sales` → `vijay-sales`, `tata_cliq` → `tata-cliq`
+- Added `_SLUG_MIGRATIONS` dict to auto-fix existing DB records via UPDATE
+- **Commit**: `a054c5b`
+
+**2. Missing playwright-stealth in production** (`requirements/base.txt`):
+- `playwright-stealth==2.0.2` was in `lock.txt` but missing from `base.txt` (which prod Dockerfile installs from)
+- Spider subprocess crashed with `ModuleNotFoundError: No module named 'playwright_stealth'`
+- **Commit**: `1b9eb9e`
+
+**3. Spider output invisible in container logs** (`apps/scraping/tasks.py`):
+- All 3 spider tasks used `subprocess.run(capture_output=True)` — silently captured all Scrapy output
+- Rewrote with `_run_spider_process()` helper using `subprocess.Popen` with line-by-line streaming
+- Uses `collections.deque(maxlen=80)` to keep tail for error reporting
+- Spider output now visible in real-time via `docker compose logs celery-scraping`
+- **Commit**: `29496e9`
+
+**4. Playwright Chromium binary installed to root** (`backend.Dockerfile`):
+- `playwright install chromium` runs as root during Docker build `deps` stage → binaries at `/root/.cache/ms-playwright/`
+- Production stage runs as `USER whydud` → Playwright looks in `/home/whydud/.cache/ms-playwright/` → `Executable doesn't exist`
+- All product detail pages (which need Playwright) failed; listing pages (plain HTTP) worked fine
+- **Fix**: Added `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` to base ENV + `chmod -R o+rx /ms-playwright` after install
+- Browsers now install to shared `/ms-playwright` path accessible by any user
+
+**5. Django superuser creation** (production):
+- Custom User model uses email as USERNAME_FIELD — `--username` flag doesn't work
+- Non-TTY environment in Docker exec — needed `python -c` one-liner with `django.setup()` before imports
+
+**6. Playwright Chromium + system deps in Dockerfile** (`backend.Dockerfile`):
+- Added `RUN playwright install-deps chromium && playwright install chromium` to deps stage
+- Required for scraping spiders that use Playwright for JS-rendered product pages
+- **Commit**: `6576cf1`
+
+### Scraping Test Results (production, Amazon.in)
+- Listing phase working: plain HTTP requests to Amazon category pages
+- 121 categories queued, some pages successfully crawled (yoga mats: 48 results, laptops: 24 results)
+- Amazon returning 503 on many requests (normal anti-bot behavior, backoff retry handling it)
+- Product detail pages: **blocked by Playwright binary path issue** (fix committed, pending rebuild)

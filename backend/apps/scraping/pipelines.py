@@ -232,9 +232,10 @@ class ProductPipeline:
         # product item is not.
         if listing.current_price is not None:
             try:
-                from django.db import connection
+                from django.db import connections
 
-                with connection.cursor() as cursor:
+                db_alias = "write" if "write" in connections.databases else "default"
+                with connections[db_alias].cursor() as cursor:
                     cursor.execute(
                         """
                         INSERT INTO price_snapshots
