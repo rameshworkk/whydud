@@ -74,7 +74,7 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
     ],
 }
 PLAYWRIGHT_MAX_PAGES_PER_CONTEXT = 4
-PLAYWRIGHT_MAX_CONTEXTS = 3            # limit memory — each context ≈ 150MB RAM
+PLAYWRIGHT_MAX_CONTEXTS = 6            # 5 rotating proxy slots + 1 default context
 
 # Randomize viewport per spider run — reduces fingerprinting consistency.
 _VIEWPORT_CHOICES = [

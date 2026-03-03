@@ -23,11 +23,11 @@ RUNNER_MODULE = "apps.scraping.runner"
 _TAIL_LINES = 80
 
 
-def _run_spider_process(cmd: list[str], env: dict, timeout: int, spider_name: str) -> tuple[int, str]:
+def _run_spider_process(cmd: list[str], env: dict, spider_name: str) -> tuple[int, str]:
     """Run a spider subprocess, streaming output to the celery worker log.
 
     Returns (returncode, last_output) where last_output is the tail of
-    stderr+stdout for error reporting.
+    stderr+stdout for error reporting.  No timeout — spiders run to completion.
     """
     proc = subprocess.Popen(
         cmd,
@@ -38,16 +38,11 @@ def _run_spider_process(cmd: list[str], env: dict, timeout: int, spider_name: st
         env=env,
     )
     tail = collections.deque(maxlen=_TAIL_LINES)
-    try:
-        for line in proc.stdout:
-            line = line.rstrip()
-            tail.append(line)
-            logger.info("[%s] %s", spider_name, line)
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-        raise
+    for line in proc.stdout:
+        line = line.rstrip()
+        tail.append(line)
+        logger.info("[%s] %s", spider_name, line)
+    proc.wait()
     return proc.returncode, "\n".join(tail)
 
 
@@ -55,7 +50,14 @@ def _run_spider_process(cmd: list[str], env: dict, timeout: int, spider_name: st
 # Primary task — run a marketplace spider (Beat entry point)
 # ---------------------------------------------------------------------------
 
-@shared_task(queue="scraping", bind=True, max_retries=1, default_retry_delay=600)
+@shared_task(
+    queue="scraping",
+    bind=True,
+    max_retries=1,
+    default_retry_delay=600,
+    soft_time_limit=None,   # no limit — scraping can take hours
+    time_limit=None,        # no limit
+)
 def run_marketplace_spider(self, marketplace_slug: str, category_slugs: list[str] | None = None) -> dict:
     """Run a specific marketplace spider with full orchestration.
 
@@ -104,7 +106,6 @@ def run_marketplace_spider(self, marketplace_slug: str, category_slugs: list[str
     job.save(update_fields=["status", "started_at"])
 
     # Build subprocess command
-    timeout = ScrapingConfig.spider_timeout()
     cmd = [
         sys.executable, "-m", RUNNER_MODULE,
         spider_name,
@@ -117,7 +118,7 @@ def run_marketplace_spider(self, marketplace_slug: str, category_slugs: list[str
     env.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
     try:
-        returncode, tail_output = _run_spider_process(cmd, env, timeout, spider_name)
+        returncode, tail_output = _run_spider_process(cmd, env, spider_name)
 
         job.finished_at = timezone.now()
 
@@ -128,12 +129,6 @@ def run_marketplace_spider(self, marketplace_slug: str, category_slugs: list[str
             job.status = ScraperJob.Status.FAILED
             job.error_message = tail_output[:2000]
             logger.error("Spider %s failed: %s", spider_name, job.error_message[:200])
-
-    except subprocess.TimeoutExpired:
-        job.finished_at = timezone.now()
-        job.status = ScraperJob.Status.FAILED
-        job.error_message = f"Spider timed out after {timeout}s"
-        logger.error("Spider %s timed out for %s", spider_name, marketplace_slug)
 
     except Exception as exc:
         job.finished_at = timezone.now()
@@ -173,7 +168,14 @@ def run_marketplace_spider(self, marketplace_slug: str, category_slugs: list[str
 # Review spider — scrape reviews for products after product scrape
 # ---------------------------------------------------------------------------
 
-@shared_task(queue="scraping", bind=True, max_retries=1, default_retry_delay=600)
+@shared_task(
+    queue="scraping",
+    bind=True,
+    max_retries=1,
+    default_retry_delay=600,
+    soft_time_limit=None,   # no limit — scraping can take hours
+    time_limit=None,        # no limit
+)
 def run_review_spider(self, marketplace_slug: str, max_review_pages: int | None = None) -> dict:
     """Scrape reviews for products from a marketplace.
 
@@ -219,7 +221,6 @@ def run_review_spider(self, marketplace_slug: str, max_review_pages: int | None 
     job.save(update_fields=["status", "started_at"])
 
     # Build subprocess command
-    timeout = ScrapingConfig.spider_timeout()
     cmd = [
         sys.executable, "-m", RUNNER_MODULE,
         spider_name,
@@ -231,7 +232,7 @@ def run_review_spider(self, marketplace_slug: str, max_review_pages: int | None 
     env.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
     try:
-        returncode, tail_output = _run_spider_process(cmd, env, timeout, spider_name)
+        returncode, tail_output = _run_spider_process(cmd, env, spider_name)
 
         job.finished_at = timezone.now()
 
@@ -242,12 +243,6 @@ def run_review_spider(self, marketplace_slug: str, max_review_pages: int | None 
             job.status = ScraperJob.Status.FAILED
             job.error_message = tail_output[:2000]
             logger.error("Review spider %s failed: %s", spider_name, job.error_message[:200])
-
-    except subprocess.TimeoutExpired:
-        job.finished_at = timezone.now()
-        job.status = ScraperJob.Status.FAILED
-        job.error_message = f"Review spider timed out after {timeout}s"
-        logger.error("Review spider %s timed out for %s", spider_name, marketplace_slug)
 
     except Exception as exc:
         job.finished_at = timezone.now()
@@ -334,7 +329,14 @@ def _queue_review_downstream_tasks(marketplace_slug: str) -> int:
 # Lower-level spider runner (for direct invocation / ad-hoc jobs)
 # ---------------------------------------------------------------------------
 
-@shared_task(queue="scraping", bind=True, max_retries=1, default_retry_delay=300)
+@shared_task(
+    queue="scraping",
+    bind=True,
+    max_retries=1,
+    default_retry_delay=300,
+    soft_time_limit=None,   # no limit — scraping can take hours
+    time_limit=None,        # no limit
+)
 def run_spider(self, marketplace_slug: str, spider_name: str, job_id: str | None = None) -> dict:
     """Launch a Scrapy spider as a subprocess for a marketplace.
 
@@ -377,7 +379,6 @@ def run_spider(self, marketplace_slug: str, spider_name: str, job_id: str | None
     job.save(update_fields=["status", "started_at"])
 
     # Build subprocess command
-    timeout = ScrapingConfig.spider_timeout()
     cmd = [
         sys.executable, "-m", RUNNER_MODULE,
         spider_name,
@@ -388,7 +389,7 @@ def run_spider(self, marketplace_slug: str, spider_name: str, job_id: str | None
     env.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
     try:
-        returncode, tail_output = _run_spider_process(cmd, env, timeout, spider_name)
+        returncode, tail_output = _run_spider_process(cmd, env, spider_name)
 
         job.finished_at = timezone.now()
 
@@ -399,12 +400,6 @@ def run_spider(self, marketplace_slug: str, spider_name: str, job_id: str | None
             job.status = ScraperJob.Status.FAILED
             job.error_message = tail_output[:2000]
             logger.error("Spider %s failed: %s", spider_name, job.error_message[:200])
-
-    except subprocess.TimeoutExpired:
-        job.finished_at = timezone.now()
-        job.status = ScraperJob.Status.FAILED
-        job.error_message = f"Spider timed out after {timeout}s"
-        logger.error("Spider %s timed out for %s", spider_name, marketplace_slug)
 
     except Exception as exc:
         job.finished_at = timezone.now()

@@ -119,11 +119,6 @@ class ScrapingConfig:
     """Configurable values for marketplace scraping."""
 
     @classmethod
-    def spider_timeout(cls) -> int:
-        """Max runtime per spider in seconds."""
-        return _get("SCRAPING_SPIDER_TIMEOUT", 3600)
-
-    @classmethod
     def max_listing_pages(cls) -> int:
         """Max pagination pages to follow per category."""
         return _get("SCRAPING_MAX_LISTING_PAGES", 5)
@@ -141,6 +136,16 @@ class ScrapingConfig:
             {
                 "amazon-in": "amazon_in",
                 "flipkart": "flipkart",
+                "croma": "croma",
+                "reliance-digital": "reliance_digital",
+                "vijay-sales": "vijay_sales",
+                "snapdeal": "snapdeal",
+                "nykaa": "nykaa",
+                "tata-cliq": "tata_cliq",
+                "jiomart": "jiomart",
+                "myntra": "myntra",
+                "ajio": "ajio",
+                "meesho": "meesho",
             },
         )
 

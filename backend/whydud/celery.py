@@ -80,6 +80,70 @@ app.conf.beat_schedule = {
         "kwargs": {"max_review_pages": 3},
         "options": {"queue": "scraping"},
     },
+    # --- Daily scrapes for remaining 10 marketplaces (staggered across 24h) ---
+    # Batch 1: Electronics sites (lower anti-bot, run early)
+    "scrape-croma-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=0, hour=2),  # 02:00 UTC (07:30 IST)
+        "args": ["croma"],
+        "options": {"queue": "scraping"},
+    },
+    "scrape-reliance-digital-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=30, hour=4),  # 04:30 UTC (10:00 IST)
+        "args": ["reliance-digital"],
+        "options": {"queue": "scraping"},
+    },
+    "scrape-vijay-sales-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=0, hour=5),  # 05:00 UTC (10:30 IST)
+        "args": ["vijay-sales"],
+        "options": {"queue": "scraping"},
+    },
+    # Batch 2: Multi-category / beauty (medium anti-bot)
+    "scrape-snapdeal-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=30, hour=7),  # 07:30 UTC (13:00 IST)
+        "args": ["snapdeal"],
+        "options": {"queue": "scraping"},
+    },
+    "scrape-nykaa-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=0, hour=8),  # 08:00 UTC (13:30 IST)
+        "args": ["nykaa"],
+        "options": {"queue": "scraping"},
+    },
+    # Batch 3: SPA sites with high anti-bot (run during off-peak hours)
+    "scrape-tata-cliq-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=0, hour=10),  # 10:00 UTC (15:30 IST)
+        "args": ["tata-cliq"],
+        "options": {"queue": "scraping"},
+    },
+    "scrape-jiomart-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=0, hour=13),  # 13:00 UTC (18:30 IST)
+        "args": ["jiomart"],
+        "options": {"queue": "scraping"},
+    },
+    "scrape-myntra-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=0, hour=16),  # 16:00 UTC (21:30 IST)
+        "args": ["myntra"],
+        "options": {"queue": "scraping"},
+    },
+    "scrape-ajio-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=0, hour=19),  # 19:00 UTC (00:30 IST next day)
+        "args": ["ajio"],
+        "options": {"queue": "scraping"},
+    },
+    "scrape-meesho-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=0, hour=22),  # 22:00 UTC (03:30 IST)
+        "args": ["meesho"],
+        "options": {"queue": "scraping"},
+    },
 }
 
 # ---------------------------------------------------------------------------

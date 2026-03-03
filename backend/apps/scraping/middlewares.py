@@ -5,7 +5,7 @@ Supports TWO proxy modes controlled by SCRAPING_PROXY_TYPE env var:
   SCRAPING_PROXY_TYPE=rotating  (DataImpulse, SmartProxy, etc.)
     - ONE gateway URL that gives a different IP per connection
     - NEVER bans the gateway — each request gets a fresh IP
-    - Uses a single Playwright context (reuses the connection)
+    - Cycles through multiple Playwright contexts to force IP rotation
     - CAPTCHA/403 = normal (~20-30%), just track stats, don't ban
     - Spider should retry once then skip
 
@@ -176,6 +176,10 @@ class PlaywrightProxyMiddleware:
     Set SCRAPING_PROXY_TYPE=rotating in .env for rotating proxy gateways.
     """
 
+    # Number of context slots for rotating proxy mode.
+    # Each slot forces a new TCP connection = new exit IP.
+    ROTATING_CONTEXT_SLOTS = 5
+
     def __init__(
         self, proxy_pool: ProxyPool, cooldown_base: float, max_cooldown: float,
         ban_threshold: int = 1, is_rotating: bool = False,
@@ -187,8 +191,15 @@ class PlaywrightProxyMiddleware:
         self._is_rotating = is_rotating
         self._sessions: dict[str, str] = {}
         self._proxy_context_kwargs: dict[str, dict] = {}
-        # For rotating: use ONE context name, never ban
-        self._rotating_context = "proxy_rotating"
+        # For rotating: cycle through multiple context slots
+        self._rotating_slot_index: int = 0
+        self._rotating_context_names: list[str] = [
+            f"rotating_{i}" for i in range(self.ROTATING_CONTEXT_SLOTS)
+        ]
+        # IP tracking
+        self._ip_per_context: dict[str, str] = {}  # context_name → last known IP
+        self._ips_seen: set[str] = set()
+        self._context_rotation_count: int = 0
         # Log spam prevention
         self._all_banned_logged = False
 
@@ -223,19 +234,42 @@ class PlaywrightProxyMiddleware:
                 "falling back to direct requests"
             )
         elif is_rotating:
-            # Rotating mode: ONE context that routes through the gateway
-            # The gateway (DataImpulse etc.) assigns a different IP per connection
+            # Rotating mode: multiple contexts through the same gateway
+            # Each context = new TCP connection = new exit IP from DataImpulse
             proxy_state = pool.states[0]
             proxy_dict = _parse_proxy_url(proxy_state.url)
-            middleware._proxy_context_kwargs[middleware._rotating_context] = {
-                **_BASE_CONTEXT_KWARGS,
-                "proxy": proxy_dict,
-            }
-            logger.info(
-                "PlaywrightProxyMiddleware: ROTATING mode — "
-                "gateway=%s, no banning, CAPTCHA = skip & continue",
-                proxy_dict.get("server", "?"),
-            )
+            for ctx_name in middleware._rotating_context_names:
+                vp = random.choice([
+                    {"width": 1920, "height": 1080},
+                    {"width": 1366, "height": 768},
+                    {"width": 1536, "height": 864},
+                    {"width": 1440, "height": 900},
+                    {"width": 1280, "height": 720},
+                ])
+                middleware._proxy_context_kwargs[ctx_name] = {
+                    **_BASE_CONTEXT_KWARGS,
+                    "proxy": proxy_dict,
+                    "viewport": vp,
+                }
+            # Resolve exit IP to verify proxy works
+            exit_ip = resolve_proxy_exit_ip(proxy_state.url)
+            if exit_ip:
+                middleware._ips_seen.add(exit_ip)
+                logger.info(
+                    "PlaywrightProxyMiddleware: ROTATING mode — "
+                    "gateway=%s, %d context slots, exit IP=%s",
+                    proxy_dict.get("server", "?"),
+                    middleware.ROTATING_CONTEXT_SLOTS,
+                    exit_ip,
+                )
+            else:
+                logger.info(
+                    "PlaywrightProxyMiddleware: ROTATING mode — "
+                    "gateway=%s, %d context slots (IP check failed — "
+                    "proxy may require Indian DC IP)",
+                    proxy_dict.get("server", "?"),
+                    middleware.ROTATING_CONTEXT_SLOTS,
+                )
         else:
             # Static mode: one context per proxy
             active_count = 0
@@ -276,8 +310,11 @@ class PlaywrightProxyMiddleware:
             return self._process_static_request(request)
 
     def _process_rotating_request(self, request):
-        """Rotating proxy: use a single context, never ban."""
-        context_name = self._rotating_context
+        """Rotating proxy: cycle through context slots for IP rotation."""
+        idx = self._rotating_slot_index % len(self._rotating_context_names)
+        context_name = self._rotating_context_names[idx]
+        self._rotating_slot_index += 1
+        self._context_rotation_count += 1
 
         request.meta["playwright_context"] = context_name
         request.meta["_proxy_context_name"] = context_name
@@ -285,6 +322,11 @@ class PlaywrightProxyMiddleware:
             request.meta["playwright_context_kwargs"] = (
                 self._proxy_context_kwargs[context_name]
             )
+
+        logger.debug(
+            "Rotating proxy: request #%d → context %s for %s",
+            self._context_rotation_count, context_name, request.url[:80],
+        )
         return None
 
     def _process_static_request(self, request):
@@ -354,6 +396,7 @@ class PlaywrightProxyMiddleware:
     def _process_rotating_response(self, request, response):
         """Rotating proxy: track stats, NEVER ban. Mark CAPTCHA for spider."""
         proxy = self.pool.states[0]
+        context_name = request.meta.get("_proxy_context_name", "?")
 
         is_captcha = False
 
@@ -365,20 +408,39 @@ class PlaywrightProxyMiddleware:
             if any(marker in body_prefix for marker in CAPTCHA_MARKERS):
                 is_captcha = True
 
+        # Try to detect exit IP from common response headers
+        exit_ip = (
+            response.headers.get(b"X-Client-IP", b"").decode("utf-8", errors="ignore")
+            or response.headers.get(b"X-Real-IP", b"").decode("utf-8", errors="ignore")
+            or response.headers.get(b"CF-Connecting-IP", b"").decode("utf-8", errors="ignore")
+        )
+        if exit_ip:
+            self._ip_per_context[context_name] = exit_ip
+            self._ips_seen.add(exit_ip)
+
         proxy.total_requests += 1
         if is_captcha:
             proxy.total_failures += 1
             # Set meta flag so the spider can check and skip immediately
             response.meta["_rotating_proxy_captcha"] = True
             logger.info(
-                "Rotating proxy CAPTCHA/block (HTTP %d) on %s — "
-                "skip this page (%d/%d = %.0f%% fail rate)",
+                "Rotating proxy CAPTCHA/block (HTTP %d) via %s on %s — "
+                "skip (%d/%d = %.0f%% fail rate)",
                 response.status,
+                context_name,
                 request.url[:80],
                 proxy.total_failures,
                 proxy.total_requests,
                 (proxy.total_failures / proxy.total_requests * 100)
                 if proxy.total_requests > 0 else 0,
+            )
+        else:
+            logger.debug(
+                "Rotating proxy OK (HTTP %d) via %s on %s%s",
+                response.status,
+                context_name,
+                request.url[:80],
+                f" [IP: {exit_ip}]" if exit_ip else "",
             )
         # NO banning. Ever. The next request gets a fresh IP.
 
@@ -499,6 +561,29 @@ class PlaywrightProxyMiddleware:
                     " [ROTATING]" if self._is_rotating else "",
                 )
 
+        if self._is_rotating:
+            logger.info(
+                "=== Rotating Proxy IP Summary ===\n"
+                "  Context slots used: %d\n"
+                "  Total context rotations: %d\n"
+                "  Unique IPs detected: %d%s",
+                len(self._rotating_context_names),
+                self._context_rotation_count,
+                len(self._ips_seen),
+                ("\n  IPs seen: " + ", ".join(sorted(self._ips_seen)))
+                if self._ips_seen else " (no IPs detected from response headers)",
+            )
+            if self._ip_per_context:
+                for ctx, ip in sorted(self._ip_per_context.items()):
+                    logger.info("  Context %s → last IP: %s", ctx, ip)
+
+            # End-of-run IP check to show what IP we're exiting with
+            if self.pool.states:
+                exit_ip = resolve_proxy_exit_ip(self.pool.states[0].url)
+                if exit_ip:
+                    self._ips_seen.add(exit_ip)
+                    logger.info("  Current exit IP (end of run): %s", exit_ip)
+
 
 # ===================================================================
 # Helpers
@@ -515,6 +600,26 @@ def _parse_proxy_url(proxy_url: str) -> dict:
     if parsed.password:
         result["password"] = parsed.password
     return result
+
+
+def resolve_proxy_exit_ip(proxy_url: str, timeout: float = 10.0) -> str | None:
+    """Make a quick request through the proxy to discover the exit IP.
+
+    Returns the IP string or None on failure.
+    """
+    try:
+        import requests
+        proxies = {"http": proxy_url, "https": proxy_url}
+        resp = requests.get(
+            "https://api.ipify.org?format=json",
+            proxies=proxies,
+            timeout=timeout,
+        )
+        if resp.status_code == 200:
+            return resp.json().get("ip")
+    except Exception as e:
+        logger.debug("IP check failed through proxy: %s", e)
+    return None
 
 
 # ===================================================================

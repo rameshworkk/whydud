@@ -1653,3 +1653,177 @@ The `auth/callback/page.tsx` already had the correct pattern.
 - 121 categories queued, some pages successfully crawled (yoga mats: 48 results, laptops: 24 results)
 - Amazon returning 503 on many requests (normal anti-bot behavior, backoff retry handling it)
 - Product detail pages: **blocked by Playwright binary path issue** (fix committed, pending rebuild)
+
+### 2026-03-03 — 10 New Marketplace Spiders (Full Coverage)
+
+Built dedicated spiders for all 10 remaining marketplaces defined in `seed_marketplaces`. Each spider follows the two-phase architecture (listing → detail), extracts via site-specific JS state variables first, then JSON-LD fallback, then HTML/CSS fallback.
+
+#### Spiders Created
+
+| Spider | File | Slug | Domain | Tech Stack | Primary Extraction | Anti-Bot | Lines |
+|--------|------|------|--------|------------|-------------------|----------|-------|
+| **Croma** | `croma_spider.py` | `croma` | croma.com | Custom JS | `__INITIAL_DATA__` pdpReducer | Low | ~850 |
+| **Reliance Digital** | `reliance_digital_spider.py` | `reliance-digital` | reliancedigital.in | Vue.js 2 / Fynd | `window.__INITIAL_STATE__` | Medium | ~490 |
+| **Vijay Sales** | `vijay_sales_spider.py` | `vijay-sales` | vijaysales.com | Magento 2 / Unbxd | JSON-LD Product schema | Medium | ~420 |
+| **Snapdeal** | `snapdeal_spider.py` | `snapdeal` | snapdeal.com | Server-rendered HTML | Hidden inputs + `sdLogData` JS | Medium | ~530 |
+| **Nykaa** | `nykaa_spider.py` | `nykaa` | nykaa.com | React / Redux | `window.__PRELOADED_STATE__` | High (Akamai) | ~480 |
+| **TataCLiQ** | `tatacliq_spider.py` | `tata-cliq` | tatacliq.com | Next.js SSR | `__NEXT_DATA__` | High (Cloudflare) | ~510 |
+| **JioMart** | `jiomart_spider.py` | `jiomart` | jiomart.com | Jio Commerce / React SSR | `window.__INITIAL_STATE__` | High (Akamai) | ~400 |
+| **Myntra** | `myntra_spider.py` | `myntra` | myntra.com | React (custom Webpack) | `window.__myx` | High (behavioral) | ~480 |
+| **AJIO** | `ajio_spider.py` | `ajio` | ajio.com | React SPA | `__PRELOADED_STATE__` / `__NEXT_DATA__` | Very High (Akamai + PerimeterX) | ~430 |
+| **Meesho** | `meesho_spider.py` | `meesho` | meesho.com | Next.js | `__NEXT_DATA__` / `__INITIAL_STATE__` | Extreme (Akamai + TLS fingerprinting) | ~420 |
+
+#### Per-Spider Architecture
+
+Each spider implements:
+- `SEED_CATEGORY_URLS` — 16-39 category URLs per site
+- `KEYWORD_CATEGORY_MAP` — keyword→whydud category slug mapping
+- `start_requests()` → `parse_listing()` → `parse_product()` three-phase flow
+- Multi-strategy extraction: JS state variable → JSON-LD → CSS/HTML → listing data fallback
+- `_is_blocked()` / `_is_captcha_page()` for anti-bot detection
+- `closed()` with structured stats logging
+- Prices converted to paisa (×100) for `ProductItem`
+
+#### Custom Settings by Anti-Bot Tier
+
+| Tier | Spiders | DOWNLOAD_DELAY | CONCURRENT_REQUESTS | PER_DOMAIN |
+|------|---------|---------------|--------------------:|------------|
+| Low | Croma, Snapdeal | 1.5 | 8 | 4 |
+| Medium | Reliance Digital, Vijay Sales, Nykaa | 2 | 6 | 3 |
+| High | TataCLiQ, JioMart, Myntra, AJIO | 3 | 4 | 2 |
+| Extreme | Meesho | 4 | 3 | 2 |
+
+#### Configuration Changes
+
+- **`common/app_settings.py`** — Added all 10 to `ScrapingConfig.spider_map()`:
+  ```
+  croma, reliance-digital, vijay-sales, snapdeal, nykaa,
+  tata-cliq, jiomart, myntra, ajio, meesho
+  ```
+- **`whydud/celery.py`** — Added 10 staggered daily Beat schedule entries:
+  - Croma 02:00 UTC, Reliance Digital 04:30, Vijay Sales 05:00
+  - Snapdeal 07:30, Nykaa 08:00
+  - TataCLiQ 10:00, JioMart 13:00, Myntra 16:00, AJIO 19:00, Meesho 22:00
+  - Spread across 24h to avoid proxy overload; electronics early, SPA sites during off-peak
+
+#### No Changes Needed
+
+- **`apps/scraping/tasks.py`** — `scrape_daily_prices()` already iterates all active marketplaces dynamically via `ScrapingConfig.spider_map()`, no code change needed
+- **Pipelines** — existing `ValidationPipeline`, `ProductPipeline`, `MeilisearchIndexPipeline` handle all `ProductItem` instances regardless of marketplace
+
+#### Testing
+
+All 10 spiders verified via `py_compile` (syntax clean). Full integration testing requires Docker containers running (PostgreSQL, Redis, Meilisearch). To test individual spiders:
+```bash
+python -m apps.scraping.runner {spider_name} --max-pages 1 --urls "{test_url}"
+```
+
+#### Total Spider Coverage
+
+Now 12 product spiders + 2 review spiders covering all Indian marketplaces:
+- Amazon.in, Flipkart (existing, 6h cycle)
+- Croma, Reliance Digital, Vijay Sales, Snapdeal, Nykaa (new, daily)
+- TataCLiQ, JioMart, Myntra, AJIO, Meesho (new, daily)
+
+### 2026-03-03 — Spider Fixes: HTTPERROR Handling, Block→Playwright Promotion, Proxy IP Logging
+
+After local integration testing, discovered and fixed several systemic issues across all 10 new spiders plus enhanced the proxy middleware with IP logging and multi-context rotation.
+
+#### Issue 1: HTTPERROR_ALLOWED_CODES Missing (All 10 Spiders)
+
+**Problem:** Scrapy's `HttpErrorMiddleware` silently drops non-2xx responses before they reach spider callbacks. All 10 new spiders were missing `HTTPERROR_ALLOWED_CODES`, so 403/429/503 responses triggered the errback instead of the callback — spiders could never handle blocks properly.
+
+**Fix:** Added `"HTTPERROR_ALLOWED_CODES": [403, 429, 503]` to `custom_settings` on all 10 spiders.
+
+#### Issue 2: 403 in RETRY_HTTP_CODES on SPA Spiders (6 Spiders)
+
+**Problem:** 6 SPA spiders (Nykaa, TataCLiQ, JioMart, Myntra, AJIO, Meesho) had `403` in `RETRY_HTTP_CODES` but no `HTTPERROR_ALLOWED_CODES`. This caused 2 wasteful retry requests per 403 that were still dropped by HttpErrorMiddleware — triple the wasted requests.
+
+**Fix:** Removed `403` from `RETRY_HTTP_CODES` on all 6 SPA spiders. Spider callbacks now handle 403 directly via `_is_blocked()`.
+
+#### Issue 3: Block→Playwright Promotion (Croma + Snapdeal)
+
+**Problem:** Croma and Snapdeal use HTTP-first listing requests. When blocked (403), they skipped the page entirely instead of retrying with Playwright.
+
+**Fix:** Added block→Playwright promotion in both `parse_listing_page` and `parse_product_page` for Croma and Snapdeal:
+- If blocked on HTTP request → re-request same URL with `meta={"playwright": True}` + stealth init
+- If blocked even with Playwright → skip and log warning
+- Same pattern used by Amazon/Flipkart spiders
+
+#### Issue 4: Single Rotating Proxy Context (Middleware)
+
+**Problem:** `PlaywrightProxyMiddleware` used ONE Playwright context (`proxy_rotating`) for all rotating proxy requests. Playwright pools TCP connections per context, so connection reuse meant the same exit IP could be used repeatedly despite DataImpulse assigning new IPs per connection.
+
+**Fix:** Changed from 1 context to 5 context slots (`rotating_0` through `rotating_4`):
+- Requests cycle round-robin through 5 context names
+- Each context gets a randomized viewport from `_VIEWPORT_CHOICES`
+- Forces new TCP connections more frequently → better IP rotation
+- Updated `PLAYWRIGHT_MAX_CONTEXTS` from 3 to 6 in `scrapy_settings.py` (5 rotating + 1 default)
+
+#### Enhancement: Proxy IP Logging
+
+Added comprehensive IP tracking to `PlaywrightProxyMiddleware`:
+
+- **`resolve_proxy_exit_ip()`** — New utility function that makes a sync HTTP request through the proxy to `api.ipify.org` to discover the actual exit IP
+- **Startup IP check** — Logs the exit IP at spider start (confirms proxy is working)
+- **Per-request logging** — Logs which context slot is used for each request
+- **Response header IP detection** — Extracts IPs from `X-Client-IP`, `X-Real-IP`, `CF-Connecting-IP` headers
+- **Enhanced close stats** — Logs IP summary: unique IPs seen, per-context IP mapping, end-of-run IP check, rotation count
+
+#### Files Modified
+
+| File | Change |
+|------|--------|
+| `spiders/croma_spider.py` | `HTTPERROR_ALLOWED_CODES` + block→Playwright promotion |
+| `spiders/snapdeal_spider.py` | `HTTPERROR_ALLOWED_CODES` + block→Playwright promotion |
+| `spiders/reliance_digital_spider.py` | `HTTPERROR_ALLOWED_CODES` added |
+| `spiders/vijay_sales_spider.py` | `HTTPERROR_ALLOWED_CODES` added |
+| `spiders/nykaa_spider.py` | `HTTPERROR_ALLOWED_CODES` added, 403 removed from `RETRY_HTTP_CODES` |
+| `spiders/tatacliq_spider.py` | `HTTPERROR_ALLOWED_CODES` added, 403 removed from `RETRY_HTTP_CODES` |
+| `spiders/jiomart_spider.py` | `HTTPERROR_ALLOWED_CODES` added, 403 removed from `RETRY_HTTP_CODES` |
+| `spiders/myntra_spider.py` | `HTTPERROR_ALLOWED_CODES` added, 403 removed from `RETRY_HTTP_CODES` |
+| `spiders/ajio_spider.py` | `HTTPERROR_ALLOWED_CODES` added, 403 removed from `RETRY_HTTP_CODES` |
+| `spiders/meesho_spider.py` | `HTTPERROR_ALLOWED_CODES` added, 403 removed from `RETRY_HTTP_CODES` |
+| `middlewares.py` | `resolve_proxy_exit_ip()`, 5-slot context rotation, IP logging |
+| `scrapy_settings.py` | `PLAYWRIGHT_MAX_CONTEXTS` 3→6 |
+
+#### Local Test Results
+
+| Spider | Result | Notes |
+|--------|--------|-------|
+| **Snapdeal** | **19 products scraped + persisted to DB** | Full pipeline works: validation → normalization → product creation → price snapshots → Meilisearch |
+| **Croma** | 403 → Playwright promotion works | Still blocked by Croma WAF (geo/fingerprint); needs Indian VPS |
+| **Reliance Digital** | Blocked | Indian IP required (Akamai Bot Manager) |
+| **Vijay Sales** | Blocked | Indian IP required |
+| **Nykaa** | Blocked | Indian IP required (Akamai) |
+| **TataCLiQ** | Blocked | Indian IP required (Cloudflare) |
+| **Myntra** | Blocked | Indian IP required (behavioral detection) |
+
+#### Proxy IP Verification
+
+Confirmed DataImpulse rotating proxy works correctly from local machine:
+- **Machine IP:** `103.162.159.179` (Indian ISP)
+- **Proxy exit IPs observed:** `122.173.26.9`, `223.181.103.237`, `171.79.79.53`, `157.37.136.20`, `106.222.216.199` (all Indian residential)
+- **Rotation confirmed:** Startup IP differs from end-of-run IP on every test run
+- Most Indian e-commerce sites block even Indian residential proxies — production deployment on Contabo VPS with Indian proxy should have better success
+
+### 2026-03-03 — Fix: Remove Time Limits from Scraping Tasks
+
+Amazon spider was killed mid-scrape after 25 minutes by Celery's global `CELERY_TASK_SOFT_TIME_LIMIT = 1500s`. It had crawled 51 pages and scraped 38 products and was still actively running. Scraping tasks can legitimately take hours across 12 marketplaces with many categories.
+
+#### Root Cause
+
+- Global Celery settings: `CELERY_TASK_SOFT_TIME_LIMIT = 1500` (25 min), `CELERY_TASK_TIME_LIMIT = 1800` (30 min) in `whydud/settings/base.py`
+- These globals are correct for short tasks (email, scoring, alerts) but scraping tasks inherited them
+- Additionally, `ScrapingConfig.spider_timeout() = 3600s` fed `proc.wait(timeout=3600)` which would also kill long scrapes
+
+#### Changes
+
+| File | Change |
+|------|--------|
+| `apps/scraping/tasks.py` | Added `soft_time_limit=None, time_limit=None` to `run_marketplace_spider`, `run_review_spider`, `run_spider` decorators |
+| `apps/scraping/tasks.py` | Removed `timeout` param from `_run_spider_process()` — now calls `proc.wait()` with no timeout |
+| `apps/scraping/tasks.py` | Removed all `subprocess.TimeoutExpired` except blocks (no longer possible) |
+| `common/app_settings.py` | Removed `ScrapingConfig.spider_timeout()` (no longer referenced) |
+
+Global 25/30 min limits still protect all other queues (email, scoring, alerts, default). Only scraping tasks run unlimited.
