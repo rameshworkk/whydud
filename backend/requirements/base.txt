@@ -30,6 +30,7 @@ scikit-learn==1.5.1
 # Scraping
 scrapy==2.14.1
 playwright==1.58.0
+playwright-stealth==2.0.2
 scrapy-playwright==0.0.46
 
 # Encryption
