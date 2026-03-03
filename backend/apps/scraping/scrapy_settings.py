@@ -48,9 +48,9 @@ DOWNLOADER_MIDDLEWARES = {
 # AutoThrottle — dynamically adjusts request rate based on server latency
 # ---------------------------------------------------------------------------
 AUTOTHROTTLE_ENABLED = True
-AUTOTHROTTLE_START_DELAY = 3       # start at 3s, scales up dynamically
-AUTOTHROTTLE_MAX_DELAY = 30        # back off up to 30s when server is stressed
-AUTOTHROTTLE_TARGET_CONCURRENCY = 1.5   # aim for 1.5 concurrent requests — be gentler
+AUTOTHROTTLE_START_DELAY = 2       # start at 2s, scales up dynamically
+AUTOTHROTTLE_MAX_DELAY = 20        # back off up to 20s when server is stressed
+AUTOTHROTTLE_TARGET_CONCURRENCY = 4.0   # aim for 4 concurrent requests — faster with rotating proxy
 
 # ---------------------------------------------------------------------------
 # Playwright (for JS-rendered pages)

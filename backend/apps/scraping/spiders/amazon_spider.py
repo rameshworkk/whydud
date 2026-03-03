@@ -383,9 +383,9 @@ class AmazonIndiaSpider(BaseWhydudSpider):
 
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
-        "DOWNLOAD_DELAY": 3,
-        "CONCURRENT_REQUESTS": 4,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
+        "DOWNLOAD_DELAY": 1.5,
+        "CONCURRENT_REQUESTS": 8,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 4,
         "RETRY_TIMES": 2,
         "RETRY_HTTP_CODES": [500, 502, 503, 504, 408, 429],
     }
