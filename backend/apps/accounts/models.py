@@ -2,11 +2,37 @@
 
 PostgreSQL schema: users
 """
+import re
 import secrets
 import uuid
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
+
+
+def validate_whydud_username_format(username: str) -> list[str]:
+    """Validate @whyd.* username format rules (no DB queries).
+
+    Returns a list of error messages (empty if valid).
+    Rules:
+      1. Length 3-30
+      2. Only lowercase letters, digits, dots, underscores
+      3. Must start with a letter
+      4. No consecutive dots (..) or underscores (__)
+      5. Cannot end with dot or underscore
+    """
+    if len(username) < 3 or len(username) > 30:
+        return ["Username must be 3-30 characters"]
+    if not re.fullmatch(r'[a-z0-9._]+', username):
+        return ["Username can only contain lowercase letters, numbers, dots and underscores"]
+    if not username[0].isalpha():
+        return ["Username must start with a letter"]
+    if '..' in username or '__' in username:
+        return ["Username cannot contain consecutive dots or underscores"]
+    if username[-1] in ('.', '_'):
+        return ["Username cannot end with a dot or underscore"]
+    return []
 
 
 def _generate_referral_code() -> str:
@@ -115,6 +141,12 @@ class WhydudEmail(models.Model):
     @property
     def email_address(self) -> str:
         return f"{self.username}@{self.domain}"
+
+    def clean(self) -> None:
+        """Model-level username format validation (safety net)."""
+        errors = validate_whydud_username_format(self.username or '')
+        if errors:
+            raise DjangoValidationError({'username': errors[0]})
 
     def __str__(self) -> str:
         return f"{self.username}@{self.domain}"

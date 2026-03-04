@@ -52,6 +52,31 @@ def send_verification_email(user_id: str) -> None:
 
 
 @shared_task(queue="email")
+def send_verification_otp(user_id: str, otp: str) -> None:
+    """Send a 6-digit OTP for email verification."""
+    from .models import User
+
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return
+
+    send_mail(
+        subject="Your Whydud verification code",
+        message=(
+            f"Hi {user.name or 'there'},\n\n"
+            f"Your verification code is: {otp}\n\n"
+            f"This code expires in 10 minutes.\n\n"
+            f"If you didn't create an account, you can ignore this email.\n\n"
+            f"— Whydud"
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+
+@shared_task(queue="email")
 def send_password_reset_email(user_id: str, uid: str, token: str) -> None:
     """Send password reset link."""
     from .models import User

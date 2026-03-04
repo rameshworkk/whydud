@@ -1,8 +1,13 @@
 """Serializers for the accounts app."""
+from django.contrib.auth import password_validation
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from apps.tco.models import UserTCOProfile
-from .models import OAuthConnection, PaymentMethod, User, WhydudEmail
+from .models import (
+    OAuthConnection, PaymentMethod, ReservedUsername, User, WhydudEmail,
+    validate_whydud_username_format,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -22,6 +27,13 @@ class RegisterSerializer(serializers.Serializer):
     whydud_username = serializers.CharField(max_length=30, required=False)
     referral_code = serializers.CharField(max_length=8, required=False)
 
+    def validate_password(self, value: str) -> str:
+        try:
+            password_validation.validate_password(value)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
+
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -34,7 +46,7 @@ class WhydudEmailSerializer(serializers.ModelSerializer):
     class Meta:
         model = WhydudEmail
         fields = [
-            "id", "username", "email_address", "is_active",
+            "id", "username", "domain", "email_address", "is_active",
             "total_emails_received", "total_orders_detected",
             "onboarding_complete", "marketplaces_registered", "created_at",
         ]
@@ -43,6 +55,26 @@ class WhydudEmailSerializer(serializers.ModelSerializer):
 
     def get_email_address(self, obj: WhydudEmail) -> str:
         return obj.email_address
+
+    def validate_username(self, value: str) -> str:
+        """Enforce @whyd.* username rules."""
+        value = value.lower().strip()
+
+        # Format rules (length, characters, start/end, no consecutive dots/underscores)
+        errors = validate_whydud_username_format(value)
+        if errors:
+            raise serializers.ValidationError(errors[0])
+
+        # Reserved usernames
+        if ReservedUsername.objects.filter(username=value).exists():
+            raise serializers.ValidationError("This username is reserved")
+
+        # Uniqueness per (username, domain)
+        domain = self.initial_data.get('domain', WhydudEmail.Domain.WHYD_IN)
+        if WhydudEmail.objects.filter(username=value, domain=domain).exists():
+            raise serializers.ValidationError("Username already taken")
+
+        return value
 
 
 class PaymentMethodSerializer(serializers.ModelSerializer):
@@ -60,6 +92,13 @@ class ChangePasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)
     new_password = serializers.CharField(min_length=8, write_only=True)
 
+    def validate_new_password(self, value: str) -> str:
+        try:
+            password_validation.validate_password(value)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
+
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -69,6 +108,13 @@ class ResetPasswordSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()
     new_password = serializers.CharField(min_length=8)
+
+    def validate_new_password(self, value: str) -> str:
+        try:
+            password_validation.validate_password(value)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
 
 
 class TCOProfileSerializer(serializers.ModelSerializer):

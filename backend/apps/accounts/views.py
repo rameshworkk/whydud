@@ -1,5 +1,4 @@
 """Account views — auth, profile, card vault, @whyd.xyz email."""
-import re
 import secrets
 
 from django.conf import settings
@@ -19,7 +18,10 @@ from rest_framework.views import APIView
 
 from common.utils import error_response, success_response
 
-from .models import PaymentMethod, ReservedUsername, User, WhydudEmail
+from .models import (
+    PaymentMethod, ReservedUsername, User, WhydudEmail,
+    validate_whydud_username_format,
+)
 from .serializers import (
     ChangePasswordSerializer,
     ForgotPasswordSerializer,
@@ -31,8 +33,14 @@ from .serializers import (
     WhydudEmailSerializer,
 )
 
-# Valid username: 3–30 chars, alphanumeric + dots/hyphens/underscores, must start/end with alnum
-_USERNAME_RE = re.compile(r'^[a-z0-9][a-z0-9._-]{1,28}[a-z0-9]$')
+OTP_LENGTH = 6
+OTP_TTL = 600  # 10 minutes
+OTP_MAX_ATTEMPTS = 5
+
+
+def _generate_otp() -> str:
+    """Generate a cryptographically random 6-digit OTP."""
+    return "".join(str(secrets.randbelow(10)) for _ in range(OTP_LENGTH))
 
 
 class RegisterView(APIView):
@@ -68,9 +76,12 @@ class RegisterView(APIView):
             from apps.rewards.tasks import award_points_task
             award_points_task.delay(str(referrer.pk), 'referral_signup', str(user.pk))
 
-        # Send verification email
-        from .tasks import send_verification_email
-        send_verification_email.delay(str(user.pk))
+        # Generate and send OTP for email verification
+        otp = _generate_otp()
+        cache.set(f"email_otp:{user.pk}", otp, OTP_TTL)
+        cache.set(f"email_otp_attempts:{user.pk}", 0, OTP_TTL)
+        from .tasks import send_verification_otp
+        send_verification_otp.delay(str(user.pk), otp)
 
         return success_response(
             {"user": UserSerializer(user).data, "token": token.key},
@@ -82,21 +93,47 @@ class LoginView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
+    LOCKOUT_THRESHOLD = 5
+    LOCKOUT_DURATION = 900  # 15 minutes in seconds
+
     def post(self, request: Request) -> Response:
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
             return error_response("validation_error", str(serializer.errors))
 
+        email = serializer.validated_data["email"]
+        lockout_key = f"login_lockout:{email}"
+
+        # Check lockout before attempting authentication
+        attempts = cache.get(lockout_key)
+        if attempts is not None and attempts >= self.LOCKOUT_THRESHOLD:
+            return error_response(
+                "too_many_attempts",
+                "Too many login attempts. Try again in 15 minutes.",
+                status=429,
+            )
+
         user = authenticate(
             request,
-            username=serializer.validated_data["email"],
+            username=email,
             password=serializer.validated_data["password"],
         )
         if not user:
+            # Increment failed attempt counter
+            new_count = cache.get(lockout_key)
+            if new_count is None:
+                cache.set(lockout_key, 1, self.LOCKOUT_DURATION)
+            else:
+                cache.incr(lockout_key)
+                # Reset TTL on each failed attempt
+                cache.touch(lockout_key, self.LOCKOUT_DURATION)
             return error_response("invalid_credentials", "Invalid email or password.", status=401)
 
         if not user.is_active or getattr(user, "is_suspended", False):
             return error_response("account_suspended", "Your account has been suspended.", status=403)
+
+        # Clear lockout on successful login
+        cache.delete(lockout_key)
 
         user.last_login_at = timezone.now()
         user.save(update_fields=["last_login_at"])
@@ -197,47 +234,66 @@ class ResetPasswordView(APIView):
 
 
 class VerifyEmailView(APIView):
-    """Verify email address using uid + token from verification email."""
+    """Verify email address using a 6-digit OTP sent to the user's email."""
     authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
-        uid = request.data.get("uid", "")
-        token = request.data.get("token", "")
+        email = request.data.get("email", "").strip().lower()
+        otp = request.data.get("otp", "").strip()
 
-        if not uid or not token:
-            return error_response("validation_error", "uid and token are required.")
+        if not email or not otp:
+            return error_response("validation_error", "email and otp are required.")
 
         try:
-            user_pk = force_str(urlsafe_base64_decode(uid))
-            user = User.objects.get(pk=user_pk)
-        except (ValueError, TypeError, User.DoesNotExist):
-            return error_response("invalid_link", "This verification link is invalid or expired.", status=400)
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return error_response("invalid_otp", "Invalid OTP.", status=400)
 
         if user.email_verified:
             return success_response({"detail": "Email already verified."})
 
-        if not default_token_generator.check_token(user, token):
-            return error_response("invalid_link", "This verification link is invalid or expired.", status=400)
+        attempts_key = f"email_otp_attempts:{user.pk}"
+        attempts = cache.get(attempts_key, 0)
+        if attempts >= OTP_MAX_ATTEMPTS:
+            return error_response(
+                "too_many_attempts",
+                "Too many failed attempts. Request a new OTP.",
+                status=429,
+            )
 
+        stored_otp = cache.get(f"email_otp:{user.pk}")
+        if stored_otp is None:
+            return error_response("otp_expired", "OTP has expired. Request a new one.", status=400)
+
+        if str(stored_otp) != str(otp):
+            cache.set(attempts_key, attempts + 1, OTP_TTL)
+            return error_response("invalid_otp", "Invalid OTP.", status=400)
+
+        # OTP matches — verify email
         user.email_verified = True
         user.save(update_fields=["email_verified"])
+        cache.delete(f"email_otp:{user.pk}")
+        cache.delete(attempts_key)
 
         return success_response({"detail": "Email verified successfully."})
 
 
 class ResendVerificationEmailView(APIView):
-    """Resend verification email to the authenticated user."""
+    """Resend OTP verification email to the authenticated user."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
         if request.user.email_verified:
             return success_response({"detail": "Email already verified."})
 
-        from .tasks import send_verification_email
-        send_verification_email.delay(str(request.user.pk))
+        otp = _generate_otp()
+        cache.set(f"email_otp:{request.user.pk}", otp, OTP_TTL)
+        cache.set(f"email_otp_attempts:{request.user.pk}", 0, OTP_TTL)
+        from .tasks import send_verification_otp
+        send_verification_otp.delay(str(request.user.pk), otp)
 
-        return success_response({"detail": "Verification email sent."})
+        return success_response({"detail": "Verification OTP sent."})
 
 
 class OAuthCompleteView(View):
@@ -332,24 +388,13 @@ class WhydudEmailView(APIView):
             except WhydudEmail.DoesNotExist:
                 pass
 
-        username = request.data.get("username", "").lower().strip()
-        if not username:
-            return error_response("validation_error", "username is required.")
+        serializer = WhydudEmailSerializer(data=request.data)
+        if not serializer.is_valid():
+            # Extract the first error message for a clean response
+            first_error = next(iter(serializer.errors.values()))[0]
+            return error_response("validation_error", str(first_error))
 
-        if not _USERNAME_RE.match(username):
-            return error_response(
-                "invalid_username",
-                "Username must be 3–30 characters, start and end with a letter or digit, "
-                "and contain only letters, digits, dots, hyphens, or underscores.",
-            )
-
-        if ReservedUsername.objects.filter(username=username).exists():
-            return error_response("username_reserved", "This username is reserved.")
-
-        if WhydudEmail.objects.filter(username=username).exists():
-            return error_response("username_taken", "This username is already taken.")
-
-        email = WhydudEmail.objects.create(user=request.user, username=username)
+        email = serializer.save(user=request.user)
         request.user.has_whydud_email = True
         request.user.save(update_fields=["has_whydud_email"])
 
@@ -368,7 +413,7 @@ class WhydudEmailAvailabilityView(APIView):
         if not username:
             return error_response("validation_error", "?username= is required.")
 
-        if not _USERNAME_RE.match(username):
+        if validate_whydud_username_format(username):
             return success_response({"available": False, "reason": "invalid_format"})
 
         if ReservedUsername.objects.filter(username=username).exists():

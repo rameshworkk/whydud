@@ -2614,3 +2614,56 @@ docker compose exec backend python -c "import sentry_sdk; sentry_sdk.capture_mes
 | `docker-compose.primary.yml` | Add `SENTRY_DSN` to backend, celery-worker, celery-beat services |
 | `docker-compose.replica.yml` | Add `SENTRY_DSN` to backend, celery-scraping services |
 | `backend/.env.example` | Add `SENTRY_DSN=` entry |
+
+---
+
+### 2026-03-04 — Security: Password Validation, Login Lockout, OTP Email Verification
+
+Implemented §16 security requirements from ARCHITECTURE.md.
+
+#### What Changed
+
+1. **Password validation on all serializers** — `RegisterSerializer`, `ChangePasswordSerializer`, and `ResetPasswordSerializer` now call `django.contrib.auth.password_validation.validate_password()`. Rejects short (<8 chars), common ("password"), and all-numeric passwords.
+
+2. **Login lockout (5 attempts / 15 min)** — `LoginView` tracks failed attempts via Redis cache key `login_lockout:{email}`. After 5 failures, returns HTTP 429 for 15 minutes. Counter resets on successful login.
+
+3. **OTP-based email verification** — Replaced link-based email verification with 6-digit OTP. On registration a code is sent to the user's email, stored in Redis (`email_otp:{user_id}`, 10-min TTL). `VerifyEmailView` now accepts `{email, otp}` instead of `{uid, token}`. Max 5 OTP attempts before requiring a resend. `ResendVerificationEmailView` generates a fresh OTP.
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/accounts/serializers.py` | Added `validate_password()` / `validate_new_password()` to Register, ChangePassword, ResetPassword serializers |
+| `backend/apps/accounts/views.py` | Login lockout logic, OTP generation, OTP-based VerifyEmailView + ResendVerificationEmailView |
+| `backend/apps/accounts/tasks.py` | Added `send_verification_otp` Celery task |
+
+### 2026-03-04 — Username Validation for @whyd.* Email Addresses
+
+Enforced strict username rules for @whyd.xyz email creation and availability checks.
+
+#### Validation Rules
+
+1. Length: 3-30 characters
+2. Allowed characters: lowercase letters, digits, dots, underscores (`^[a-z0-9._]+$`)
+3. Must start with a letter (not digit/dot/underscore)
+4. No consecutive dots (`..`) or underscores (`__`)
+5. Cannot end with dot or underscore
+6. Checked against `reserved_usernames` table
+7. Uniqueness per (username, domain) — same username can exist on different domains
+
+#### What Changed
+
+- **Shared validator** — `validate_whydud_username_format()` in `models.py` handles format rules 1-5 (no DB queries), reused by serializer, model `clean()`, and availability view.
+- **Serializer validation** — `WhydudEmailSerializer.validate_username()` enforces all 7 rules (format + reserved + uniqueness). View now delegates to serializer per DRF standards.
+- **Model safety net** — `WhydudEmail.clean()` calls the format validator as a last line of defense.
+- **View cleanup** — Removed old `_USERNAME_RE` regex from views. `WhydudEmailView.post()` refactored to use serializer. `WhydudEmailAvailabilityView` uses shared validator.
+- **Migration 0008** — Seeds 6 additional reserved usernames: postmaster, webmaster, hello, test, pop, imap.
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/accounts/models.py` | Added `validate_whydud_username_format()`, `WhydudEmail.clean()` |
+| `backend/apps/accounts/serializers.py` | Added `validate_username()` to `WhydudEmailSerializer`, added `domain` to fields |
+| `backend/apps/accounts/views.py` | Removed `_USERNAME_RE`, refactored `WhydudEmailView.post()` to use serializer, updated availability view |
+| `backend/apps/accounts/migrations/0008_seed_more_reserved_usernames.py` | Seeds postmaster, webmaster, hello, test, pop, imap |
