@@ -19,9 +19,9 @@ interface FilterTab {
 const FILTER_TABS: FilterTab[] = [
   { key: "all", label: "All", types: [] },
   { key: "price", label: "Price Drops", types: ["price_drop", "price_alert"] },
-  { key: "orders", label: "Orders", types: ["return_window", "refund_delay", "back_in_stock"] },
+  { key: "orders", label: "Orders", types: ["return_window", "refund_delay", "back_in_stock", "order_detected"] },
   { key: "reviews", label: "Reviews", types: ["review_upvote", "dudscore_change"] },
-  { key: "system", label: "System", types: ["level_up", "discussion_reply"] },
+  { key: "system", label: "System", types: ["level_up", "points_earned", "discussion_reply", "subscription_renewal"] },
 ];
 
 function matchesFilter(n: Notification, tab: FilterTab): boolean {

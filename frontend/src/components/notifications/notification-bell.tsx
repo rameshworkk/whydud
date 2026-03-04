@@ -13,6 +13,9 @@ import {
   AlertTriangle,
   ShieldCheck,
   Info,
+  Coins,
+  CreditCard,
+  ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils/index";
 import { notificationsApi } from "@/lib/api/notifications";
@@ -41,6 +44,12 @@ function notificationIcon(type: string) {
       return { Icon: Trophy, color: "text-[#F97316] bg-orange-50" };
     case "dudscore_change":
       return { Icon: ShieldCheck, color: "text-[#4DB6AC] bg-teal-50" };
+    case "points_earned":
+      return { Icon: Coins, color: "text-[#FBBF24] bg-yellow-50" };
+    case "subscription_renewal":
+      return { Icon: CreditCard, color: "text-purple-500 bg-purple-50" };
+    case "order_detected":
+      return { Icon: ShoppingBag, color: "text-[#4DB6AC] bg-teal-50" };
     default:
       return { Icon: Info, color: "text-[#64748B] bg-slate-50" };
   }

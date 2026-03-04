@@ -247,6 +247,7 @@ class Notification(models.Model):
         LEVEL_UP = "level_up", "Level Up"
         POINTS_EARNED = "points_earned", "Points Earned"
         SUBSCRIPTION_RENEWAL = "subscription_renewal", "Subscription Renewal"
+        ORDER_DETECTED = "order_detected", "Order Detected"
 
     id = models.BigAutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")

@@ -22,6 +22,14 @@ class NotificationListView(APIView):
 
     def get(self, request: Request) -> Response:
         qs = Notification.objects.filter(user=request.user).order_by("-created_at")
+
+        # Optional type filter: ?type=price_drop
+        notif_type = request.query_params.get("type")
+        if notif_type:
+            valid_types = {c[0] for c in Notification.Type.choices}
+            if notif_type in valid_types:
+                qs = qs.filter(type=notif_type)
+
         paginator = CursorPagination()
         page = paginator.paginate_queryset(qs, request)
         if page is not None:

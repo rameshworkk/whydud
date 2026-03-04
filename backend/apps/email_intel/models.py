@@ -10,16 +10,19 @@ class InboxEmail(models.Model):
     class Category(models.TextChoices):
         ORDER = "order", "Order"
         SHIPPING = "shipping", "Shipping"
+        DELIVERY = "delivery", "Delivery"
         REFUND = "refund", "Refund"
         RETURN = "return", "Return"
         SUBSCRIPTION = "subscription", "Subscription"
         PROMO = "promo", "Promotional"
+        OTP = "otp", "OTP / Verification"
         OTHER = "other", "Other"
 
     class ParseStatus(models.TextChoices):
         PENDING = "pending", "Pending"
         PARSED = "parsed", "Parsed"
         FAILED = "failed", "Failed"
+        FAILED_PERMANENT = "failed_permanent", "Failed Permanently"
         SKIPPED = "skipped", "Skipped"
 
     class Direction(models.TextChoices):

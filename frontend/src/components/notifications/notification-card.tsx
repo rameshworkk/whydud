@@ -10,6 +10,9 @@ import {
   AlertTriangle,
   ShieldCheck,
   Info,
+  Coins,
+  CreditCard,
+  ShoppingBag,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils/index";
@@ -27,6 +30,9 @@ const ICON_MAP: Record<string, { Icon: LucideIcon; color: string }> = {
   discussion_reply: { Icon: MessageSquare, color: "text-blue-500 bg-blue-50" },
   level_up: { Icon: Trophy, color: "text-[#F97316] bg-orange-50" },
   dudscore_change: { Icon: ShieldCheck, color: "text-[#4DB6AC] bg-teal-50" },
+  points_earned: { Icon: Coins, color: "text-[#FBBF24] bg-yellow-50" },
+  subscription_renewal: { Icon: CreditCard, color: "text-purple-500 bg-purple-50" },
+  order_detected: { Icon: ShoppingBag, color: "text-[#4DB6AC] bg-teal-50" },
 };
 
 const DEFAULT_ICON = { Icon: Info, color: "text-[#64748B] bg-slate-50" };

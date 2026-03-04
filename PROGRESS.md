@@ -207,8 +207,8 @@ GET  /api/v1/email/whydud/status/    → Email status
 | Feature-specific ratings | ❌ NOT BUILT |
 | Seller feedback | ❌ NOT BUILT |
 | NPS score | ❌ NOT BUILT |
-| Notifications system | ❌ NOT BUILT (model exists, no delivery logic) |
-| Notification preferences | ❌ NOT BUILT (model exists, no UI) |
+| Notifications system | ✅ BUILT (bell icon, dropdown, full page, 11 types, Celery tasks, create_notification service) |
+| Notification preferences | ✅ BUILT (backend GET/PATCH API, model, serializer) |
 | Purchase Preferences | ❌ NOT BUILT (model exists, no UI) |
 | Reviewer levels & leaderboard | ❌ NOT BUILT (model exists, no calculation) |
 | Trending products | ❌ NOT BUILT |
@@ -2817,3 +2817,77 @@ Enhanced the existing Write a Review 4-tab form with missing features from archi
 | `frontend/src/components/reviews/star-rating-input.tsx` | Added `STAR_LABELS`, `showLabel` prop, hover label display |
 | `frontend/src/components/review/leave-review-tab.tsx` | Added `MAX_BODY_CHARS` (500), `MAX_MEDIA_FILES` (5), char counter, file limit enforcement, `showLabel` on overall rating |
 | `frontend/src/app/(public)/product/[slug]/review/page.tsx` | Added `saveDraft`/`loadDraft`/`clearDraft` helpers, auto-save effect, load-on-mount, clear-on-submit |
+
+---
+
+### 2026-03-04 — Email Parsing Pipeline (Architecture §6)
+
+Replaced the `process_inbound_email` stub with a full email parsing pipeline per architecture.md §6.
+
+#### What Was Built
+
+1. **Parser package** (`parsers/`) — Refactored monolithic `parsers.py` into a modular package:
+   - `base.py` — `BaseEmailParser` ABC, shared regex helpers, marketplace detection (14 domains), category detection (9 categories incl. new `delivery` + `otp`), confidence scoring
+   - `amazon.py` — `AmazonOrderParser`: BeautifulSoup + nh3 HTML parsing, Amazon order ID regex (`\d{3}-\d{7}-\d{7}`), product extraction from `<a>` tags with `/dp/` or `/gp/` hrefs, "Items Ordered" section fallback, "Order Total" extraction
+   - `flipkart.py` — `FlipkartOrderParser`: `OD\d{15,}` order IDs, Flipkart product link extraction, structured section parsing
+   - `generic.py` — `GenericOrderParser`: best-effort fallback with lower confidence (0.40–0.65)
+   - `__init__.py` — Parser registry, `parse_email()` entry point, category-specific handlers (order/shipping/delivery/refund/return/subscription), per-item `ParsedOrder` creation
+
+2. **Post-parse service** (`services.py`) — `post_parse_order()`:
+   - Fuzzy product matching via `SequenceMatcher` against `products.Product.title` (threshold >0.7)
+   - Affiliate click attribution: links purchase to recent `ClickEvent` within 7 days
+   - Notification creation (`ORDER_DETECTED` type)
+   - WhydudEmail order counter increment
+   - Return window alert scheduling (3-day and 1-day Celery ETA tasks)
+
+3. **Celery tasks** (`tasks.py`) — Updated:
+   - `process_inbound_email`: exponential backoff retry (60s base, max 600s), `failed_permanent` status after 3 retries
+   - `send_return_window_alert`: per-window alert with duplicate prevention
+   - `check_return_window_alerts`: daily scan for 3-day and 1-day expiring windows
+   - `detect_refund_delays`: daily scan for overdue refunds, creates `REFUND_DELAY` notifications
+
+4. **Model changes**:
+   - `InboxEmail.Category`: added `DELIVERY`, `OTP`
+   - `InboxEmail.ParseStatus`: added `FAILED_PERMANENT`
+   - `Notification.Type`: added `ORDER_DETECTED`
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/email_intel/parsers.py` | **Deleted** — replaced by `parsers/` package |
+| `backend/apps/email_intel/parsers/__init__.py` | Parser registry, `parse_email()` entry point, all category handlers |
+| `backend/apps/email_intel/parsers/base.py` | `BaseEmailParser`, shared helpers, marketplace/category detection |
+| `backend/apps/email_intel/parsers/amazon.py` | `AmazonOrderParser` — BS4 + nh3 HTML parsing |
+| `backend/apps/email_intel/parsers/flipkart.py` | `FlipkartOrderParser` — Flipkart-specific patterns |
+| `backend/apps/email_intel/parsers/generic.py` | `GenericOrderParser` — best-effort fallback |
+| `backend/apps/email_intel/services.py` | **New** — product matching, affiliate attribution, notifications, alert scheduling |
+| `backend/apps/email_intel/tasks.py` | Retry logic, `send_return_window_alert`, `detect_refund_delays` |
+| `backend/apps/email_intel/models.py` | Added `DELIVERY`, `OTP` categories + `FAILED_PERMANENT` status |
+| `backend/apps/accounts/models.py` | Added `ORDER_DETECTED` notification type |
+| `backend/apps/email_intel/migrations/0004_add_delivery_otp_categories.py` | Migration for new choices |
+| `backend/apps/accounts/migrations/0009_notification_order_detected_type.py` | Migration for notification type |
+
+### 2026-03-04 — Notification System Completion (Epic 9)
+
+Notification system was already 90% built from prior sessions. This session completed the remaining gaps:
+
+**Backend:**
+- **Created `backend/apps/accounts/services.py`** — `create_notification()` helper function
+  - Validates notification type against `Notification.Type.choices`
+  - Validates user exists by UUID
+  - Creates `Notification` row with all fields (type, title, body, action_url, action_label, entity_type, entity_id, metadata)
+  - Returns `Notification | None` (None for invalid type or missing user)
+  - Complements the existing Celery `create_notification` task (which checks preferences + queues email) — this service is for direct synchronous creation
+- **Added `?type=` query param filter** to `NotificationListView` in `notification_views.py`
+  - `GET /api/v1/notifications?type=price_drop` — filters by notification type
+  - Validates against `Notification.Type.choices` to prevent injection
+
+**Frontend — Added missing notification types to icon maps and filter tabs:**
+- `notification-bell.tsx`: Added icons for `points_earned` (Coins), `subscription_renewal` (CreditCard), `order_detected` (ShoppingBag)
+- `notification-card.tsx`: Same 3 types added to `ICON_MAP`
+- `notification-list.tsx`: Updated filter tabs — `order_detected` added to Orders tab, `points_earned` and `subscription_renewal` added to System tab
+
+**Already built (verified this session):**
+- Backend: `Notification` model (11 types), `NotificationPreference` model, `notification_views.py` (6 views), `notification_serializers.py`, `urls/notifications.py`, URL included in main `urls.py`
+- Frontend: `notifications.ts` API client, `notification-bell.tsx` (30s polling, dropdown), `notification-card.tsx`, `notification-list.tsx` (filter tabs, pagination), `notifications/page.tsx`, `NotificationBell` already in Header
