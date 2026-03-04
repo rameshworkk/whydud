@@ -12,6 +12,7 @@ import { AlternativeProducts } from "@/components/product/AlternativeProducts";
 import { ShareButton } from "@/components/product/share-button";
 import { AddToCompareButton } from "@/components/product/add-to-compare-button";
 import { RecentlyViewedTracker } from "@/components/product/recently-viewed-tracker";
+import { DiscussionSection } from "@/components/discussions/DiscussionSection";
 import { productsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils";
 import { config } from "@/config";
@@ -538,6 +539,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <Suspense>
             <SimilarProducts slug={slug} />
           </Suspense>
+
+          {/* -- Community Discussions -- */}
+          <DiscussionSection productSlug={slug} />
         </main>
 
         {/* -- Right Sidebar: Reviews -- */}

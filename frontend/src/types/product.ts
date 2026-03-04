@@ -241,29 +241,45 @@ export interface SearchResponse {
   source: string;
 }
 
+export type DiscussionThreadType = "question" | "experience" | "comparison" | "tip" | "alert";
+
+export interface DiscussionAuthor {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
 export interface DiscussionThread {
   id: string;
   product: string;
-  user: { id: string; name: string; avatarUrl: string };
-  threadType: "question" | "discussion" | "tip";
+  author: DiscussionAuthor;
+  threadType: DiscussionThreadType;
   title: string;
   body: string;
-  upvotes: number;
   replyCount: number;
+  upvotes: number;
+  downvotes: number;
+  viewCount: number;
   isPinned: boolean;
-  isResolved: boolean;
+  isLocked: boolean;
+  lastReplyAt: string | null;
+  userVote: 1 | -1 | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface DiscussionReply {
   id: string;
   thread: string;
-  user: { id: string; name: string; avatarUrl: string };
+  author: DiscussionAuthor;
   body: string;
-  upvotes: number;
-  isAccepted: boolean;
   parentReply: string | null;
+  upvotes: number;
+  downvotes: number;
+  isAccepted: boolean;
+  userVote: 1 | -1 | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface BankCard {
