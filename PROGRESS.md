@@ -2667,3 +2667,34 @@ Enforced strict username rules for @whyd.xyz email creation and availability che
 | `backend/apps/accounts/serializers.py` | Added `validate_username()` to `WhydudEmailSerializer`, added `domain` to fields |
 | `backend/apps/accounts/views.py` | Removed `_USERNAME_RE`, refactored `WhydudEmailView.post()` to use serializer, updated availability view |
 | `backend/apps/accounts/migrations/0008_seed_more_reserved_usernames.py` | Seeds postmaster, webmaster, hello, test, pop, imap |
+
+### 2026-03-04 — Production Spider Test Script
+
+Created `backend/scripts/test_all_spiders.sh` — a connectivity test script for the 7 spiders never tested on production VPS.
+
+#### Spiders Covered
+
+| Spider | Anti-Bot Strategy | Test URL |
+|--------|-------------------|----------|
+| croma | curl_cffi Chrome TLS | `croma.com/phones-wearables/mobile-phones/c/10` |
+| meesho | camoufox anti-detect Firefox | `meesho.com/mobile-phones/pl/mobiles` |
+| ajio | Playwright + PerimeterX | `ajio.com/shop/men-shoes` |
+| myntra | Playwright + fingerprinting | `myntra.com/men-tshirts` |
+| firstcry | curl_cffi Chrome/131 | `firstcry.com/toys` |
+| nykaa | curl_cffi Chrome/120 (partially tested) | `nykaa.com/skin/c/2` |
+| jiomart | curl_cffi + sitemap (partially tested) | `jiomart.com/c/groceries/...` |
+
+#### What the Script Does
+
+1. Pre-flight check that `celery-worker` container is running
+2. Runs each spider sequentially: `docker compose exec -T celery-worker python -m apps.scraping.runner {spider} --max-pages 1 --urls {url}`
+3. Captures exit code, parses `item_scraped_count` from Scrapy stats, measures elapsed time
+4. On failure/warning: prints last 20 lines of log output
+5. Prints formatted summary table (PASS/WARN/FAIL per spider)
+6. Full logs saved to `/tmp/spider_tests_<timestamp>/`
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/scripts/test_all_spiders.sh` | New file — production spider connectivity test script |
