@@ -3142,3 +3142,28 @@ Full implementation of the reward points engine with anti-gaming protections, co
 - `backend/apps/reviews/services.py` — quality gate on point awards
 - `backend/apps/reviews/views.py` — popular review bonus + moderator clawback
 - `backend/common/app_settings.py` — RewardsConfig (18 tuneable values)
+
+---
+
+## 2026-03-05 — Structlog Structured JSON Logging (Architecture §15)
+
+**What was done:**
+Configured structlog + django-structlog for structured JSON logging per architecture.md §15.
+
+**Changes:**
+1. `backend/requirements/base.txt` — added `django-structlog==9.1.1`
+2. `backend/whydud/settings/base.py`:
+   - Added `django_structlog` to `INSTALLED_APPS`
+   - Added `common.middleware.RequestIDMiddleware` early in MIDDLEWARE chain
+   - Added `django_structlog.middlewares.RequestMiddleware` at end of MIDDLEWARE
+   - Refactored structlog config: shared processor chain + `ProcessorFormatter` integration with Django `LOGGING` dict so both structlog and stdlib loggers emit consistent JSON
+3. `backend/common/middleware.py` — NEW: `RequestIDMiddleware`
+   - Generates UUID-4 per request (or reuses `X-Request-ID` from reverse proxy)
+   - Binds `request_id` + `service="backend"` to structlog context-vars
+   - Sets `X-Request-ID` response header for client correlation
+
+**Log output format (per architecture.md §15):**
+```json
+{"level": "info", "timestamp": "...", "service": "backend", "request_id": "...",
+ "action": "product_search", "query": "earbuds", "results": 42, "latency_ms": 87}
+```
