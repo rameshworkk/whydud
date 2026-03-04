@@ -8,7 +8,11 @@ import type { ProductListing } from "@/types";
 interface MarketplacePricesProps {
   listings: ProductListing[];
   bestPrice: number | null;
+  filteredBestPrice?: number | null;
+  marketplaceFilterActive?: boolean;
+  totalListings?: number;
   referrerPage?: string;
+  onToggleFilter?: (showAll: boolean) => void;
 }
 
 const MARKETPLACE_LOGOS: Record<string, string> = {
@@ -32,9 +36,17 @@ const MARKETPLACE_COLORS: Record<string, string> = {
 export function MarketplacePrices({
   listings,
   bestPrice,
+  filteredBestPrice,
+  marketplaceFilterActive = false,
+  totalListings,
   referrerPage = "product_page",
+  onToggleFilter,
 }: MarketplacePricesProps) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  const effectiveBestPrice = marketplaceFilterActive && filteredBestPrice != null
+    ? filteredBestPrice
+    : bestPrice;
 
   async function handleBuyClick(listing: ProductListing) {
     setLoadingId(listing.id);
@@ -47,11 +59,9 @@ export function MarketplacePrices({
       if (res.success && res.data) {
         window.open(res.data.affiliateUrl, "_blank", "noopener,noreferrer");
       } else {
-        // Fallback to direct buy URL if tracking fails
         window.open(listing.buyUrl, "_blank", "noopener,noreferrer");
       }
     } catch {
-      // Fallback to direct buy URL on network error
       window.open(listing.buyUrl, "_blank", "noopener,noreferrer");
     } finally {
       setLoadingId(null);
@@ -60,11 +70,29 @@ export function MarketplacePrices({
 
   return (
     <div className="flex flex-col gap-2">
+      {/* Filter info badge */}
+      {marketplaceFilterActive && (
+        <div className="flex items-center justify-between rounded-lg bg-[#FFF7ED] border border-[#F97316]/20 px-3 py-2">
+          <span className="text-xs text-[#F97316] font-medium">
+            Showing {listings.length} of {totalListings ?? "all"} marketplaces
+          </span>
+          {onToggleFilter && (
+            <button
+              type="button"
+              onClick={() => onToggleFilter(true)}
+              className="text-xs font-medium text-[#F97316] hover:text-[#EA580C] underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded"
+            >
+              Show all
+            </button>
+          )}
+        </div>
+      )}
+
       {listings.map((listing) => {
-        const isBest = listing.currentPrice !== null && listing.currentPrice === bestPrice;
+        const isBest = listing.currentPrice !== null && listing.currentPrice === effectiveBestPrice;
         const diffPct =
-          bestPrice && listing.currentPrice && !isBest
-            ? ((listing.currentPrice - bestPrice) / bestPrice) * 100
+          effectiveBestPrice && listing.currentPrice && !isBest
+            ? ((listing.currentPrice - effectiveBestPrice) / effectiveBestPrice) * 100
             : null;
         const logoClass =
           MARKETPLACE_COLORS[listing.marketplace.slug] ?? "bg-slate-500 text-white";
@@ -132,6 +160,21 @@ export function MarketplacePrices({
           </div>
         );
       })}
+
+      {listings.length === 0 && (
+        <div className="rounded-lg border border-dashed border-[#E2E8F0] bg-white p-6 text-center">
+          <p className="text-sm text-slate-500">No listings from your preferred marketplaces.</p>
+          {onToggleFilter && (
+            <button
+              type="button"
+              onClick={() => onToggleFilter(true)}
+              className="mt-2 text-xs font-medium text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded"
+            >
+              Show all marketplaces
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

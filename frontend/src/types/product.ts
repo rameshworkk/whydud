@@ -156,6 +156,8 @@ export interface ProductDetail {
   isRefurbished: boolean;
   listings: ProductListing[];
   reviewSummary: ReviewSummary;
+  filteredBestPrice: number | null;
+  marketplaceFilterActive: boolean;
   firstSeenAt: string | null;
   lastScrapedAt: string | null;
 }

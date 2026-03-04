@@ -187,3 +187,15 @@ export interface PurchaseDashboard {
   expiringReturns: number;
   activeSubscriptions: number;
 }
+
+export interface MarketplaceInfo {
+  id: number;
+  slug: string;
+  name: string;
+}
+
+export interface MarketplacePreference {
+  preferredMarketplaces: number[];
+  allMarketplaces: MarketplaceInfo[];
+  updatedAt: string;
+}

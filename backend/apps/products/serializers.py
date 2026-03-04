@@ -91,12 +91,19 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     Nested ``brand`` and ``category`` objects are included here (versus the
     flat strings in ``ProductListSerializer``) because the detail page renders
     brand logos, category breadcrumbs, and TCO links.
+
+    Pass ``preferred_marketplace_ids`` (list[int]) in serializer context to
+    filter listings to only those marketplaces. When the list is non-empty,
+    ``filtered_best_price`` is recalculated from the filtered set and
+    ``marketplace_filter_active`` is True.
     """
 
     brand = BrandSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
-    listings = ProductListingSerializer(many=True, read_only=True)
+    listings = serializers.SerializerMethodField()
     review_summary = serializers.SerializerMethodField()
+    filtered_best_price = serializers.SerializerMethodField()
+    marketplace_filter_active = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -111,8 +118,35 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "status", "is_refurbished",
             "listings",
             "review_summary",
+            "filtered_best_price", "marketplace_filter_active",
             "first_seen_at", "last_scraped_at",
         ]
+
+    def _get_preferred_ids(self) -> list[int]:
+        return self.context.get("preferred_marketplace_ids") or []
+
+    def get_listings(self, obj: Product) -> list[dict]:
+        preferred = self._get_preferred_ids()
+        qs = obj.listings.all()
+        if preferred:
+            qs = qs.filter(marketplace_id__in=preferred)
+        return ProductListingSerializer(qs, many=True).data
+
+    def get_filtered_best_price(self, obj: Product) -> str | None:
+        preferred = self._get_preferred_ids()
+        if not preferred:
+            return None
+        prices = [
+            listing.current_price
+            for listing in obj.listings.all()
+            if listing.marketplace_id in preferred
+            and listing.current_price is not None
+            and listing.in_stock
+        ]
+        return str(min(prices)) if prices else None
+
+    def get_marketplace_filter_active(self, obj: Product) -> bool:
+        return bool(self._get_preferred_ids())
 
     def get_review_summary(self, obj: Product) -> dict:
         """Aggregate review statistics for this product.

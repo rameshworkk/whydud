@@ -7,6 +7,7 @@ import secrets
 import uuid
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
 
@@ -301,6 +302,31 @@ class NotificationPreference(models.Model):
 
     def __str__(self) -> str:
         return f"NotifPrefs for {self.user.email}"
+
+
+class MarketplacePreference(models.Model):
+    """User's preferred marketplaces for filtering product listings and prices.
+
+    Empty preferred_marketplaces = show all (default behavior).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="marketplace_preferences")
+    preferred_marketplaces = ArrayField(
+        models.IntegerField(),
+        default=list,
+        blank=True,
+        help_text="List of Marketplace IDs. Empty = show all.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'users"."marketplace_preferences'
+
+    def __str__(self) -> str:
+        count = len(self.preferred_marketplaces)
+        return f"{self.user.email} — {count} preferred marketplace(s)"
 
 
 class PurchasePreference(models.Model):

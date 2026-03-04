@@ -19,13 +19,14 @@ from rest_framework.views import APIView
 from common.utils import error_response, success_response
 
 from .models import (
-    PaymentMethod, ReservedUsername, User, WhydudEmail,
+    MarketplacePreference, PaymentMethod, ReservedUsername, User, WhydudEmail,
     validate_whydud_username_format,
 )
 from .serializers import (
     ChangePasswordSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
+    MarketplacePreferenceSerializer,
     PaymentMethodSerializer,
     RegisterSerializer,
     ResetPasswordSerializer,
@@ -459,3 +460,25 @@ class PaymentMethodDetailView(APIView):
             return error_response("not_found", "Payment method not found.", status=404)
         method.delete()
         return success_response({"detail": "Deleted."})
+
+
+class MarketplacePreferenceView(APIView):
+    """GET + PUT /api/v1/me/marketplace-preferences
+
+    GET  — returns preferred marketplace IDs + full marketplace list.
+    PUT  — updates preferred marketplace IDs (empty list = show all).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        pref, _ = MarketplacePreference.objects.get_or_create(user=request.user)
+        return success_response(MarketplacePreferenceSerializer(pref).data)
+
+    def put(self, request: Request) -> Response:
+        pref, _ = MarketplacePreference.objects.get_or_create(user=request.user)
+        serializer = MarketplacePreferenceSerializer(pref, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error_response("validation_error", str(serializer.errors))
+        serializer.save()
+        return success_response(serializer.data)

@@ -5,8 +5,8 @@ from rest_framework import serializers
 
 from apps.tco.models import UserTCOProfile
 from .models import (
-    OAuthConnection, PaymentMethod, ReservedUsername, User, WhydudEmail,
-    validate_whydud_username_format,
+    MarketplacePreference, OAuthConnection, PaymentMethod, ReservedUsername,
+    User, WhydudEmail, validate_whydud_username_format,
 )
 
 
@@ -115,6 +115,41 @@ class ResetPasswordSerializer(serializers.Serializer):
         except DjangoValidationError as e:
             raise serializers.ValidationError(e.messages)
         return value
+
+
+class MarketplacePreferenceSerializer(serializers.ModelSerializer):
+    """Serializer for user marketplace preferences.
+
+    Accepts a list of marketplace IDs. Returns the same plus a full
+    ``all_marketplaces`` list for the settings UI.
+    """
+
+    all_marketplaces = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MarketplacePreference
+        fields = ["preferred_marketplaces", "all_marketplaces", "updated_at"]
+        read_only_fields = ["updated_at"]
+
+    def get_all_marketplaces(self, obj: MarketplacePreference) -> list[dict]:
+        from apps.products.models import Marketplace
+
+        return list(
+            Marketplace.objects.values("id", "slug", "name").order_by("name")
+        )
+
+    def validate_preferred_marketplaces(self, value: list[int]) -> list[int]:
+        if not value:
+            return value
+        from apps.products.models import Marketplace
+
+        existing_ids = set(Marketplace.objects.values_list("id", flat=True))
+        invalid = [mid for mid in value if mid not in existing_ids]
+        if invalid:
+            raise serializers.ValidationError(
+                f"Invalid marketplace IDs: {invalid}"
+            )
+        return sorted(set(value))
 
 
 class TCOProfileSerializer(serializers.ModelSerializer):

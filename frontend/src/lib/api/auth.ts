@@ -1,5 +1,5 @@
 import { apiClient, clearToken } from "./client";
-import type { User, WhydudEmail, PaymentMethod } from "@/types";
+import type { User, WhydudEmail, PaymentMethod, MarketplacePreference } from "@/types";
 
 export const authApi = {
   register: (payload: { email: string; password: string; name?: string; whydudUsername?: string }) =>
@@ -47,6 +47,16 @@ export const whydudEmailApi = {
     }),
 
   getStatus: () => apiClient.get<WhydudEmail>("/api/v1/email/whydud/status"),
+};
+
+export const marketplacePreferencesApi = {
+  get: () =>
+    apiClient.get<MarketplacePreference>("/api/v1/me/marketplace-preferences"),
+
+  update: (preferredMarketplaces: number[]) =>
+    apiClient.put<MarketplacePreference>("/api/v1/me/marketplace-preferences", {
+      preferredMarketplaces,
+    }),
 };
 
 export const cardVaultApi = {

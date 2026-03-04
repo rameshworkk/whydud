@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { authApi, whydudEmailApi, cardVaultApi } from "@/lib/api/auth";
-import type { User, WhydudEmail, PaymentMethod } from "@/types";
+import { authApi, whydudEmailApi, cardVaultApi, marketplacePreferencesApi } from "@/lib/api/auth";
+import type { User, WhydudEmail, PaymentMethod, MarketplacePreference, MarketplaceInfo } from "@/types";
 
 const TABS = [
   "Profile",
   "@whyd.xyz",
+  "Marketplaces",
   "Card Vault",
   "TCO Preferences",
   "Subscription",
@@ -449,6 +450,194 @@ function SubscriptionTab({ user }: { user: User | null }) {
   );
 }
 
+const MARKETPLACE_BADGE_COLORS: Record<string, string> = {
+  amazon_in: "bg-[#FF9900]",
+  flipkart: "bg-[#2874F0]",
+  myntra: "bg-[#FF3F6C]",
+  snapdeal: "bg-[#E40046]",
+  croma: "bg-[#67B346]",
+  tatacliq: "bg-[#A51C30]",
+  reliance_digital: "bg-[#0058A9]",
+  nykaa: "bg-[#FC2779]",
+  ajio: "bg-[#1B1B1B]",
+  meesho: "bg-[#F43397]",
+  jiomart: "bg-[#0070C0]",
+};
+
+const MARKETPLACE_BADGE_LABELS: Record<string, string> = {
+  amazon_in: "A",
+  flipkart: "F",
+  myntra: "M",
+  snapdeal: "S",
+  croma: "C",
+  tatacliq: "T",
+  reliance_digital: "R",
+  nykaa: "N",
+  ajio: "AJ",
+  meesho: "Me",
+  jiomart: "J",
+};
+
+function MarketplacesTab({
+  marketplacePref,
+  loading,
+}: {
+  marketplacePref: MarketplacePreference | null;
+  loading: boolean;
+}) {
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (marketplacePref && !initialized) {
+      setSelected(new Set(marketplacePref.preferredMarketplaces));
+      setInitialized(true);
+    }
+  }, [marketplacePref, initialized]);
+
+  if (loading) return <TabSkeleton />;
+
+  const allMarketplaces = marketplacePref?.allMarketplaces ?? [];
+  const noneSelected = selected.size === 0;
+
+  function toggleMarketplace(id: number) {
+    setMessage(null);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function selectAll() {
+    setMessage(null);
+    setSelected(new Set());
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setMessage(null);
+    const res = await marketplacePreferencesApi.update(Array.from(selected));
+    if (res.success) {
+      setMessage({ type: "success", text: "Marketplace preferences saved." });
+    } else if (!res.success && "error" in res) {
+      setMessage({ type: "error", text: res.error.message });
+    }
+    setSaving(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">
+          Marketplace Preferences
+        </h3>
+        <p className="text-xs text-slate-500">
+          {noneSelected
+            ? "You're seeing prices from all marketplaces. Select specific ones to filter."
+            : `You'll only see prices and deals from ${selected.size} selected marketplace${selected.size === 1 ? "" : "s"}.`}
+        </p>
+      </div>
+
+      {message && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            message.type === "success"
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-500">
+          {noneSelected
+            ? "All marketplaces shown (default)"
+            : `${selected.size} of ${allMarketplaces.length} selected`}
+        </span>
+        {!noneSelected && (
+          <button
+            type="button"
+            onClick={selectAll}
+            className="text-xs font-medium text-[#F97316] hover:text-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded"
+          >
+            Show all
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {allMarketplaces.map((mp: MarketplaceInfo) => {
+          const isChecked = noneSelected || selected.has(mp.id);
+          const isExplicitlySelected = selected.has(mp.id);
+          const badgeColor = MARKETPLACE_BADGE_COLORS[mp.slug] ?? "bg-slate-500";
+          const badgeLabel = MARKETPLACE_BADGE_LABELS[mp.slug] ?? mp.name[0];
+
+          return (
+            <button
+              key={mp.id}
+              type="button"
+              onClick={() => toggleMarketplace(mp.id)}
+              className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] ${
+                isExplicitlySelected
+                  ? "border-[#F97316] bg-[#FFF7ED]"
+                  : noneSelected
+                    ? "border-[#E2E8F0] bg-white hover:border-slate-300"
+                    : "border-[#E2E8F0] bg-white opacity-50 hover:opacity-75"
+              }`}
+            >
+              <span
+                className={`inline-flex items-center justify-center w-8 h-8 rounded-md text-xs font-bold text-white shrink-0 ${badgeColor}`}
+              >
+                {badgeLabel}
+              </span>
+              <span className="text-sm font-medium text-slate-800 flex-1">
+                {mp.name}
+              </span>
+              <div
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  isExplicitlySelected
+                    ? "border-[#F97316] bg-[#F97316]"
+                    : "border-slate-300 bg-white"
+                }`}
+              >
+                {isExplicitlySelected && (
+                  <svg
+                    className="w-3 h-3 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={3}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={saving}
+        className="self-start rounded-lg bg-[#F97316] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {saving ? "Saving..." : "Save Preferences"}
+      </button>
+    </div>
+  );
+}
+
 function DataPrivacyTab() {
   return (
     <div className="max-w-lg flex flex-col gap-5">
@@ -516,21 +705,24 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [whydEmail, setWhydEmail] = useState<WhydudEmail | null>(null);
   const [cards, setCards] = useState<PaymentMethod[]>([]);
+  const [marketplacePref, setMarketplacePref] = useState<MarketplacePreference | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchSettings() {
       try {
-        const [userRes, emailRes, cardsRes] = await Promise.all([
+        const [userRes, emailRes, cardsRes, mpRes] = await Promise.all([
           authApi.me(),
           whydudEmailApi.getStatus(),
           cardVaultApi.list(),
+          marketplacePreferencesApi.get(),
         ]);
 
         if (userRes.success && "data" in userRes) setUser(userRes.data);
         if (emailRes.success && "data" in emailRes) setWhydEmail(emailRes.data);
         if (cardsRes.success && "data" in cardsRes) setCards(cardsRes.data);
+        if (mpRes.success && "data" in mpRes) setMarketplacePref(mpRes.data);
 
         // If all requests failed, show error
         if (!userRes.success && !emailRes.success && !cardsRes.success) {
@@ -579,6 +771,7 @@ export default function SettingsPage() {
       {/* Tab content */}
       {activeTab === "Profile" && <ProfileTab user={user} loading={loading} />}
       {activeTab === "@whyd.xyz" && <WhydEmailTab whydEmail={whydEmail} loading={loading} />}
+      {activeTab === "Marketplaces" && <MarketplacesTab marketplacePref={marketplacePref} loading={loading} />}
       {activeTab === "Card Vault" && <CardVaultTab cards={cards} loading={loading} />}
       {activeTab === "TCO Preferences" && <TCOPreferencesTab />}
       {activeTab === "Subscription" && <SubscriptionTab user={user} />}

@@ -23,6 +23,17 @@ from .serializers import (
 )
 
 
+def _get_preferred_marketplace_ids(request: Request) -> list[int]:
+    """Return the authenticated user's preferred marketplace IDs, or empty list."""
+    if not request.user or not request.user.is_authenticated:
+        return []
+    try:
+        pref = request.user.marketplace_preferences
+        return pref.preferred_marketplaces or []
+    except Exception:
+        return []
+
+
 class ProductListView(APIView):
     """GET /api/v1/products/
 
@@ -120,8 +131,15 @@ class ProductDetailView(APIView):
             .prefetch_related("listings__marketplace", "listings__seller"),
             slug=slug,
         )
+        preferred = _get_preferred_marketplace_ids(request)
         return success_response(
-            ProductDetailSerializer(product, context={"request": request}).data
+            ProductDetailSerializer(
+                product,
+                context={
+                    "request": request,
+                    "preferred_marketplace_ids": preferred,
+                },
+            ).data
         )
 
 
@@ -224,8 +242,12 @@ class CompareView(APIView):
         if len(products) < 2:
             return error_response("not_found", "One or more products not found.", status=404)
 
+        preferred = _get_preferred_marketplace_ids(request)
         product_data = ProductDetailSerializer(
-            products, many=True, context={"request": request}
+            products, many=True, context={
+                "request": request,
+                "preferred_marketplace_ids": preferred,
+            }
         ).data
 
         # Build marketplace × product price matrix
@@ -305,7 +327,10 @@ class BankCardVariantsView(APIView):
 
 
 class ProductListingsView(APIView):
-    """GET /api/v1/products/:slug/listings — all marketplace listings."""
+    """GET /api/v1/products/:slug/listings — all marketplace listings.
+
+    Respects user's marketplace preferences unless ``?all=true`` is passed.
+    """
 
     permission_classes = [AllowAny]
 
@@ -316,28 +341,44 @@ class ProductListingsView(APIView):
             .select_related("marketplace", "seller")
             .order_by("current_price")
         )
-        return success_response(ProductListingSerializer(listings, many=True).data)
+        show_all = request.query_params.get("all", "").lower() == "true"
+        preferred = _get_preferred_marketplace_ids(request)
+        if preferred and not show_all:
+            listings = listings.filter(marketplace_id__in=preferred)
+        data = ProductListingSerializer(listings, many=True).data
+        return success_response({
+            "listings": data,
+            "marketplace_filter_active": bool(preferred) and not show_all,
+            "total_listings": ProductListing.objects.filter(product=product).count(),
+        })
 
 
 class BestPriceView(APIView):
-    """GET /api/v1/products/:slug/best-price — lowest price with affiliate link."""
+    """GET /api/v1/products/:slug/best-price — lowest price with affiliate link.
+
+    Respects user's marketplace preferences unless ``?all=true`` is passed.
+    """
 
     permission_classes = [AllowAny]
 
     def get(self, request: Request, slug: str) -> Response:
         product = get_object_or_404(Product, slug=slug)
-        listing = (
+        qs = (
             ProductListing.objects.filter(product=product, in_stock=True, current_price__isnull=False)
             .select_related("marketplace", "seller")
-            .order_by("current_price")
-            .first()
         )
+        show_all = request.query_params.get("all", "").lower() == "true"
+        preferred = _get_preferred_marketplace_ids(request)
+        if preferred and not show_all:
+            qs = qs.filter(marketplace_id__in=preferred)
+        listing = qs.order_by("current_price").first()
         if not listing:
             return error_response("not_found", "No in-stock listings found.", status=404)
 
         data = ProductListingSerializer(listing).data
         data["product_slug"] = product.slug
         data["product_title"] = product.title
+        data["marketplace_filter_active"] = bool(preferred) and not show_all
         return success_response(data)
 
 

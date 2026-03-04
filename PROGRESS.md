@@ -2944,3 +2944,45 @@ Added SEO structured data and improved meta tags for product pages.
   - Removed similar/alternatives fetches from `fetchProductData()` — components now fetch their own data (lazy load below fold)
   - Removed unused `ProductCard` import
 - TypeScript clean: `tsc --noEmit` passes with zero errors
+
+### 2026-03-05 — Marketplace Preferences Feature (NEW)
+
+Users can set which marketplaces they want to see. When preferences are set, product pages, listings, and comparisons filter to only show those marketplaces. Empty preferences = show all (default).
+
+**Backend — Model + API:**
+- `apps/accounts/models.py`: Added `MarketplacePreference` model — `OneToOneField(User)`, `ArrayField(IntegerField)` for marketplace IDs, stored in `users.marketplace_preferences`
+- `apps/accounts/migrations/0010_marketplace_preferences.py`: Migration for new model
+- `apps/accounts/serializers.py`: Added `MarketplacePreferenceSerializer` — validates marketplace IDs against DB, returns `all_marketplaces` list for settings UI
+- `apps/accounts/views.py`: Added `MarketplacePreferenceView` — `GET /api/v1/me/marketplace-preferences` (auto-creates on first access) + `PUT` to update
+- `apps/accounts/urls/account.py`: Wired `me/marketplace-preferences` URL
+
+**Backend — Filtering logic:**
+- `apps/products/views.py`: Added `_get_preferred_marketplace_ids()` helper that reads user's preferences
+- `ProductDetailView`: Passes `preferred_marketplace_ids` in serializer context
+- `ProductListingsView`: Filters listings by preference (supports `?all=true` bypass), returns `marketplace_filter_active` + `total_listings`
+- `BestPriceView`: Filters best price by preference (supports `?all=true` bypass)
+- `CompareView`: Passes preferences to `ProductDetailSerializer` context
+- `apps/products/serializers.py`: `ProductDetailSerializer` changed `listings` to `SerializerMethodField` that filters by preference. Added `filtered_best_price` (recalculated from filtered set) and `marketplace_filter_active` fields
+
+**Frontend — Types + API:**
+- `src/types/user.ts`: Added `MarketplaceInfo` and `MarketplacePreference` interfaces
+- `src/types/product.ts`: Added `filteredBestPrice` and `marketplaceFilterActive` to `ProductDetail`
+- `src/lib/api/auth.ts`: Added `marketplacePreferencesApi` with `get()` and `update()` methods
+- `src/lib/api/types.ts`: Re-exported new types
+
+**Frontend — Settings UI:**
+- `src/app/(dashboard)/settings/page.tsx`: Added "Marketplaces" tab (7th tab)
+  - Grid of marketplace cards with badge icons, names, and checkboxes
+  - Checked = marketplace selected, unchecked = filtered out
+  - Empty selection = show all (default behavior)
+  - "Show all" reset button when any are selected
+  - "Save Preferences" button with loading state + success/error messages
+  - Badge colors match existing marketplace config
+
+**Frontend — MarketplacePrices component:**
+- `src/components/product/marketplace-prices.tsx`: Added new optional props: `filteredBestPrice`, `marketplaceFilterActive`, `totalListings`, `onToggleFilter`
+  - Shows info badge "Showing X of Y marketplaces" when filter active
+  - "Show all" toggle to bypass filter
+  - Empty state when no listings match preferences
+  - Recalculates best price from filtered set
+  - All new props optional — backwards-compatible
