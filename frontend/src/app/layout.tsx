@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 import { CompareProvider } from "@/contexts/compare-context";
 import { CompareTray } from "@/components/compare/compare-tray";
@@ -37,6 +38,14 @@ export default function RootLayout({
           <CompareProvider>
             {children}
             <CompareTray />
+            <Toaster
+              position="top-center"
+              toastOptions={{
+                style: {
+                  fontFamily: "var(--font-inter), sans-serif",
+                },
+              }}
+            />
           </CompareProvider>
         </AuthProvider>
       </body>

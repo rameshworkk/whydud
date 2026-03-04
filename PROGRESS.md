@@ -2891,3 +2891,56 @@ Notification system was already 90% built from prior sessions. This session comp
 **Already built (verified this session):**
 - Backend: `Notification` model (11 types), `NotificationPreference` model, `notification_views.py` (6 views), `notification_serializers.py`, `urls/notifications.py`, URL included in main `urls.py`
 - Frontend: `notifications.ts` API client, `notification-bell.tsx` (30s polling, dropdown), `notification-card.tsx`, `notification-list.tsx` (filter tabs, pagination), `notifications/page.tsx`, `NotificationBell` already in Header
+
+### 2026-03-04 — JSON-LD Structured Data & Open Graph Meta Tags (US-1.13)
+
+Added SEO structured data and improved meta tags for product pages.
+
+**File modified:** `frontend/src/app/(public)/product/[slug]/page.tsx`
+
+**`generateMetadata()` updates:**
+- Title format: `"{title} — Price, Reviews & DudScore | Whydud"`
+- Description includes listing count, DudScore, and review count
+- Added `alternates.canonical` for canonical URL (`https://whydud.com/product/{slug}`)
+- OG images include `width: 800, height: 800` dimensions
+- Twitter card always `summary_large_image`
+- Removed `getShareData` dependency — metadata built from product data directly
+- Fallback placeholder image when product has no images
+
+**JSON-LD structured data (`<script type="application/ld+json">`):**
+- Schema.org `Product` type with `name`, `image`, `description`, `brand`, `sku`, `url`
+- `AggregateOffer` with `lowPrice`/`highPrice` (paisa → rupees via `formatPriceForSchema()`)
+- `aggregateRating` conditionally included (omitted when no ratings)
+- `availability` based on in-stock listings
+
+**Helpers added:**
+- `formatPriceForSchema()` — converts paisa to `"1999.00"` decimal string for schema.org
+- `buildProductJsonLd()` — assembles full JSON-LD object with edge case handling
+
+### 2026-03-04 — Floating Compare Tray (Architecture §13)
+- Enhanced `frontend/src/contexts/compare-context.tsx`:
+  - Added localStorage persistence (key: `whydud_compare`) — restores compare state on mount
+  - Persists minimal `{slug, title, image, price}` shape to avoid localStorage bloat
+  - Added `sonner` toast notification when user tries to add 5th product ("Max 4 products. Remove one first.")
+- Enhanced `frontend/src/components/compare/compare-tray.tsx`:
+  - Mobile: shows collapsed bar with product count badge + "Compare Now" button, tap to expand/collapse product list
+  - Desktop: unchanged — thumbnails + prices + empty slots + clear/compare actions
+  - Animate in/out with `translate-y` transition
+- Integrated `AddToCompareButton` into:
+  - Product detail page (`(public)/product/[slug]/page.tsx`) — next to ShareButton in action bar
+  - Product card (`components/product/product-card.tsx`) — hover overlay in image area (top-right)
+- Installed `sonner` for toast notifications, added `<Toaster />` to root layout
+- TypeScript clean: `tsc --noEmit` passes with zero errors
+
+### 2026-03-05 — Similar Products & Alternative Products (US-1.9, US-1.10)
+- **Backend fixes** (`backend/apps/products/views.py`):
+  - `SimilarProductsView`: Changed limit from 12 to 8
+  - `AlternativeProductsView`: Added ±20% price range filter (`current_best_price` within 80%-120% of source product), changed limit from 12 to 8, added null check for `current_best_price`
+- **Frontend components created**:
+  - `frontend/src/components/product/SimilarProducts.tsx` — async Server Component, self-fetching via `productsApi.getSimilar()`, horizontal scroll row of ProductCards, renders nothing if no results
+  - `frontend/src/components/product/AlternativeProducts.tsx` — async Server Component, self-fetching via `productsApi.getAlternatives()`, title "People Also Considered", same pattern
+- **Product page updated** (`frontend/src/app/(public)/product/[slug]/page.tsx`):
+  - Replaced inline similar/alternatives sections with `<SimilarProducts>` and `<AlternativeProducts>` components wrapped in `<Suspense>`
+  - Removed similar/alternatives fetches from `fetchProductData()` — components now fetch their own data (lazy load below fold)
+  - Removed unused `ProductCard` import
+- TypeScript clean: `tsc --noEmit` passes with zero errors

@@ -3,6 +3,7 @@ import Image from "next/image";
 import type { ProductSummary } from "@/types";
 import { formatPrice } from "@/lib/utils/format";
 import { getMarketplace } from "@/config/marketplace";
+import { AddToCompareButton } from "@/components/product/add-to-compare-button";
 
 interface ProductCardProps {
   product: ProductSummary;
@@ -91,6 +92,14 @@ export function ProductCard({ product }: ProductCardProps) {
             DudScore {product.dudScore}
           </span>
         )}
+
+        {/* Compare button overlay */}
+        <div
+          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          onClick={(e) => e.preventDefault()}
+        >
+          <AddToCompareButton product={product} className="shadow-sm" />
+        </div>
       </div>
 
       {/* Card body */}

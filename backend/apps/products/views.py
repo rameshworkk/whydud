@@ -362,7 +362,7 @@ class SimilarProductsView(APIView):
             )
             .exclude(id=product.id)
             .select_related("brand", "category")
-            .order_by("-dud_score")[:12]
+            .order_by("-dud_score")[:8]
         )
         return success_response(ProductListSerializer(qs, many=True).data)
 
@@ -374,18 +374,22 @@ class AlternativeProductsView(APIView):
 
     def get(self, request: Request, slug: str) -> Response:
         product = get_object_or_404(Product, slug=slug)
-        if not product.category:
+        if not product.category or product.current_best_price is None:
             return success_response([])
 
+        price = product.current_best_price
+        margin = price * Decimal("0.2")
         qs = (
             Product.objects.filter(
                 category=product.category,
                 status=Product.Status.ACTIVE,
+                current_best_price__gte=price - margin,
+                current_best_price__lte=price + margin,
             )
             .exclude(id=product.id)
             .exclude(brand=product.brand)
             .select_related("brand", "category")
-            .order_by("-dud_score")[:12]
+            .order_by("-dud_score")[:8]
         )
         return success_response(ProductListSerializer(qs, many=True).data)
 

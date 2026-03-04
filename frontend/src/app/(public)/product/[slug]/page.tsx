@@ -7,8 +7,10 @@ import { CrossPlatformPricePanel } from "@/components/product/cross-platform-pri
 import { CategoryScoreBars } from "@/components/product/category-score-bars";
 import { PriceChart } from "@/components/product/price-chart";
 import { ReviewSidebar } from "@/components/reviews/review-sidebar";
-import { ProductCard } from "@/components/product/product-card";
+import { SimilarProducts } from "@/components/product/SimilarProducts";
+import { AlternativeProducts } from "@/components/product/AlternativeProducts";
 import { ShareButton } from "@/components/product/share-button";
+import { AddToCompareButton } from "@/components/product/add-to-compare-button";
 import { RecentlyViewedTracker } from "@/components/product/recently-viewed-tracker";
 import { productsApi } from "@/lib/api/products";
 import { formatPrice } from "@/lib/utils";
@@ -26,6 +28,7 @@ import {
   Info,
 } from "lucide-react";
 import type { ProductDetail, ProductSummary, PricePoint, Review, DudScoreLabel } from "@/types";
+import { Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -134,24 +137,71 @@ function normalizeRatingDistribution(
   return result;
 }
 
+/** Convert paisa to rupees string for schema.org (e.g. 199900 → "1999.00"). */
+function formatPriceForSchema(paisa: number | null | undefined): string {
+  if (paisa == null) return "0.00";
+  return (paisa / 100).toFixed(2);
+}
+
+/** Build JSON-LD structured data for the product page. */
+function buildProductJsonLd(p: ProductDetail, slug: string): Record<string, unknown> {
+  const pricedListings = p.listings.filter((l) => l.currentPrice != null);
+  const maxPrice =
+    pricedListings.length > 0
+      ? Math.max(...pricedListings.map((l) => l.currentPrice!))
+      : p.currentBestPrice;
+
+  const jsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: p.title,
+    image: p.images ?? [],
+    description: p.description,
+    brand: { "@type": "Brand", name: p.brand.name },
+    sku: p.id,
+    url: `${config.siteUrl}/product/${slug}`,
+  };
+
+  if (pricedListings.length > 0 && p.currentBestPrice != null) {
+    jsonLd.offers = {
+      "@type": "AggregateOffer",
+      lowPrice: formatPriceForSchema(p.currentBestPrice),
+      highPrice: formatPriceForSchema(maxPrice),
+      priceCurrency: "INR",
+      offerCount: pricedListings.length,
+      availability: pricedListings.some((l) => l.inStock)
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+    };
+  }
+
+  if (p.avgRating != null && p.totalReviews > 0) {
+    jsonLd.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: p.avgRating,
+      reviewCount: p.totalReviews,
+      bestRating: 5,
+      worstRating: 1,
+    };
+  }
+
+  return jsonLd;
+}
+
 // ── Data fetching ────────────────────────────────────────────────────────────
 
 async function fetchProductData(slug: string) {
-  const [detailRes, priceRes, reviewsRes, similarRes, alternativesRes] = await Promise.all([
+  const [detailRes, priceRes, reviewsRes] = await Promise.all([
     productsApi.getDetail(slug),
     productsApi.getPriceHistory(slug),
     productsApi.getReviews(slug),
-    productsApi.getSimilar(slug),
-    productsApi.getAlternatives(slug),
   ]);
 
   const product: ProductDetail | null = detailRes.success ? detailRes.data : null;
   const priceHistory: PricePoint[] = priceRes.success ? priceRes.data : [];
   const reviews: Review[] = reviewsRes.success ? reviewsRes.data : [];
-  const similarProducts: ProductSummary[] = similarRes.success ? similarRes.data : [];
-  const alternatives: ProductSummary[] = alternativesRes.success ? alternativesRes.data : [];
 
-  return { product, priceHistory, reviews, similarProducts, alternatives };
+  return { product, priceHistory, reviews };
 }
 
 // ── Metadata ─────────────────────────────────────────────────────────────────
@@ -162,39 +212,38 @@ interface ProductPageProps {
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const [detailRes, shareRes] = await Promise.all([
-    productsApi.getDetail(slug),
-    productsApi.getShareData(slug),
-  ]);
+  const detailRes = await productsApi.getDetail(slug);
 
   if (!detailRes.success) {
     return { title: "Product Not Found — Whydud" };
   }
 
   const p = detailRes.data;
-  const share = shareRes.success ? shareRes.data : null;
-  const fallbackDesc = `DudScore ${p.dudScore ?? "N/A"} · Best price ${formatPrice(p.currentBestPrice)} on ${p.currentBestMarketplace}`;
-  const ogTitle = share?.ogTitle ?? p.title;
-  const ogDescription = share?.ogDescription ?? fallbackDesc;
-  const ogImage = share?.ogImage ?? p.images?.[0];
-  const productUrl = share?.url ?? `${config.siteUrl}/product/${slug}`;
+  const listingCount = p.listings.length;
+  const title = `${p.title} — Price, Reviews & DudScore | Whydud`;
+  const description = `${p.title} starting at ${formatPrice(p.currentBestPrice)} across ${listingCount} marketplaces. DudScore: ${p.dudScore ?? "N/A"}/100. ${p.totalReviews} reviews analyzed.`;
+  const productUrl = `${config.siteUrl}/product/${slug}`;
+  const ogImage = p.images?.[0] ?? `${config.siteUrl}/images/og-placeholder.png`;
 
   return {
-    title: `${p.title} — Whydud`,
-    description: fallbackDesc,
+    title,
+    description,
+    alternates: {
+      canonical: productUrl,
+    },
     openGraph: {
-      title: ogTitle,
-      description: ogDescription,
-      url: productUrl,
-      siteName: "Whydud",
+      title,
+      description,
       type: "website",
-      ...(ogImage && { images: [{ url: ogImage, alt: p.title }] }),
+      url: productUrl,
+      images: [{ url: ogImage, width: 800, height: 800, alt: p.title }],
+      siteName: config.siteName,
     },
     twitter: {
-      card: ogImage ? "summary_large_image" : "summary",
-      title: ogTitle,
-      description: ogDescription,
-      ...(ogImage && { images: [ogImage] }),
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
     },
   };
 }
@@ -203,7 +252,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const { product: p, priceHistory, reviews, similarProducts, alternatives } = await fetchProductData(slug);
+  const { product: p, priceHistory, reviews } = await fetchProductData(slug);
 
   if (!p) {
     notFound();
@@ -238,10 +287,37 @@ export default async function ProductPage({ params }: ProductPageProps) {
     }
   }
 
+  const jsonLd = buildProductJsonLd(p, slug);
+
+  // Build a ProductSummary for the compare button (client component)
+  const productSummary: ProductSummary = {
+    id: p.id,
+    slug: p.slug,
+    title: p.title,
+    brandName: p.brand.name,
+    brandSlug: p.brand.slug,
+    categoryName: p.category.name,
+    categorySlug: p.category.slug,
+    dudScore: p.dudScore,
+    dudScoreConfidence: p.dudScoreConfidence,
+    avgRating: p.avgRating,
+    totalReviews: p.totalReviews,
+    currentBestPrice: p.currentBestPrice,
+    currentBestMarketplace: p.currentBestMarketplace,
+    lowestPriceEver: p.lowestPriceEver,
+    images: p.images,
+    isRefurbished: p.isRefurbished,
+    status: p.status,
+  };
+
   return (
     <>
       <Header />
       <RecentlyViewedTracker slug={slug} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
 
       {/* Three-column dashboard — each column scrolls independently */}
       <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#F8FAFC]">
@@ -330,16 +406,19 @@ export default async function ProductPage({ params }: ProductPageProps) {
             ))}
           </nav>
 
-          {/* Brand + category + share */}
+          {/* Brand + category + actions */}
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               {p.brand.name} · {p.category.name}
             </p>
-            <ShareButton
-              url={`${config.siteUrl}/product/${p.slug}`}
-              title={p.title}
-              description={`DudScore ${p.dudScore ?? "N/A"} · Best price ${formatPrice(p.currentBestPrice)} on ${p.currentBestMarketplace}`}
-            />
+            <div className="flex items-center gap-2">
+              <AddToCompareButton product={productSummary} />
+              <ShareButton
+                url={`${config.siteUrl}/product/${p.slug}`}
+                title={p.title}
+                description={`DudScore ${p.dudScore ?? "N/A"} · Best price ${formatPrice(p.currentBestPrice)} on ${p.currentBestMarketplace}`}
+              />
+            </div>
           </div>
 
           {/* Title */}
@@ -450,33 +529,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <PriceChart data={priceHistory} marketplaces={marketplaceChartMap} />
           </div>
 
-          {/* -- Similar Products -- */}
-          {similarProducts.length > 0 && (
-            <div className="mt-5">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">Similar Products</h2>
-              <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory no-scrollbar">
-                {similarProducts.map((product) => (
-                  <div key={product.id} className="snap-start shrink-0 w-[180px] md:w-[200px]">
-                    <ProductCard product={product} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* -- Alternatives (People Also Considered) -- */}
+          <Suspense>
+            <AlternativeProducts slug={slug} />
+          </Suspense>
 
-          {/* -- Alternatives -- */}
-          {alternatives.length > 0 && (
-            <div className="mt-5">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">Alternatives</h2>
-              <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory no-scrollbar">
-                {alternatives.map((product) => (
-                  <div key={product.id} className="snap-start shrink-0 w-[180px] md:w-[200px]">
-                    <ProductCard product={product} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* -- Similar Products -- */}
+          <Suspense>
+            <SimilarProducts slug={slug} />
+          </Suspense>
         </main>
 
         {/* -- Right Sidebar: Reviews -- */}

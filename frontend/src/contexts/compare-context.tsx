@@ -5,11 +5,31 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import type { ProductSummary } from "@/types/product";
 
 const MAX_COMPARE = 4;
+const STORAGE_KEY = "whydud_compare";
+
+/** Minimal shape we persist to localStorage (avoids bloat). */
+interface CompareItem {
+  slug: string;
+  title: string;
+  image: string | null;
+  price: number | null;
+}
+
+function toCompareItem(p: ProductSummary): CompareItem {
+  return {
+    slug: p.slug,
+    title: p.title,
+    image: p.images?.[0] ?? null,
+    price: p.currentBestPrice,
+  };
+}
 
 interface CompareContextValue {
   products: ProductSummary[];
@@ -27,13 +47,73 @@ interface CompareContextValue {
 
 const CompareContext = createContext<CompareContextValue | null>(null);
 
+/** Read persisted items from localStorage on mount. */
+function loadPersistedItems(): ProductSummary[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const items: CompareItem[] = JSON.parse(raw);
+    if (!Array.isArray(items)) return [];
+    // Reconstruct minimal ProductSummary from persisted items
+    return items.slice(0, MAX_COMPARE).map((item) => ({
+      id: "",
+      slug: item.slug,
+      title: item.title,
+      brandName: null,
+      brandSlug: null,
+      categoryName: null,
+      categorySlug: null,
+      dudScore: null,
+      dudScoreConfidence: null,
+      avgRating: null,
+      totalReviews: 0,
+      currentBestPrice: item.price,
+      currentBestMarketplace: "",
+      lowestPriceEver: null,
+      images: item.image ? [item.image] : null,
+      isRefurbished: false,
+      status: "active",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function persistItems(products: ProductSummary[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const items: CompareItem[] = products.map(toCompareItem);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
 export function CompareProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<ProductSummary[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Restore from localStorage on mount (client only)
+  useEffect(() => {
+    setProducts(loadPersistedItems());
+    setHydrated(true);
+  }, []);
+
+  // Persist whenever products change (after hydration)
+  useEffect(() => {
+    if (hydrated) {
+      persistItems(products);
+    }
+  }, [products, hydrated]);
 
   const addToCompare = useCallback((product: ProductSummary) => {
     setProducts((prev) => {
-      if (prev.length >= MAX_COMPARE) return prev;
       if (prev.some((p) => p.slug === product.slug)) return prev;
+      if (prev.length >= MAX_COMPARE) {
+        toast.warning("Max 4 products. Remove one first.");
+        return prev;
+      }
       return [...prev, product];
     });
   }, []);
