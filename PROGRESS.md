@@ -2519,3 +2519,67 @@ python -m apps.scraping.runner flipkart --max-pages 1
 | `apps/scraping/middlewares.py` | `BackoffRetryMiddleware` — removed `spider` arg, added `from_crawler()` |
 | `apps/scraping/pipelines.py` | All 7 pipelines updated: `from_crawler()` + removed `spider` arg from all methods |
 | `requirements/base.txt` | Added `brotli>=1.1.0` |
+
+### 2026-03-04 — FirstCry Spider: Recon + Full Build (Wave 2 — Spider 2)
+
+**Context:** SCRAPER-DEV-PLAN-WAVE2.md Prompt 2A (recon) + Prompt 2B (build).
+
+**Recon findings (test_firstcry_recon.py):**
+- Server: Apache/2.4.54 — **no Cloudflare, no Akamai**. Minimal anti-bot.
+- Direct category URLs (`/baby-care`) return 404. Categories use numeric IDs or search redirects.
+- `/search?q={query}` redirects to SSR listing pages (200–1.3MB) with 20+ product cards.
+- Product URL pattern: `/{brand}/{slug}/{PID}/product-detail` (not `.html` as dev plan assumed).
+- Product pages embed rich JS: `CurrentProductDetailJSON` with pid, pn, mrp, Dis%, hashAgeG (age groups), hashCols (colors), Img, stock, warranty.
+- Additional JS vars: `avg_rating`, `totalreview`, `review_url`, `cat_url`, `scat_url`.
+- **HTTP-only viable** — no Playwright needed for either listing or detail phase.
+- Difficulty: **3/10** (downgraded from plan's 4/10).
+
+**Spider architecture (firstcry_spider.py):**
+- HTTP-only via `curl_cffi` + `FirstCryCurlCffiMiddleware` (Chrome/131 TLS impersonation).
+- Phase 1 (Listing): Search-based discovery `/search?q={query}` → parse SSR HTML `div.li_inner_block a[href*='/product-detail']` → extract PIDs. Pagination via `?page=N`. 24 seed search queries across baby-care, feeding, clothing, toys, gear, nursery, footwear, school.
+- Phase 2 (Detail): Extract `CurrentProductDetailJSON` via `json.JSONDecoder.raw_decode()`. Rating/reviews from `avg_rating`/`totalreview` JS vars.
+- Age group extraction (CRITICAL): `hashAgeG` → `["0#0-3 Months", ...]` → `specs.age_group`.
+- Colors from `hashCols`, images from `Img` (semicolon-separated CDN filenames).
+- Prices in rupees → converted to paisa (* 100). Selling price computed as `MRP * (1 - Dis/100)`.
+- Brand extracted from URL path segment.
+- Breadcrumbs from `cat_url`/`scat_url` JS vars.
+- Category inference from breadcrumb keywords.
+- Dedup by product ID. Pagination tracking per base URL.
+
+**Settings:** `DOWNLOAD_DELAY=1.5`, `CONCURRENT_REQUESTS=4`, `RETRY_TIMES=3`.
+
+**Test command:**
+```bash
+cd backend
+python -m apps.scraping.runner firstcry --max-pages 1
+```
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/firstcry_spider.py` | **NEW** — Full HTTP-only spider with curl_cffi, search-based discovery, CurrentProductDetailJSON extraction |
+| `apps/scraping/spiders/test_firstcry_recon.py` | **NEW** — Recon script that probed FirstCry site structure and anti-bot |
+
+---
+
+### Fix: Google OAuth "Network request failed" (2026-03-04)
+
+**Problem:** Google OAuth sign-in completed on the backend but the frontend callback page showed "Network request failed" when exchanging the one-time code for a DRF token.
+
+**Root causes found (3 issues):**
+
+1. **`frontend/src/lib/api/client.ts` — All client-side API calls broken.** The `new URL(path, "http://localhost:3000")` fallback on the client side caused every browser `fetch()` to target `localhost:3000` on the user's machine instead of `whydud.com`. Fixed by using `window.location.origin` as the base URL on the client side.
+
+2. **`frontend/src/app/accounts/[...path]/route.ts` & `oauth/[...path]/route.ts` — Proxy loop.** Route handlers used `NEXT_PUBLIC_API_URL` (= `https://whydud.com` in prod), sending requests back through Caddy to themselves. Fixed by using `INTERNAL_API_URL` (= `http://backend:8000`) for server-side proxying.
+
+3. **`docker/Caddyfile` — Missing `/accounts/*` and `/oauth/*` routes.** AllAuth OAuth endpoints fell through to the Next.js catch-all instead of going directly to Django. Added explicit `handle` blocks for both paths.
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `frontend/src/lib/api/client.ts` | Fix URL base: use `window.location.origin` on client side instead of `http://localhost:3000` |
+| `frontend/src/app/accounts/[...path]/route.ts` | Use `INTERNAL_API_URL` instead of `NEXT_PUBLIC_API_URL` |
+| `frontend/src/app/oauth/[...path]/route.ts` | Use `INTERNAL_API_URL` instead of `NEXT_PUBLIC_API_URL` |
+| `docker/Caddyfile` | Add `/accounts/*` and `/oauth/*` → `reverse_proxy backend:8000` |

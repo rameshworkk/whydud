@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
  */
 
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  process.env.INTERNAL_API_URL ?? "http://localhost:8000";
 
 async function proxy(req: NextRequest) {
   const url = new URL(req.url);

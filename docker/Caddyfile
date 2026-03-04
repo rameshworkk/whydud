@@ -2,7 +2,7 @@
 # Auto-SSL via Let's Encrypt
 
 whydud.com, www.whydud.com {
-    # Django backend: API + admin + webhooks
+    # Django backend: API + admin + webhooks + OAuth
     handle /api/* {
         reverse_proxy backend:8000
     }
@@ -12,6 +12,16 @@ whydud.com, www.whydud.com {
     }
 
     handle /webhooks/* {
+        reverse_proxy backend:8000
+    }
+
+    # AllAuth OAuth flows (Google login/callback)
+    handle /accounts/* {
+        reverse_proxy backend:8000
+    }
+
+    # OAuth completion redirect (creates one-time code → frontend callback)
+    handle /oauth/* {
         reverse_proxy backend:8000
     }
 

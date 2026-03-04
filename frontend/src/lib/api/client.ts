@@ -104,7 +104,10 @@ async function request<T>(
   const { body, params, ...init } = options;
 
   // Convert query param keys to snake_case for Django
-  const url = new URL(`${API_BASE}${path}`, API_BASE || "http://localhost:3000");
+  const url = new URL(
+      `${API_BASE}${path}`,
+      API_BASE || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"),
+    );
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined) url.searchParams.set(toSnakeCase(k), String(v));
