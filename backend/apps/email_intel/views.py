@@ -18,6 +18,7 @@ from apps.accounts.models import WhydudEmail
 from common.encryption import encrypt
 from common.pagination import CursorPagination
 from common.permissions import IsConnectedUser
+from common.throttling import EmailSendThrottle
 from common.utils import error_response, success_response
 
 from .models import (
@@ -223,6 +224,7 @@ class SubscriptionsView(APIView):
 class SendEmailView(APIView):
     """POST /api/v1/inbox/send — compose and send a new email from @whyd.* address."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [EmailSendThrottle]
 
     def post(self, request: Request) -> Response:
         serializer = SendEmailSerializer(data=request.data)
@@ -256,6 +258,7 @@ class SendEmailView(APIView):
 class ReplyEmailView(APIView):
     """POST /api/v1/inbox/:id/reply — reply to an existing inbound email."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [EmailSendThrottle]
 
     def post(self, request: Request, pk: str) -> Response:
         # Fetch the original email being replied to

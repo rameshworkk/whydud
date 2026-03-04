@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 
 from common.app_settings import SearchConfig
 from common.rate_limiting import AnonSearchThrottle, UserSearchThrottle
+from common.throttling import SearchRateThrottle
 from common.utils import error_response, success_response
 
 
@@ -47,7 +48,7 @@ class SearchView(APIView):
     """
 
     permission_classes = [AllowAny]
-    throttle_classes = [AnonSearchThrottle, UserSearchThrottle]
+    throttle_classes = [SearchRateThrottle, AnonSearchThrottle, UserSearchThrottle]
 
     def get(self, request: Request) -> Response:
         query = request.query_params.get("q", "").strip()
@@ -175,7 +176,7 @@ class AutocompleteView(APIView):
     """
 
     permission_classes = [AllowAny]
-    throttle_classes = [AnonSearchThrottle, UserSearchThrottle]
+    throttle_classes = [SearchRateThrottle, AnonSearchThrottle, UserSearchThrottle]
 
     def get(self, request: Request) -> Response:
         query = request.query_params.get("q", "").strip()

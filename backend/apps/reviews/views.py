@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from common.pagination import CursorPagination
+from common.throttling import ReviewRateThrottle
 from common.utils import error_response, success_response
 
 from .models import Review, ReviewerProfile, ReviewVote
@@ -34,6 +35,11 @@ class ProductReviewsView(APIView):
         if self.request.method == "POST":
             return [IsAuthenticated()]
         return [AllowAny()]
+
+    def get_throttles(self):
+        if self.request.method == "POST":
+            return [ReviewRateThrottle()]
+        return []
 
     def get(self, request: Request, slug: str) -> Response:
         from apps.products.models import Product

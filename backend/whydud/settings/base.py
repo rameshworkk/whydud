@@ -237,13 +237,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "common.pagination.CursorPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
-    "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
-    ],
+    "DEFAULT_THROTTLE_CLASSES": [],  # Don't apply globally — per-view throttles only
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "10/min",
-        "user": "30/min",
+        "auth": "10/minute",
+        "search": "60/minute",
+        "review": "5/hour",
+        "email_send": "10/day",
     },
     "EXCEPTION_HANDLER": "common.utils.custom_exception_handler",
 }

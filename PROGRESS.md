@@ -3018,3 +3018,25 @@ Example: `whydud.amazon.in/dp/B0CZLQT2GG` → Caddy 302 redirects to `whydud.com
   - Uses `{uri}` (path + query string) to preserve full URL including query params
   - Covers: Amazon.in, Flipkart, Myntra, Nykaa, Snapdeal, Croma, Reliance Digital, AJIO, Meesho, TataCLiQ, JioMart, Vijay Sales, FirstCry, Giva
   - DNS requirement: wildcard CNAME `*.amazon.in`, `*.flipkart.com`, etc. pointing to whydud.com server, OR individual CNAME records per subdomain
+
+---
+
+### DRF Throttling — Per-View Rate Limiting (2026-03-05)
+
+**Settings (`backend/whydud/settings/base.py`):**
+- Removed global `DEFAULT_THROTTLE_CLASSES` (was anon 10/min + user 30/min globally)
+- Added scoped `DEFAULT_THROTTLE_RATES`: auth 10/minute, search 60/minute, review 5/hour, email_send 10/day
+
+**New file (`backend/common/throttling.py`):**
+- `AuthRateThrottle(UserRateThrottle)` — scope `auth`, keys by IP (auth endpoints are unauthenticated)
+- `SearchRateThrottle(AnonRateThrottle)` — scope `search`
+- `ReviewRateThrottle(UserRateThrottle)` — scope `review`
+- `EmailSendThrottle(UserRateThrottle)` — scope `email_send`
+
+**Views updated:**
+- `accounts/views.py`: `RegisterView`, `LoginView`, `ForgotPasswordView` → `[AuthRateThrottle]`
+- `search/views.py`: `SearchView`, `AutocompleteView` → `[SearchRateThrottle, AnonSearchThrottle, UserSearchThrottle]`
+- `reviews/views.py`: `ProductReviewsView` → `[ReviewRateThrottle]` on POST only (via `get_throttles`)
+- `email_intel/views.py`: `SendEmailView`, `ReplyEmailView` → `[EmailSendThrottle]`
+
+All throttled endpoints return standard DRF 429 with `Retry-After` header.

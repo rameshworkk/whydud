@@ -16,6 +16,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.throttling import AuthRateThrottle
 from common.utils import error_response, success_response
 
 from .models import (
@@ -47,6 +48,7 @@ def _generate_otp() -> str:
 class RegisterView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     def post(self, request: Request) -> Response:
         serializer = RegisterSerializer(data=request.data)
@@ -93,6 +95,7 @@ class RegisterView(APIView):
 class LoginView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     LOCKOUT_THRESHOLD = 5
     LOCKOUT_DURATION = 900  # 15 minutes in seconds
@@ -180,6 +183,7 @@ class ForgotPasswordView(APIView):
     """Send password reset email with a one-time link."""
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     def post(self, request: Request) -> Response:
         serializer = ForgotPasswordSerializer(data=request.data)
