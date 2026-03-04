@@ -33,6 +33,8 @@ playwright==1.58.0
 playwright-stealth==2.0.2
 scrapy-playwright==0.0.46
 curl_cffi>=0.14.0               # Chrome TLS impersonation for Akamai-protected sites (Nykaa)
+camoufox[geoip]>=0.4.11         # Anti-detection Firefox browser for Akamai Bot Manager (Meesho)
+brotli>=1.1.0                   # Decode Brotli (br) compressed responses from Flipkart et al.
 
 # Encryption
 cryptography==46.0.5

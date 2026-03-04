@@ -1,4 +1,4 @@
-"""Seed all 12 Indian marketplaces.
+"""Seed all 14 Indian marketplaces.
 
 Usage:
     python manage.py seed_marketplaces
@@ -95,6 +95,22 @@ MARKETPLACES = [
         "affiliate_param": "utm_source",
         "scraper_status": "active",
     },
+    {
+        "slug": "giva",
+        "name": "Giva",
+        "base_url": "https://www.giva.co",
+        "affiliate_tag": "",
+        "affiliate_param": "",
+        "scraper_status": "development",
+    },
+    {
+        "slug": "firstcry",
+        "name": "FirstCry",
+        "base_url": "https://www.firstcry.com",
+        "affiliate_tag": "",
+        "affiliate_param": "",
+        "scraper_status": "development",
+    },
 ]
 
 
@@ -107,16 +123,25 @@ _SLUG_MIGRATIONS = {
 
 
 class Command(BaseCommand):
-    help = "Seed all 12 Indian marketplaces (update_or_create by slug)"
+    help = "Seed all 14 Indian marketplaces (update_or_create by slug)"
 
     def handle(self, *args, **options):
-        # Fix old underscore slugs → hyphens
+        # Fix old underscore slugs -> hyphens (skip if new slug already exists)
         migrated = 0
         for old_slug, new_slug in _SLUG_MIGRATIONS.items():
-            rows = Marketplace.objects.filter(slug=old_slug).update(slug=new_slug)
-            if rows:
-                migrated += rows
-                self.stdout.write(f"  Migrated slug: {old_slug} → {new_slug}")
+            if (
+                Marketplace.objects.filter(slug=old_slug).exists()
+                and not Marketplace.objects.filter(slug=new_slug).exists()
+            ):
+                rows = Marketplace.objects.filter(slug=old_slug).update(slug=new_slug)
+                if rows:
+                    migrated += rows
+                    self.stdout.write(f"  Migrated slug: {old_slug} -> {new_slug}")
+            elif Marketplace.objects.filter(slug=old_slug).exists():
+                # Both exist — delete the old one to avoid conflicts
+                Marketplace.objects.filter(slug=old_slug).delete()
+                migrated += 1
+                self.stdout.write(f"  Removed stale slug: {old_slug} (new slug {new_slug} already exists)")
 
         created = 0
         updated = 0

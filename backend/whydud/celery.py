@@ -84,7 +84,7 @@ app.conf.beat_schedule = {
     # Batch 1: Electronics sites (lower anti-bot, run early)
     "scrape-croma-daily": {
         "task": "apps.scraping.tasks.run_marketplace_spider",
-        "schedule": crontab(minute=0, hour=2),  # 02:00 UTC (07:30 IST)
+        "schedule": crontab(minute=0, hour=8),  # 08:00 UTC (13:30 IST)
         "args": ["croma"],
         "options": {"queue": "scraping"},
     },
@@ -116,7 +116,7 @@ app.conf.beat_schedule = {
     # Batch 3: SPA sites with high anti-bot (run during off-peak hours)
     "scrape-tata-cliq-daily": {
         "task": "apps.scraping.tasks.run_marketplace_spider",
-        "schedule": crontab(minute=0, hour=10),  # 10:00 UTC (15:30 IST)
+        "schedule": crontab(minute=30, hour=6),  # 06:30 UTC (12:00 IST)
         "args": ["tata-cliq"],
         "options": {"queue": "scraping"},
     },
@@ -140,8 +140,14 @@ app.conf.beat_schedule = {
     },
     "scrape-meesho-daily": {
         "task": "apps.scraping.tasks.run_marketplace_spider",
-        "schedule": crontab(minute=0, hour=22),  # 22:00 UTC (03:30 IST)
+        "schedule": crontab(minute=0, hour=10),  # 10:00 UTC (15:30 IST)
         "args": ["meesho"],
+        "options": {"queue": "scraping"},
+    },
+    "scrape-firstcry-daily": {
+        "task": "apps.scraping.tasks.run_marketplace_spider",
+        "schedule": crontab(minute=30, hour=9),  # 09:30 UTC (15:00 IST)
+        "args": ["firstcry"],
         "options": {"queue": "scraping"},
     },
 }

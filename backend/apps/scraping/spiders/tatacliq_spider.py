@@ -1,16 +1,27 @@
-"""TataCLiQ spider — scrapes multi-category marketplace listings and details.
+"""Tata CLiQ spider — Playwright-based SPA scraper with XHR interception.
 
 Architecture:
-  TataCLiQ is a Next.js SSR application.
-  - Data source: __NEXT_DATA__ (script#__NEXT_DATA__ type=application/json)
-  - JSON-LD Product schema on detail pages as fallback
-  - Moderate anti-bot (Cloudflare) — Playwright recommended for reliability
-  - Marketplace API: /marketplacewebservices/v2/... endpoints
+  TataCLiQ is a PURE SPA — every URL returns an empty <div id="root">.
+  ALL product data is loaded via XHR/fetch after React hydration.
+  __NEXT_DATA__ does NOT exist on this site.
+
+  Strategy:
+    1. Load pages via Playwright (stealth + DataImpulse proxy)
+    2. Intercept XHR/fetch responses for structured JSON data
+    3. Fallback: extract from rendered DOM after React render
+    4. Fallback: JSON-LD (if present on product pages)
+
+  Discovery: SEARCH-BASED — category URLs no longer work (SPA routes to 404).
+    Uses /search/?searchCategory=all&text={keyword} to find products.
+
+  Anti-bot: Cloudflare Bot Management (__cf_bm cookie)
+  Proxy: DataImpulse rotating proxy (required for sustained scraping)
+
+  All prices in RUPEES — converted to paisa (* 100) before yielding.
 
 URL patterns:
-  Category: /{category-path}/c-{msh+code}?page={n}&size=40
-  Product:  /{product-slug}/p-{mp+code}
   Search:   /search/?searchCategory=all&text={query}&page={n}
+  Product:  /{product-slug}/p-{mp+code}
 """
 import json
 import random
@@ -30,114 +41,189 @@ from .base_spider import BaseWhydudSpider
 PRODUCT_CODE_RE = re.compile(r"/p-(\w+)")
 PRICE_RE = re.compile(r"[\d,]+(?:\.\d{1,2})?")
 
-MARKETPLACE_SLUG = "tata-cliq"
+MARKETPLACE_SLUG = "tata_cliq"
+
+# DataImpulse rotating proxy — each connection gets a different exit IP.
+# Set SCRAPING_PROXY_LIST env var or leave empty to run without proxy.
+import os as _os
+_PROXY_URL = _os.environ.get("SCRAPING_PROXY_LIST", "").strip().split(",")[0].strip()
+DATAIMPULSE_PROXY: dict | None = None
+if _PROXY_URL:
+    from urllib.parse import urlparse as _urlparse
+    _parsed = _urlparse(_PROXY_URL)
+    DATAIMPULSE_PROXY = {
+        "server": f"{_parsed.scheme}://{_parsed.hostname}:{_parsed.port}",
+    }
+    if _parsed.username:
+        DATAIMPULSE_PROXY["username"] = _parsed.username
+    if _parsed.password:
+        DATAIMPULSE_PROXY["password"] = _parsed.password
+
+# Playwright context kwargs shared by all requests.
+_PW_CONTEXT_BASE: dict = {
+    "locale": "en-IN",
+    "timezone_id": "Asia/Kolkata",
+    "java_script_enabled": True,
+    "ignore_https_errors": True,
+    "bypass_csp": True,
+    "extra_http_headers": {
+        "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
+    },
+}
+if DATAIMPULSE_PROXY:
+    _PW_CONTEXT_BASE["proxy"] = DATAIMPULSE_PROXY
+
+# Two context slots — forces IP rotation on DataImpulse.
+_CONTEXT_NAMES = ["tcliq_0", "tcliq_1"]
+
+# Viewports randomized per context to reduce fingerprinting.
+_VIEWPORTS = [
+    {"width": 1920, "height": 1080},
+    {"width": 1366, "height": 768},
+    {"width": 1536, "height": 864},
+    {"width": 1440, "height": 900},
+]
+
+# ---------------------------------------------------------------------------
+# XHR / fetch interception — injected BEFORE page scripts load
+# ---------------------------------------------------------------------------
+
+_XHR_CAPTURE_JS = """
+window.__whydud_xhr = [];
+const _wf = window.fetch;
+window.fetch = async function() {
+    const r = await _wf.apply(this, arguments);
+    try {
+        const a0 = arguments[0];
+        const u = typeof a0 === 'string' ? a0 : (a0 && a0.url ? a0.url : (r.url || ''));
+        if (r.ok) {
+            const c = r.headers.get('content-type') || '';
+            if (c.includes('json')) {
+                const d = await r.clone().json();
+                window.__whydud_xhr.push({u: u, d: d});
+            }
+        }
+    } catch(e) {}
+    return r;
+};
+const _xo = XMLHttpRequest.prototype.open;
+const _xs = XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.open = function(m, u) {
+    this._wu = u;
+    return _xo.apply(this, arguments);
+};
+XMLHttpRequest.prototype.send = function() {
+    this.addEventListener('load', function() {
+        try {
+            const c = this.getResponseHeader('content-type') || '';
+            if (c.includes('json') && this._wu) {
+                window.__whydud_xhr.push({u: this._wu, d: JSON.parse(this.responseText)});
+            }
+        } catch(e) {}
+    });
+    return _xs.apply(this, arguments);
+};
+"""
+
+# Evaluated AFTER page load — injects captured XHR data into DOM.
+_XHR_INJECT_JS = """() => {
+    try {
+        const e = document.createElement('script');
+        e.id = '__whydud_data';
+        e.type = 'application/json';
+        e.textContent = JSON.stringify(window.__whydud_xhr || []);
+        document.head.appendChild(e);
+    } catch(x) {}
+    return (window.__whydud_xhr || []).length;
+}"""
 
 # ---------------------------------------------------------------------------
 # Keyword → Whydud category slug mapping
 # ---------------------------------------------------------------------------
 
 KEYWORD_CATEGORY_MAP: dict[str, str] = {
-    # Electronics
     "electronics": "electronics",
-    "mobiles": "smartphones",
-    "smartphones": "smartphones",
     "mobile-phones": "smartphones",
-    "laptops": "laptops",
-    "televisions": "televisions",
-    "headphones": "audio",
+    "smartphones": "smartphones",
+    "laptop": "laptops",
+    "tv": "televisions",
+    "head-phones": "audio",
+    "earphones": "audio",
     "speakers": "audio",
-    "cameras": "cameras",
+    "audio-video": "audio",
+    "camera": "cameras",
     "tablets": "tablets",
-    "smartwatches": "smartwatches",
-    "smart-watches": "smartwatches",
-    # Fashion — Men
+    "wearable-devices": "smartwatches",
+    "smart-watch": "smartwatches",
     "mens-clothing": "mens-fashion",
-    "men-clothing": "mens-fashion",
-    "mens-shirts": "mens-fashion",
-    "mens-tshirts": "mens-fashion",
-    "mens-jeans": "mens-fashion",
-    "mens-trousers": "mens-fashion",
-    # Fashion — Women
     "womens-clothing": "womens-fashion",
-    "women-clothing": "womens-fashion",
-    "womens-kurtas": "womens-fashion",
-    "womens-dresses": "womens-fashion",
-    "womens-tops": "womens-fashion",
-    "sarees": "womens-fashion",
-    # Footwear
-    "footwear": "footwear",
-    "mens-footwear": "footwear",
-    "womens-footwear": "footwear",
-    "sports-shoes": "footwear",
-    # Beauty
-    "beauty": "beauty",
-    "skincare": "skincare",
-    "makeup": "makeup",
-    "fragrance": "fragrance",
-    # Home & Kitchen
-    "home-kitchen": "home-decor",
-    "home-furnishing": "home-decor",
-    "kitchen-appliances": "kitchen-tools",
-    # Accessories
-    "accessories": "accessories",
-    "watches": "watches",
-    "jewellery": "jewellery",
-    "bags": "accessories",
-    "sunglasses": "accessories",
-    # Appliances
+    "large-appliances": "appliances",
     "refrigerators": "refrigerators",
-    "washing-machines": "washing-machines",
-    "air-conditioners": "air-conditioners",
-    "air-purifiers": "appliances",
-    "vacuum-cleaners": "appliances",
+    "washing-machine": "washing-machines",
+    "air-conditioner": "air-conditioners",
+    "small-appliances": "appliances",
 }
 
 # ---------------------------------------------------------------------------
-# Seed URLs — TataCLiQ category pages
-# Format: (url, max_pages)
+# Seed queries — search-based discovery (category URLs route to SPA 404)
+# Format: (search_term, whydud_category_slug, max_pages)
 # ---------------------------------------------------------------------------
 
 _TOP = 10
 _STD = 5
 
-SEED_CATEGORY_URLS: list[tuple[str, int]] = [
-    # ── Electronics ─────────────────────────────────────────────────────
-    ("https://www.tatacliq.com/mobiles/c-msh1210", _TOP),
-    ("https://www.tatacliq.com/laptops/c-msh1220", _TOP),
-    ("https://www.tatacliq.com/televisions/c-msh1211", _STD),
-    ("https://www.tatacliq.com/headphones/c-msh1215", _STD),
-    ("https://www.tatacliq.com/cameras/c-msh1214", _STD),
-    ("https://www.tatacliq.com/tablets/c-msh1221", _STD),
-    ("https://www.tatacliq.com/smart-watches/c-msh1216", _STD),
-    # ── Fashion — Men ───────────────────────────────────────────────────
-    ("https://www.tatacliq.com/mens-clothing/c-msh1012", _TOP),
-    ("https://www.tatacliq.com/mens-footwear/c-msh1013", _STD),
-    # ── Fashion — Women ─────────────────────────────────────────────────
-    ("https://www.tatacliq.com/womens-clothing/c-msh1011", _TOP),
-    ("https://www.tatacliq.com/womens-footwear/c-msh1017", _STD),
-    # ── Beauty ──────────────────────────────────────────────────────────
-    ("https://www.tatacliq.com/beauty/c-msh13", _STD),
-    # ── Home & Kitchen ──────────────────────────────────────────────────
-    ("https://www.tatacliq.com/home-kitchen/c-msh14", _STD),
-    # ── Watches & Accessories ───────────────────────────────────────────
-    ("https://www.tatacliq.com/watches/c-msh1015", _STD),
-    ("https://www.tatacliq.com/jewellery/c-msh1016", _STD),
-    ("https://www.tatacliq.com/accessories/c-msh1014", _STD),
+SEED_SEARCH_QUERIES: list[tuple[str, str, int]] = [
+    # NOTE: TataCLiQ's SPA redirects many generic terms (e.g. "laptops",
+    # "television", "mobile phones") to a curated promo/CLP page. These are
+    # detected as blocks and skipped. Brand-specific queries work more reliably.
+    #
+    # Tested working (2026-03): "smartphones", "headphones earphones"
+    # Order: put known-working queries first for quick mode.
+
+    # Known-working queries
+    ("smartphones", "smartphones", _TOP),
+    ("headphones earphones", "audio", _STD),
+    ("bluetooth speakers", "audio", _STD),
+    ("smartwatch", "smartwatches", _STD),
+
+    # Brand-specific queries — higher success rate
+    ("samsung mobile", "smartphones", _STD),
+    ("iphone", "smartphones", _STD),
+    ("oneplus phone", "smartphones", _STD),
+    ("sony headphones", "audio", _STD),
+    ("jbl speaker", "audio", _STD),
+    ("samsung tv", "televisions", _STD),
+    ("lg tv", "televisions", _STD),
+    ("laptop dell", "laptops", _STD),
+    ("laptop hp", "laptops", _STD),
+    ("macbook", "laptops", _STD),
+    ("dslr camera", "cameras", _STD),
+    ("ipad tablet", "tablets", _STD),
+
+    # Appliances
+    ("refrigerator samsung", "refrigerators", _STD),
+    ("washing machine lg", "washing-machines", _STD),
+    ("air conditioner", "air-conditioners", _STD),
+
+    # Fashion
+    ("mens shirt", "mens-fashion", _STD),
+    ("womens dress", "womens-fashion", _STD),
+    ("mens jeans", "mens-fashion", _STD),
 ]
+
+_SEARCH_URL = "https://www.tatacliq.com/search/?searchCategory=all&text={query}"
 
 MAX_LISTING_PAGES = 5
 PAGE_SIZE = 40
+QUICK_MODE_CATEGORIES = 5
 
 
 class TataCliqSpider(BaseWhydudSpider):
-    """Scrapes TataCLiQ.com multi-category marketplace.
+    """Scrapes TataCLiQ.com — pure SPA with Cloudflare Bot Management.
 
-    TataCLiQ uses Next.js with SSR. Product data is in:
-    - __NEXT_DATA__ JSON on pages (primary)
-    - JSON-LD Product schema on detail pages (fallback)
-    - Marketplace API at /marketplacewebservices/v2/ (alternative)
-
-    Cloudflare WAF — Playwright recommended for reliability.
+    Uses Playwright + stealth + DataImpulse proxy for ALL pages.
+    Primary extraction via XHR/fetch response interception.
+    Fallback via rendered DOM parsing and JSON-LD.
 
     Spider arguments:
       job_id        — UUID of a ScraperJob row.
@@ -148,16 +234,16 @@ class TataCliqSpider(BaseWhydudSpider):
     name = "tata_cliq"
     allowed_domains = ["tatacliq.com", "www.tatacliq.com"]
 
-    QUICK_MODE_CATEGORIES = 5
-
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
-        "DOWNLOAD_DELAY": 3,
-        "CONCURRENT_REQUESTS": 4,
+        "DOWNLOAD_DELAY": 5,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
+        "CONCURRENT_REQUESTS": 2,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
         "RETRY_TIMES": 2,
         "RETRY_HTTP_CODES": [500, 502, 503, 504, 408, 429],
         "HTTPERROR_ALLOWED_CODES": [403, 429, 503],
+        "PLAYWRIGHT_MAX_CONTEXTS": 3,  # 2 proxy + 1 default
     }
 
     # ------------------------------------------------------------------
@@ -182,13 +268,16 @@ class TataCliqSpider(BaseWhydudSpider):
         self._max_pages_override: int | None = int(max_pages) if max_pages else None
         self._pages_followed: dict[str, int] = {}
         self._max_pages_map: dict[str, int] = {}
+        self._ctx_idx: int = 0
 
         # Stats
         self._listing_pages_scraped: int = 0
         self._product_pages_scraped: int = 0
         self._products_extracted: int = 0
+        self._xhr_extractions: int = 0
+        self._dom_extractions: int = 0
 
-    def closed(self, reason):
+    def closed(self, reason: str) -> None:
         """Log final scrape statistics."""
         total = self._product_pages_scraped + self.items_failed
         rate = (self._product_pages_scraped / total * 100) if total > 0 else 0
@@ -197,15 +286,18 @@ class TataCliqSpider(BaseWhydudSpider):
             f"listings={self._listing_pages_scraped}, "
             f"product_attempts={total}, "
             f"products_ok={self._product_pages_scraped} ({rate:.0f}%), "
-            f"failed={self.items_failed}"
+            f"xhr_extractions={self._xhr_extractions}, "
+            f"dom_extractions={self._dom_extractions}, "
+            f"items_scraped={self.items_scraped}, "
+            f"items_failed={self.items_failed}"
         )
 
     # ------------------------------------------------------------------
-    # Stealth helpers
+    # Playwright helpers
     # ------------------------------------------------------------------
 
-    async def _apply_stealth(self, page, request):
-        """Apply playwright-stealth scripts before navigation."""
+    async def _page_init(self, page, request):
+        """Apply stealth and inject XHR capture script before navigation."""
         try:
             await self.STEALTH.apply_stealth_async(page)
             page.set_default_navigation_timeout(60000)
@@ -213,46 +305,47 @@ class TataCliqSpider(BaseWhydudSpider):
         except Exception as e:
             self.logger.warning(f"Stealth setup issue: {e}")
 
+        await page.add_init_script(_XHR_CAPTURE_JS)
+
+    def _next_context(self) -> str:
+        """Cycle between 2 proxy context slots for IP rotation."""
+        name = _CONTEXT_NAMES[self._ctx_idx % len(_CONTEXT_NAMES)]
+        self._ctx_idx += 1
+        return name
+
+    def _pw_meta(
+        self, category_slug: str | None = None, wait_ms: tuple[int, int] = (8000, 15000),
+        extra: dict | None = None,
+    ) -> dict:
+        """Build Playwright request meta with proxy, stealth, and XHR capture."""
+        ctx_name = self._next_context()
+        vp = random.choice(_VIEWPORTS)
+        meta = {
+            "category_slug": category_slug,
+            "playwright": True,
+            # Spider manages its own proxy context — skip middleware override.
+            "_skip_proxy_middleware": True,
+            "playwright_context": ctx_name,
+            "playwright_context_kwargs": {**_PW_CONTEXT_BASE, "viewport": vp},
+            "playwright_page_init_callback": self._page_init,
+            "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"},
+            "playwright_page_methods": [
+                # Wait for React SPA to hydrate and fetch search results
+                PageMethod("wait_for_timeout", random.randint(*wait_ms)),
+                # Inject captured XHR data into DOM for extraction
+                PageMethod("evaluate", _XHR_INJECT_JS),
+            ],
+        }
+        if extra:
+            meta.update(extra)
+        return meta
+
     # ------------------------------------------------------------------
-    # start_requests — Playwright for Cloudflare bypass
+    # start_requests
     # ------------------------------------------------------------------
 
     def start_requests(self):
-        """Emit Playwright requests for category listing pages."""
-        url_pairs = self._load_urls()
-        random.shuffle(url_pairs)
-
-        for url, max_pg in url_pairs:
-            base = url.split("?")[0]
-            self._max_pages_map[base] = max_pg
-
-            self.logger.info(f"Queuing category ({max_pg} pages): {url}")
-            yield scrapy.Request(
-                url,
-                callback=self.parse_listing_page,
-                errback=self.handle_error,
-                headers=self._make_headers(),
-                meta={
-                    "category_slug": self._resolve_category_from_url(url),
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                        PageMethod("wait_for_timeout", random.randint(3000, 5000)),
-                    ],
-                },
-                dont_filter=True,
-            )
-
-        self.logger.info(f"Queued {len(url_pairs)} categories (Playwright)")
-
-    def _load_urls(self) -> list[tuple[str, int]]:
-        """Resolve the (url, max_pages) list to crawl."""
-        fallback = self._max_pages_override or MAX_LISTING_PAGES
-
-        if self._category_urls:
-            return [(u, fallback) for u in self._category_urls]
-
+        """First visit homepage (warmup for Cloudflare cookies), then search pages."""
         if self.job_id:
             try:
                 from apps.scraping.models import ScraperJob
@@ -261,202 +354,302 @@ class TataCliqSpider(BaseWhydudSpider):
             except Exception as exc:
                 self.logger.warning(f"Could not load ScraperJob {self.job_id}: {exc}")
 
-        if self._max_pages_override is not None:
-            if self._max_pages_override <= 3:
-                self.logger.info(
-                    f"Quick mode: using first {self.QUICK_MODE_CATEGORIES} categories "
-                    f"(max_pages={self._max_pages_override})"
-                )
-                return [
-                    (url, self._max_pages_override)
-                    for url, _ in SEED_CATEGORY_URLS[:self.QUICK_MODE_CATEGORIES]
-                ]
-            return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
-        return list(SEED_CATEGORY_URLS)
+        # Step 1: Warmup — visit homepage to establish Cloudflare cookies/session.
+        # Uses tcliq_0 context so subsequent requests on the same context share cookies.
+        self.logger.info("Warmup: visiting TataCLiQ homepage to establish session")
+        yield scrapy.Request(
+            "https://www.tatacliq.com/",
+            callback=self._after_warmup,
+            errback=self._warmup_failed,
+            headers=self._make_headers(),
+            meta=self._pw_meta(wait_ms=(8000, 12000)),
+            dont_filter=True,
+        )
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _resolve_category_from_url(self, url: str) -> str | None:
-        """Extract whydud category slug from URL path."""
-        path = url.split("?")[0].lower()
-        for keyword, slug in KEYWORD_CATEGORY_MAP.items():
-            if keyword in path:
-                return slug
-        return None
-
-    def _extract_next_data(self, response) -> dict | None:
-        """Extract __NEXT_DATA__ JSON from page source."""
-        script = response.css('script#__NEXT_DATA__::text').get()
-        if not script:
-            # Fallback: regex search
-            match = re.search(
-                r'<script\s+id="__NEXT_DATA__"\s+type="application/json">\s*(\{.+?\})\s*</script>',
-                response.text,
-                re.DOTALL,
+    def _after_warmup(self, response):
+        """Homepage loaded — now queue search pages using the established session."""
+        if self._is_blocked(response):
+            self.logger.warning(
+                f"Homepage warmup blocked (status={response.status}, url={response.url}). "
+                "Proceeding anyway — search pages may fail."
             )
-            if match:
-                script = match.group(1)
-        if not script:
-            return None
-        try:
-            return json.loads(script)
-        except (json.JSONDecodeError, ValueError):
-            self.logger.warning(f"Failed to parse __NEXT_DATA__ on {response.url}")
-            return None
+        else:
+            self.logger.info(
+                f"Homepage warmup OK (status={response.status}, "
+                f"url={response.url}, body={len(response.body)} bytes)"
+            )
 
-    def _parse_price(self, price_val) -> Decimal | None:
-        """Parse price value to Decimal in paisa."""
-        if price_val is None:
-            return None
-        try:
-            val_str = str(price_val).replace(",", "")
-            match = PRICE_RE.search(val_str)
-            if not match:
-                return None
-            rupees = Decimal(match.group().replace(",", ""))
-            if rupees <= 0:
-                return None
-            return rupees * 100  # convert to paisa
-        except (InvalidOperation, ValueError):
-            return None
+        yield from self._queue_search_requests()
 
-    def _is_blocked(self, response) -> bool:
-        """Detect Cloudflare challenge or block page."""
-        if response.status in (403, 429, 503):
-            return True
-        title = (response.css("title::text").get() or "").strip().lower()
-        if "just a moment" in title or "attention required" in title:
-            return True
-        if "access denied" in title or "blocked" in title:
-            return True
-        return False
+    def _warmup_failed(self, failure):
+        """Homepage warmup failed — still try search pages."""
+        self.logger.warning(f"Homepage warmup failed: {failure.getErrorMessage()}")
+        yield from self._queue_search_requests()
+
+    def _queue_search_requests(self):
+        """Yield search page requests."""
+        queries = self._load_queries()
+        random.shuffle(queries)
+
+        for url, category_slug, max_pg in queries:
+            self._max_pages_map[url] = max_pg
+            self.logger.info(f"Queuing search ({max_pg} pages): {url}")
+            yield scrapy.Request(
+                url,
+                callback=self.parse_listing_page,
+                errback=self.handle_error,
+                headers=self._make_headers(),
+                meta=self._pw_meta(category_slug=category_slug),
+                dont_filter=True,
+            )
+
+        self.logger.info(f"Queued {len(queries)} search queries (Playwright + proxy)")
+
+    def _load_queries(self) -> list[tuple[str, str, int]]:
+        """Resolve (url, category_slug, max_pages) list to crawl."""
+        fallback = self._max_pages_override or MAX_LISTING_PAGES
+
+        # Override: explicit URLs (still supported for ad-hoc runs)
+        if self._category_urls:
+            return [
+                (u, self._resolve_category_from_url(u), fallback)
+                for u in self._category_urls
+            ]
+
+        # Build search URLs from seed queries
+        seeds = SEED_SEARCH_QUERIES
+        if self._max_pages_override is not None:
+            max_pg = self._max_pages_override
+            if max_pg <= 3:
+                self.logger.info(
+                    f"Quick mode: {QUICK_MODE_CATEGORIES} queries, "
+                    f"max_pages={max_pg}"
+                )
+                seeds = seeds[:QUICK_MODE_CATEGORIES]
+        else:
+            max_pg = None  # use per-query default
+
+        result = []
+        for query, cat_slug, default_max in seeds:
+            url = _SEARCH_URL.format(query=query.replace(" ", "+"))
+            result.append((url, cat_slug, max_pg if max_pg is not None else default_max))
+        return result
 
     # ------------------------------------------------------------------
     # Phase 1: Listing pages
     # ------------------------------------------------------------------
 
     def parse_listing_page(self, response):
-        """Extract products from category/search listing page."""
+        """Extract products directly from listing page (XHR or DOM).
+
+        Strategy: yield ProductItems directly from listing data — avoids
+        visiting individual product pages (which fail with proxy auth errors).
+        """
         self._listing_pages_scraped += 1
+
+        self.logger.info(
+            f"Listing page: status={response.status}, url={response.url}, "
+            f"body={len(response.body)} bytes"
+        )
 
         if self._is_blocked(response):
             self.logger.warning(f"Blocked on listing {response.url} — skipping")
             return
 
         category_slug = response.meta.get("category_slug")
+        items_yielded = 0
 
-        # Strategy 1: Extract from __NEXT_DATA__
-        next_data = self._extract_next_data(response)
-        products = []
-        if next_data:
-            page_props = next_data.get("props", {}).get("pageProps") or {}
-            # Try various paths
-            for key in ("searchResult", "categoryData", "plpData", "data"):
-                section = page_props.get(key) or {}
-                prod_list = (
-                    section.get("products")
-                    or section.get("results")
-                    or section.get("items")
-                    or section.get("productList")
-                    or []
-                )
-                if isinstance(prod_list, list) and prod_list:
-                    products = prod_list
-                    break
-
-        if products:
-            self.logger.info(f"Found {len(products)} products (__NEXT_DATA__) on {response.url}")
-            for prod in products:
-                prod_id = prod.get("productId") or prod.get("productCode") or prod.get("id")
-                slug = prod.get("url") or prod.get("slug") or ""
-                if not prod_id:
-                    continue
-
-                if slug and slug.startswith("/"):
-                    product_url = f"https://www.tatacliq.com{slug}"
-                elif slug:
-                    product_url = f"https://www.tatacliq.com/{slug}"
-                else:
-                    product_url = f"https://www.tatacliq.com/p-{prod_id}"
-
-                yield scrapy.Request(
-                    product_url,
-                    callback=self.parse_product_page,
-                    errback=self.handle_error,
-                    headers=self._make_headers(),
-                    meta={
-                        "category_slug": category_slug,
-                        "listing_data": prod,
-                        "playwright": True,
-                        "playwright_page_init_callback": self._apply_stealth,
-                        "playwright_page_methods": [
-                            PageMethod("wait_for_load_state", "domcontentloaded"),
-                            PageMethod("wait_for_timeout", random.randint(2000, 4000)),
-                        ],
-                    },
-                )
+        # Strategy 1: XHR intercepted data (primary — Hybris searchab API)
+        xhr_data = self._extract_xhr_data(response)
+        if xhr_data:
+            xhr_urls = [entry.get("u", "?")[:100] for entry in xhr_data[:10]]
+            self.logger.info(f"XHR captured {len(xhr_data)} responses, URLs: {xhr_urls}")
         else:
-            # Strategy 2: HTML product links
-            links = response.css("a[href*='/p-']::attr(href)").getall()
-            seen = set()
-            for href in links:
-                full_url = response.urljoin(href)
-                if full_url not in seen and "/p-" in full_url:
-                    seen.add(full_url)
-                    yield scrapy.Request(
-                        full_url,
-                        callback=self.parse_product_page,
-                        errback=self.handle_error,
-                        headers=self._make_headers(),
-                        meta={
-                            "category_slug": category_slug,
-                            "playwright": True,
-                            "playwright_page_init_callback": self._apply_stealth,
-                            "playwright_page_methods": [
-                                PageMethod("wait_for_load_state", "domcontentloaded"),
-                                PageMethod("wait_for_timeout", random.randint(2000, 4000)),
-                            ],
-                        },
-                    )
-            if not links:
-                self.logger.warning(f"No products found on {response.url}")
-                return
+            self.logger.warning("No XHR data captured — init script may not have injected")
 
-        # Pagination (0-indexed)
-        base_url = response.url.split("?")[0]
-        pages_so_far = self._pages_followed.get(base_url, 0)
-        max_for_category = self._max_pages_map.get(base_url, MAX_LISTING_PAGES)
+        products = self._find_products_in_xhr(xhr_data)
+        if products:
+            self.logger.info(
+                f"Found {len(products)} products (XHR) on {response.url}"
+            )
+            for prod in products:
+                item = self._build_item_from_listing(prod, category_slug)
+                if item:
+                    self._xhr_extractions += 1
+                    self._product_pages_scraped += 1
+                    self.items_scraped += 1
+                    items_yielded += 1
+                    yield item
 
-        if pages_so_far < max_for_category - 1:
+        # Strategy 2: Extract from rendered DOM (product cards)
+        if items_yielded == 0:
+            dom_items = self._extract_from_dom(response, category_slug)
+            for item in dom_items:
+                self._dom_extractions += 1
+                self._product_pages_scraped += 1
+                self.items_scraped += 1
+                items_yielded += 1
+                yield item
+
+        if items_yielded > 0:
+            self.logger.info(f"Yielded {items_yielded} items from listing {response.url}")
+        else:
+            self.logger.warning(
+                f"No products extracted from {response.url} "
+                f"(XHR: {len(xhr_data)} responses)"
+            )
+            return
+
+        # Pagination — preserve full query string
+        yield from self._follow_pagination(response, category_slug)
+
+    def _follow_pagination(self, response, category_slug: str | None):
+        """Build next page URL preserving search query params."""
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+        parsed = urlparse(response.url)
+        params = parse_qs(parsed.query)
+
+        # Track pages by the base search query (not full URL with page params)
+        base_key = parsed.path
+        pages_so_far = self._pages_followed.get(base_key, 0)
+
+        # Determine max pages for this search
+        original_url = response.meta.get("_original_search_url", response.url)
+        max_for_search = self._max_pages_map.get(original_url, MAX_LISTING_PAGES)
+
+        if pages_so_far < max_for_search - 1:
             next_page = pages_so_far + 1
-            separator = "&" if "?" in base_url else "?"
-            next_url = f"{base_url}{separator}page={next_page}&size={PAGE_SIZE}"
-            self._pages_followed[base_url] = next_page
+            # Preserve search params, update page
+            params["page"] = [str(next_page)]
+            params["size"] = [str(PAGE_SIZE)]
+            new_query = urlencode(
+                {k: v[0] if isinstance(v, list) else v for k, v in params.items()}
+            )
+            next_url = urlunparse(parsed._replace(query=new_query))
+            self._pages_followed[base_key] = next_page
 
+            self.logger.info(f"Following pagination → {next_url}")
             yield scrapy.Request(
                 next_url,
                 callback=self.parse_listing_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
-                meta={
-                    "category_slug": category_slug,
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                        PageMethod("wait_for_timeout", random.randint(3000, 5000)),
-                    ],
-                },
+                meta=self._pw_meta(
+                    category_slug=category_slug,
+                    extra={"_original_search_url": original_url},
+                ),
             )
+
+    def _extract_from_dom(self, response, category_slug: str | None) -> list:
+        """Extract product data from rendered DOM product cards."""
+        items = []
+        # TataCLiQ product cards typically have links to /p-{code}
+        product_links = response.css("a[href*='/p-']")
+        seen_urls = set()
+
+        for link in product_links:
+            href = link.attrib.get("href", "")
+            full_url = response.urljoin(href)
+            if full_url in seen_urls or "/p-" not in full_url:
+                continue
+            seen_urls.add(full_url)
+
+            code_match = PRODUCT_CODE_RE.search(full_url)
+            external_id = code_match.group(1) if code_match else None
+            if not external_id:
+                continue
+
+            # Try to get title from the link or nearby elements
+            title = link.css("::text").get() or ""
+            title = title.strip()
+            if not title or len(title) < 5:
+                # Try parent container
+                parent = link.xpath("ancestor::div[contains(@class,'product')]")
+                if parent:
+                    title = " ".join(parent.css("::text").getall()).strip()[:200]
+
+            if not title or len(title) < 5:
+                continue
+
+            # Try to extract price from nearby elements
+            parent_card = link.xpath("ancestor::div[contains(@class,'ProductCard') or contains(@class,'product-card') or contains(@class,'ProductModule')]")
+            price = None
+            if parent_card:
+                price_texts = parent_card.re(r'₹\s*([\d,]+)')
+                if price_texts:
+                    price = self._parse_price(price_texts[0])
+
+            # Image
+            img = link.css("img::attr(src)").get()
+            images = [img] if img else []
+
+            item = ProductItem(
+                marketplace_slug=MARKETPLACE_SLUG,
+                external_id=external_id,
+                url=full_url,
+                title=title,
+                brand=None,
+                price=price,
+                mrp=None,
+                images=images,
+                rating=None,
+                review_count=None,
+                specs={},
+                seller_name="TataCLiQ",
+                seller_rating=None,
+                in_stock=True,
+                fulfilled_by="TataCLiQ",
+                category_slug=category_slug,
+                about_bullets=[],
+                offer_details=[],
+                raw_html_path=None,
+                description=None,
+                warranty=None,
+                delivery_info=None,
+                return_policy=None,
+                breadcrumbs=[],
+                variant_options=[],
+                country_of_origin=None,
+                manufacturer=None,
+                model_number=None,
+                weight=None,
+                dimensions=None,
+            )
+            items.append(item)
+
+        self.logger.info(f"DOM extraction: {len(items)} products from {len(seen_urls)} links")
+        return items
+
+    def _build_item_from_listing(self, data: dict, category_slug: str | None) -> ProductItem | None:
+        """Build a ProductItem from listing XHR data (no product page visit)."""
+        return self._build_item(
+            data,
+            url=self._product_url_from_data(data),
+            category_slug=category_slug,
+            external_id=str(
+                data.get("productId") or data.get("productCode") or data.get("id") or ""
+            ) or None,
+        )
+
+    def _product_url_from_data(self, data: dict) -> str:
+        """Build a product URL from listing data."""
+        slug = data.get("url") or data.get("slug") or ""
+        if slug and slug.startswith("/"):
+            return f"https://www.tatacliq.com{slug}"
+        elif slug:
+            return f"https://www.tatacliq.com/{slug}"
+        pid = data.get("productId") or data.get("productCode") or data.get("id")
+        if pid:
+            return f"https://www.tatacliq.com/p-{pid}"
+        return ""
 
     # ------------------------------------------------------------------
     # Phase 2: Product detail pages
     # ------------------------------------------------------------------
 
     def parse_product_page(self, response):
-        """Extract product data from detail page."""
+        """Extract product data from detail page via XHR or DOM."""
         if self._is_blocked(response):
             self.logger.warning(f"Blocked on product {response.url}")
             self.items_failed += 1
@@ -465,112 +658,197 @@ class TataCliqSpider(BaseWhydudSpider):
         category_slug = response.meta.get("category_slug")
         listing_data = response.meta.get("listing_data")
 
-        # Extract product code from URL
         code_match = PRODUCT_CODE_RE.search(response.url)
         external_id = code_match.group(1) if code_match else None
 
-        # Strategy 1: __NEXT_DATA__
-        next_data = self._extract_next_data(response)
-        if next_data:
-            page_props = next_data.get("props", {}).get("pageProps") or {}
-            product = page_props.get("productData") or page_props.get("product") or page_props.get("data") or {}
-            if product and (product.get("productname") or product.get("name")):
-                item = self._parse_from_next_data(product, response.url, category_slug, external_id)
-                if item:
-                    self._product_pages_scraped += 1
-                    self._products_extracted += 1
-                    self.items_scraped += 1
-                    yield item
-                    return
+        # Strategy 1: XHR intercepted data
+        xhr_data = self._extract_xhr_data(response)
+        product = self._find_product_detail_in_xhr(xhr_data)
+        if product:
+            item = self._build_item(product, response.url, category_slug, external_id)
+            if item:
+                self._xhr_extractions += 1
+                self._product_pages_scraped += 1
+                self.items_scraped += 1
+                yield item
+                return
 
         # Strategy 2: JSON-LD
         item = self._parse_from_json_ld(response, category_slug, external_id)
         if item:
+            self._dom_extractions += 1
             self._product_pages_scraped += 1
-            self._products_extracted += 1
             self.items_scraped += 1
             yield item
             return
 
-        # Strategy 3: Build from listing data
+        # Strategy 3: Listing data fallback
         if listing_data:
-            item = self._parse_from_listing_data(listing_data, response.url, category_slug, external_id)
+            item = self._build_item(listing_data, response.url, category_slug, external_id)
             if item:
+                self._dom_extractions += 1
                 self._product_pages_scraped += 1
-                self._products_extracted += 1
                 self.items_scraped += 1
                 yield item
                 return
+
+        # Strategy 4: Redux store via JS evaluation
+        # (window.__STORE__ or similar — last resort)
+        # The PageMethod already ran, so we check for any store data
+        # that may have been captured.
 
         self.logger.warning(f"Could not extract product data from {response.url}")
         self.items_failed += 1
 
     # ------------------------------------------------------------------
-    # Extraction: __NEXT_DATA__ (primary)
+    # XHR data extraction
     # ------------------------------------------------------------------
 
-    def _parse_from_next_data(
-        self, product: dict, url: str, category_slug: str | None, external_id: str | None,
+    def _extract_xhr_data(self, response) -> list[dict]:
+        """Extract captured XHR/fetch JSON responses from injected DOM element."""
+        script = response.css('script#__whydud_data::text').get()
+        if not script:
+            return []
+        try:
+            return json.loads(script)
+        except (json.JSONDecodeError, ValueError):
+            return []
+
+    def _find_products_in_xhr(self, xhr_data: list[dict]) -> list[dict]:
+        """Search XHR responses for product listing arrays.
+
+        Prioritizes the Hybris searchab API (marketplacewebservices/v2/mpl/products)
+        since it contains the richest product data.
+        """
+        # First pass: look specifically for the Hybris search API response
+        for entry in xhr_data:
+            url = entry.get("u", "")
+            if "searchab" in url or "products/search" in url or "marketplacewebservices" in url:
+                data = entry.get("d", {})
+                if isinstance(data, dict):
+                    products = self._extract_product_list(data)
+                    if products:
+                        self.logger.info(f"Found {len(products)} products from Hybris API: {url[:80]}")
+                        return products
+
+        # Second pass: generic patterns
+        for entry in xhr_data:
+            data = entry.get("d", {})
+            if not isinstance(data, dict):
+                continue
+
+            products = self._extract_product_list(data)
+            if products:
+                return products
+
+        return []
+
+    def _extract_product_list(self, data: dict) -> list[dict]:
+        """Try to extract a product list from an XHR response dict."""
+        # Direct product array keys
+        for key in ("products", "results", "items", "productList",
+                     "searchProducts", "data", "searchresult"):
+            val = data.get(key)
+            if isinstance(val, list) and val and isinstance(val[0], dict):
+                if self._looks_like_products(val):
+                    return val
+
+        # Nested search — e.g. data.searchResult.products
+        for outer_key in ("searchResult", "categoryData", "plpData",
+                          "response", "searchresult", "plpResponse"):
+            section = data.get(outer_key)
+            if not isinstance(section, dict):
+                continue
+            for key in ("products", "results", "items", "productList"):
+                val = section.get(key)
+                if isinstance(val, list) and val and isinstance(val[0], dict):
+                    if self._looks_like_products(val):
+                        return val
+
+        return []
+
+    def _looks_like_products(self, items: list[dict]) -> bool:
+        """Check if a list of dicts looks like product data."""
+        first = items[0]
+        return any(
+            k in first
+            for k in (
+                "productId", "productCode", "name", "productname",
+                "id", "url", "price", "winningSellerPrice",
+                "imageURL", "brandname",
+            )
+        )
+
+        return []
+
+    def _find_product_detail_in_xhr(self, xhr_data: list[dict]) -> dict | None:
+        """Search XHR responses for a single product detail object."""
+        for entry in xhr_data:
+            data = entry.get("d", {})
+            if not isinstance(data, dict):
+                continue
+
+            # Direct product object
+            for key in ("productData", "product", "productDetails"):
+                val = data.get(key)
+                if isinstance(val, dict) and (val.get("productname") or val.get("name")):
+                    return val
+
+            # Top-level product data
+            if data.get("productname") or (data.get("name") and data.get("productId")):
+                return data
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Item builders
+    # ------------------------------------------------------------------
+
+    def _build_item(
+        self, data: dict, url: str, category_slug: str | None, external_id: str | None,
     ) -> ProductItem | None:
-        """Extract product data from __NEXT_DATA__ product object."""
-        name = product.get("productname") or product.get("name")
+        """Build a ProductItem from a product data dict (XHR or listing)."""
+        name = data.get("productname") or data.get("name")
         if not name:
             return None
 
-        pid = external_id or str(product.get("productId") or product.get("productCode") or "")
+        pid = external_id or str(
+            data.get("productId") or data.get("productCode") or data.get("id") or ""
+        )
         if not pid:
             return None
 
-        # Prices
-        selling_price = self._parse_price(product.get("price") or product.get("winningSellerPrice"))
-        mrp = self._parse_price(product.get("mrp") or product.get("wasPriceData"))
+        selling_price = self._parse_price(
+            data.get("price") or data.get("winningSellerPrice")
+        )
+        mrp = self._parse_price(data.get("mrp") or data.get("wasPriceData"))
 
-        # Brand
-        brand = product.get("brandname") or product.get("brand")
+        brand = data.get("brandname") or data.get("brand")
         if isinstance(brand, dict):
             brand = brand.get("name")
 
-        # Images
-        images = []
-        for key in ("imageURL", "image", "productImage"):
-            img = product.get(key)
-            if img:
-                if isinstance(img, str):
-                    images.append(img)
-                elif isinstance(img, list):
-                    images.extend([i for i in img if isinstance(i, str)])
-        gallery = product.get("galleryImages") or product.get("images") or []
-        for img in gallery:
-            if isinstance(img, str):
-                images.append(img)
-            elif isinstance(img, dict):
-                images.append(img.get("url") or img.get("imageURL", ""))
+        images = self._extract_images(data)
 
-        # Rating
         rating = None
         review_count = None
-        rating_val = product.get("averageRating") or product.get("rating")
+        rating_val = data.get("averageRating") or data.get("rating")
         if rating_val and str(rating_val) not in ("0", "0.0"):
             try:
                 rating = Decimal(str(rating_val))
             except (InvalidOperation, ValueError):
                 pass
-        count_val = product.get("totalRatings") or product.get("reviewCount") or product.get("ratingCount")
+        count_val = data.get("totalRatings") or data.get("reviewCount") or data.get("ratingCount")
         if count_val and str(count_val) != "0":
             try:
                 review_count = int(count_val)
             except (ValueError, TypeError):
                 pass
 
-        # Stock
-        in_stock = product.get("inStock", True)
+        in_stock = data.get("inStock", True)
+        seller_name = data.get("sellerName") or data.get("winningSellerName") or "TataCLiQ"
 
-        # Seller
-        seller_name = product.get("sellerName") or product.get("winningSellerName") or "TataCLiQ"
-
-        # Category
         if not category_slug:
-            hierarchy = product.get("categoryHierarchy") or []
+            hierarchy = data.get("categoryHierarchy") or []
             for cat in hierarchy:
                 cat_lower = cat.lower() if isinstance(cat, str) else ""
                 for kw, slug in KEYWORD_CATEGORY_MAP.items():
@@ -580,8 +858,7 @@ class TataCliqSpider(BaseWhydudSpider):
                 if category_slug:
                     break
 
-        # Description
-        description = product.get("description") or product.get("productDescription")
+        description = data.get("description") or data.get("productDescription")
 
         return ProductItem(
             marketplace_slug=MARKETPLACE_SLUG,
@@ -591,7 +868,7 @@ class TataCliqSpider(BaseWhydudSpider):
             brand=brand if brand else None,
             price=selling_price,
             mrp=mrp,
-            images=[img for img in images if img],
+            images=images,
             rating=rating,
             review_count=review_count,
             specs={},
@@ -616,16 +893,33 @@ class TataCliqSpider(BaseWhydudSpider):
             dimensions=None,
         )
 
+    def _extract_images(self, data: dict) -> list[str]:
+        """Extract image URLs from product data."""
+        images = []
+        for key in ("imageURL", "image", "productImage"):
+            img = data.get(key)
+            if img:
+                if isinstance(img, str):
+                    images.append(img)
+                elif isinstance(img, list):
+                    images.extend(i for i in img if isinstance(i, str))
+        gallery = data.get("galleryImages") or data.get("images") or []
+        for img in gallery:
+            if isinstance(img, str):
+                images.append(img)
+            elif isinstance(img, dict):
+                images.append(img.get("url") or img.get("imageURL", ""))
+        return [i for i in images if i]
+
     # ------------------------------------------------------------------
-    # Extraction: JSON-LD (fallback)
+    # JSON-LD fallback
     # ------------------------------------------------------------------
 
     def _parse_from_json_ld(
         self, response, category_slug: str | None, external_id: str | None,
     ) -> ProductItem | None:
         """Extract product data from JSON-LD structured data."""
-        ld_scripts = response.css('script[type="application/ld+json"]::text').getall()
-        for script_text in ld_scripts:
+        for script_text in response.css('script[type="application/ld+json"]::text').getall():
             try:
                 ld_data = json.loads(script_text)
             except (json.JSONDecodeError, ValueError):
@@ -643,11 +937,8 @@ class TataCliqSpider(BaseWhydudSpider):
                 continue
 
             name = ld_data.get("name")
-            if not name:
-                continue
-
             sku = ld_data.get("sku") or external_id
-            if not sku:
+            if not name or not sku:
                 continue
 
             offers = ld_data.get("offers") or {}
@@ -662,10 +953,7 @@ class TataCliqSpider(BaseWhydudSpider):
             if isinstance(images, str):
                 images = [images]
 
-            in_stock = True
-            availability = offers.get("availability", "")
-            if "OutOfStock" in availability:
-                in_stock = False
+            in_stock = "OutOfStock" not in (offers.get("availability") or "")
 
             return ProductItem(
                 marketplace_slug=MARKETPLACE_SLUG,
@@ -679,7 +967,11 @@ class TataCliqSpider(BaseWhydudSpider):
                 rating=None,
                 review_count=None,
                 specs={},
-                seller_name=offers.get("seller", {}).get("name", "TataCLiQ") if isinstance(offers.get("seller"), dict) else "TataCLiQ",
+                seller_name=(
+                    offers.get("seller", {}).get("name", "TataCLiQ")
+                    if isinstance(offers.get("seller"), dict)
+                    else "TataCLiQ"
+                ),
                 seller_rating=None,
                 in_stock=in_stock,
                 fulfilled_by="TataCLiQ",
@@ -702,59 +994,63 @@ class TataCliqSpider(BaseWhydudSpider):
         return None
 
     # ------------------------------------------------------------------
-    # Extraction: Listing data fallback
+    # Utility helpers
     # ------------------------------------------------------------------
 
-    def _parse_from_listing_data(
-        self, listing: dict, url: str, category_slug: str | None, external_id: str | None,
-    ) -> ProductItem | None:
-        """Build ProductItem from listing data when detail extraction fails."""
-        name = listing.get("productname") or listing.get("name")
-        if not name:
+    def _parse_price(self, price_val) -> Decimal | None:
+        """Parse price value to Decimal in paisa (rupees × 100)."""
+        if price_val is None:
+            return None
+        try:
+            val_str = str(price_val).replace(",", "")
+            match = PRICE_RE.search(val_str)
+            if not match:
+                return None
+            rupees = Decimal(match.group().replace(",", ""))
+            if rupees <= 0:
+                return None
+            return rupees * 100
+        except (InvalidOperation, ValueError):
             return None
 
-        pid = external_id or str(listing.get("productId") or listing.get("productCode") or "")
-        if not pid:
-            return None
+    def _is_blocked(self, response) -> bool:
+        """Detect Cloudflare challenge, block page, or SPA redirect to /404."""
+        if response.status in (403, 429, 503):
+            self.logger.debug(f"Blocked: HTTP {response.status}")
+            return True
+        # TataCLiQ SPA redirects to /404 when bot-detected or URL is invalid.
+        final_url = response.url
+        if "/404" in final_url or final_url.rstrip("/").endswith("/404"):
+            self.logger.debug(f"Blocked: URL contains /404: {final_url}")
+            return True
+        title = (response.css("title::text").get() or "").strip().lower()
+        self.logger.debug(f"Page title: {title!r}")
+        if "just a moment" in title or "attention required" in title:
+            return True
+        if "access denied" in title or "blocked" in title:
+            return True
+        if "page not found" in title or "404" in title:
+            return True
+        # Check for Cloudflare challenge markers in body — only flag if it's
+        # a challenge page (small body), not if "captcha" appears incidentally
+        # in a large SPA bundle.
+        body_prefix = response.text[:3000].lower() if response.text else ""
+        if len(response.body) < 50000 and (
+            "captcha" in body_prefix or "robot check" in body_prefix
+        ):
+            self.logger.debug(f"Blocked: CAPTCHA marker in small page ({len(response.body)} bytes)")
+            return True
+        # Redirected to TataCLiQ's generic CLP instead of search results —
+        # indicates the search was intercepted/blocked.
+        if "gadget-clp" in final_url or "icid2=" in final_url:
+            self.logger.debug(f"Blocked: redirected to promo CLP: {final_url[:100]}")
+            return True
+        return False
 
-        selling_price = self._parse_price(listing.get("price"))
-        mrp = self._parse_price(listing.get("mrp"))
-        brand = listing.get("brandname") or listing.get("brand")
-
-        images = []
-        img = listing.get("imageURL") or listing.get("image")
-        if img:
-            images = [img] if isinstance(img, str) else img
-
-        return ProductItem(
-            marketplace_slug=MARKETPLACE_SLUG,
-            external_id=pid,
-            url=url,
-            title=name,
-            brand=brand,
-            price=selling_price,
-            mrp=mrp,
-            images=images,
-            rating=None,
-            review_count=None,
-            specs={},
-            seller_name="TataCLiQ",
-            seller_rating=None,
-            in_stock=True,
-            fulfilled_by="TataCLiQ",
-            category_slug=category_slug,
-            about_bullets=[],
-            offer_details=[],
-            raw_html_path=None,
-            description=None,
-            warranty=None,
-            delivery_info=None,
-            return_policy=None,
-            breadcrumbs=[],
-            variant_options=[],
-            country_of_origin=None,
-            manufacturer=brand,
-            model_number=None,
-            weight=None,
-            dimensions=None,
-        )
+    def _resolve_category_from_url(self, url: str) -> str | None:
+        """Extract whydud category slug from URL path."""
+        path = url.split("?")[0].lower()
+        for keyword, slug in KEYWORD_CATEGORY_MAP.items():
+            if keyword in path:
+                return slug
+        return None

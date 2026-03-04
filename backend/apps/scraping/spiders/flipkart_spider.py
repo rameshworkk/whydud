@@ -1,34 +1,43 @@
-"""Flipkart spider — scrapes product listings, detail pages, prices, and offers.
+"""Flipkart spider — camoufox-based scraper for anti-bot bypass.
 
-Two-phase architecture:
-  Phase 1 — Listing pages (/search?q=...) use Playwright (React-rendered).
-            Includes block detection (403, 429, Access Denied).
-  Phase 2 — Product detail pages try PLAIN HTTP first.
-            Flipkart serves JSON-LD structured data in the initial HTML.
-            Only falls back to Playwright if JSON-LD is missing/incomplete.
+Architecture:
+  Flipkart is a React SPA with aggressive bot detection that blocks
+  Playwright Chromium with 500/403 errors.  Camoufox (anti-detection
+  Firefox patched at C++ level) bypasses these blocks.
 
-Strategy:
-  1. JSON-LD structured data (``<script type="application/ld+json">``) is the
-     primary source for title, price, brand, rating, images, availability, and
-     seller.  Flipkart reliably includes schema.org Product markup.
-  2. CSS/XPath fallbacks extract the same data when JSON-LD is absent.
-  3. Specs, highlights, offers, MRP, and fulfilment info are CSS/XPath only.
+  Strategy:
+    Phase 1: Listing pages (/search?q=...) via camoufox — React-rendered.
+    Phase 2: Product detail pages try PLAIN HTTP first (JSON-LD in HTML).
+             Falls back to camoufox if HTTP is blocked or data incomplete.
+
+  Data sources (priority order):
+    1. JSON-LD structured data — title, price, brand, rating, images
+    2. window.__INITIAL_STATE__ (Redux) — MRP, seller, variants, availability
+    3. CSS/XPath fallbacks — specs, highlights, offers, warranty
 
 Sprint 2, Week 5.
 """
+
+from __future__ import annotations
+
 import json
+import logging
 import os
 import random
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from urllib.parse import urlparse
 
 import scrapy
-from scrapy_playwright.page import PageMethod
+from scrapy import signals
+from scrapy.http import HtmlResponse, TextResponse
 
 from apps.scraping.items import ProductItem
 from .base_spider import BaseWhydudSpider
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -344,13 +353,196 @@ SEED_CATEGORY_URLS: list[tuple[str, int]] = [
 MAX_LISTING_PAGES = 5
 
 
-class FlipkartSpider(BaseWhydudSpider):
-    """Scrapes Flipkart with a two-phase approach.
+# ---------------------------------------------------------------------------
+# Camoufox downloader middleware
+# ---------------------------------------------------------------------------
 
-    Phase 1: Listing pages via Playwright (React-rendered, lazy-loaded cards).
-             Includes block detection for 403/429/Access Denied.
+
+class FlipkartCamoufoxMiddleware:
+    """Scrapy downloader middleware using camoufox (anti-detection Firefox).
+
+    Only intercepts requests with ``meta["camoufox"] = True``.
+    Manages a single persistent browser context with optional proxy.
+
+    CRITICAL: All camoufox/Playwright sync API calls MUST run on the SAME
+    dedicated thread.  Playwright's sync layer uses greenlets that are bound
+    to the OS thread that created them — dispatching to the default
+    ThreadPoolExecutor (which may pick *any* thread) causes
+    ``greenlet.error: Cannot switch to a different thread``.
+
+    Solution: a single-worker ``ThreadPoolExecutor`` pins every browser
+    operation to one thread for the lifetime of the spider.
+    """
+
+    def __init__(self) -> None:
+        import concurrent.futures
+
+        self._context = None
+        self._camoufox_cm = None
+        self._request_count = 0
+        self._success_count = 0
+        self._fail_count = 0
+        # Single-thread executor — all camoufox ops are serialised here.
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="camoufox"
+        )
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        middleware = cls()
+        middleware._crawler = crawler
+        crawler.signals.connect(middleware.spider_closed, signal=signals.spider_closed)
+        return middleware
+
+    # -- proxy helpers -----------------------------------------------------
+
+    @staticmethod
+    def _get_proxy() -> dict | None:
+        """Read the first proxy from SCRAPING_PROXY_LIST env var."""
+        proxy_list = os.environ.get("SCRAPING_PROXY_LIST", "").strip()
+        if not proxy_list:
+            return None
+        first = proxy_list.split(",")[0].strip()
+        if not first:
+            return None
+        parsed = urlparse(first)
+        if not parsed.hostname or not parsed.port:
+            return None
+        proxy: dict = {"server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"}
+        if parsed.username:
+            proxy["username"] = parsed.username
+        if parsed.password:
+            proxy["password"] = parsed.password
+        return proxy
+
+    # -- browser lifecycle -------------------------------------------------
+
+    def _ensure_browser(self) -> None:
+        """Start camoufox browser (called ONLY on the dedicated worker thread)."""
+        if self._context is not None:
+            return
+
+        import asyncio
+        import sys
+
+        if sys.platform == "win32":
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+        from camoufox.sync_api import Camoufox
+
+        proxy = self._get_proxy()
+        self._camoufox_cm = Camoufox(
+            headless=True,
+            proxy=proxy,
+            geoip=bool(proxy),
+            block_images=True,
+            block_webrtc=True,
+            os="windows",
+            i_know_what_im_doing=True,
+        )
+        self._context = self._camoufox_cm.__enter__()
+        logger.info(
+            f"Camoufox browser started for Flipkart (proxy={'yes' if proxy else 'no'})"
+        )
+
+    def _fetch_page(
+        self, url: str, wait_ms: int, wait_selector: str | None = None
+    ) -> tuple[int, bytes]:
+        """Render a page with camoufox (runs on the dedicated worker thread).
+
+        Because the executor has max_workers=1, calls are automatically
+        serialised and always execute on the same OS thread — no greenlet
+        cross-thread switches can occur.
+        """
+        self._ensure_browser()
+        page = self._context.new_page()
+        try:
+            resp = page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            status = resp.status if resp else 200
+
+            # Wait for a specific element (e.g. product links on listings)
+            if wait_selector:
+                try:
+                    page.wait_for_selector(wait_selector, timeout=15000)
+                except Exception:
+                    pass  # Proceed anyway — data may still be in HTML
+
+            page.wait_for_timeout(wait_ms)
+            content = page.content()
+            return status, content.encode("utf-8")
+        finally:
+            page.close()
+
+    def _close_browser(self) -> None:
+        """Shut down camoufox (runs on the dedicated worker thread)."""
+        if self._camoufox_cm is not None:
+            self._camoufox_cm.__exit__(None, None, None)
+
+    # -- Scrapy middleware hooks --------------------------------------------
+
+    async def process_request(self, request, spider=None):
+        """Intercept requests flagged with meta['camoufox'] = True."""
+        if not request.meta.get("camoufox"):
+            return None
+
+        self._request_count += 1
+        wait_ms = request.meta.get("camoufox_wait_ms", 5000)
+        wait_selector = request.meta.get("camoufox_wait_selector")
+
+        try:
+            import asyncio
+
+            loop = asyncio.get_event_loop()
+            status, body = await loop.run_in_executor(
+                self._executor, self._fetch_page, request.url, wait_ms, wait_selector
+            )
+            self._success_count += 1
+            return HtmlResponse(
+                url=request.url,
+                status=status,
+                body=body,
+                request=request,
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            self._fail_count += 1
+            logger.warning(f"Camoufox request failed for {request.url[:80]}: {exc}")
+            return HtmlResponse(
+                url=request.url,
+                status=503,
+                body=b"",
+                request=request,
+                encoding="utf-8",
+            )
+
+    def spider_closed(self, spider=None):
+        """Shut down camoufox browser cleanly on the dedicated thread."""
+        if self._context is not None:
+            try:
+                future = self._executor.submit(self._close_browser)
+                future.result(timeout=15)
+            except Exception as exc:
+                logger.warning(f"Error closing camoufox: {exc}")
+            self._context = None
+            self._camoufox_cm = None
+        self._executor.shutdown(wait=False)
+        logger.info(
+            f"Camoufox middleware closed — {self._request_count} requests "
+            f"({self._success_count} OK, {self._fail_count} failed)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Spider
+# ---------------------------------------------------------------------------
+
+
+class FlipkartSpider(BaseWhydudSpider):
+    """Scrapes Flipkart with camoufox (anti-detection Firefox).
+
+    Phase 1: Listing pages via camoufox (React-rendered, lazy-loaded cards).
     Phase 2: Product detail pages try plain HTTP first (JSON-LD is in raw HTML).
-             Falls back to Playwright only when JSON-LD data is incomplete.
+             Falls back to camoufox only when HTTP is blocked or data incomplete.
 
     Spider arguments (passed via ``-a``):
       job_id        — UUID of a ScraperJob row.
@@ -367,13 +559,23 @@ class FlipkartSpider(BaseWhydudSpider):
 
     custom_settings = {
         **BaseWhydudSpider.custom_settings,
-        "DOWNLOAD_DELAY": 10,
-        "CONCURRENT_REQUESTS": 2,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
-        # Flipkart serves valid page content with 403 status codes (anti-bot
-        # challenge pages that still render product data via JS). Allow the
-        # spider to process these responses instead of discarding them.
+        "DOWNLOAD_DELAY": 3,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
+        "CONCURRENT_REQUESTS": 3,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
         "HTTPERROR_ALLOWED_CODES": [403],
+        # Disable scrapy_playwright — we use camoufox middleware instead.
+        "DOWNLOAD_HANDLERS": {
+            "https": "scrapy.core.downloader.handlers.http11.HTTP11DownloadHandler",
+            "http": "scrapy.core.downloader.handlers.http11.HTTP11DownloadHandler",
+        },
+        "DOWNLOADER_MIDDLEWARES": {
+            "scrapy.downloadermiddlewares.useragent.UserAgentMiddleware": None,
+            "scrapy.downloadermiddlewares.retry.RetryMiddleware": None,
+            "apps.scraping.middlewares.PlaywrightProxyMiddleware": None,
+            "apps.scraping.spiders.flipkart_spider.FlipkartCamoufoxMiddleware": 100,
+            "apps.scraping.middlewares.BackoffRetryMiddleware": 350,
+        },
     }
 
     # ------------------------------------------------------------------
@@ -396,23 +598,16 @@ class FlipkartSpider(BaseWhydudSpider):
             if category_urls
             else []
         )
-        # --max-pages CLI arg acts as a global override for ALL categories.
-        # When not set, per-category limits from SEED_CATEGORY_URLS are used.
         self._max_pages_override: int | None = int(max_pages) if max_pages else None
         self._save_html = save_html == "1"
         self._pages_followed: dict[str, int] = {}
-        self._max_pages_map: dict[str, int] = {}  # base_url → per-category limit
-
-        # Proxy mode: rotating proxies get fewer block retries (new IP each time)
-        self._is_rotating = (
-            os.environ.get("SCRAPING_PROXY_TYPE", "static").lower() == "rotating"
-        )
+        self._max_pages_map: dict[str, int] = {}
 
         # Scrape stats
         self._listing_pages_scraped: int = 0
         self._product_pages_scraped: int = 0
         self._product_pages_plain_http: int = 0
-        self._product_pages_playwright: int = 0
+        self._product_pages_camoufox: int = 0
         self._blocked_count: int = 0
         self._products_extracted: int = 0
 
@@ -426,30 +621,23 @@ class FlipkartSpider(BaseWhydudSpider):
             f"product_attempts={total}, "
             f"products_ok={self._product_pages_scraped} ({rate:.0f}%), "
             f"plain_http={self._product_pages_plain_http}, "
-            f"playwright={self._product_pages_playwright}, "
+            f"camoufox={self._product_pages_camoufox}, "
             f"blocked={self._blocked_count}, "
             f"failed={self.items_failed}"
         )
 
     # ------------------------------------------------------------------
-    # start_requests — Phase 1: Playwright for listings
+    # start_requests — Phase 1: camoufox for listings
     # ------------------------------------------------------------------
 
-    async def _apply_stealth(self, page, request):
-        """Apply playwright-stealth scripts to a page before navigation."""
-        try:
-            await self.STEALTH.apply_stealth_async(page)
-            # Increase timeouts for proxy connections (DataImpulse adds latency)
-            page.set_default_navigation_timeout(60000)  # 60s instead of 30s
-            page.set_default_timeout(45000)  # 45s for other operations
-        except Exception as e:
-            self.logger.warning(f"Stealth setup issue: {e}")
+    async def start(self):
+        """Emit camoufox requests for all category listing pages.
 
-    def start_requests(self):
-        """Emit Playwright requests for all category listing pages.
-
-        Flipkart listing pages are React-rendered — Playwright is required.
+        Flipkart listing pages are React-rendered — camoufox is required.
         Categories are shuffled to distribute load.
+
+        Uses async ``start()`` (Scrapy 2.13+) instead of deprecated
+        ``start_requests()``.
         """
         url_pairs = self._load_urls()
         random.shuffle(url_pairs)
@@ -458,39 +646,32 @@ class FlipkartSpider(BaseWhydudSpider):
             base = re.sub(r"[&?]page=\d+", "", url)
             self._max_pages_map[base] = max_pg
             self.logger.info(f"Queuing category ({max_pg} pages): {url}")
-            # Phase 1: Playwright for listing pages (React-rendered)
             yield scrapy.Request(
                 url,
                 callback=self.parse_listing_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
                 meta={
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "networkidle"),
-                    ],
+                    "camoufox": True,
+                    "camoufox_wait_ms": 8000,
+                    "camoufox_wait_selector": 'a[href*="/p/itm"]',
                     "category_slug": self._resolve_category_from_url(url),
                 },
                 dont_filter=True,
             )
 
-        self.logger.info(f"Queued {len(url_pairs)} categories (Playwright)")
+        self.logger.info(f"Queued {len(url_pairs)} categories (camoufox)")
 
     def _load_urls(self) -> list[tuple[str, int]]:
         """Resolve the list of (url, max_pages) pairs to crawl.
 
         Priority: CLI ``category_urls`` > ScraperJob > seed categories.
-        The ``--max-pages`` CLI arg overrides per-category limits globally.
-        Quick mode: when --max-pages <= 3, only use top N categories.
         """
         fallback = self._max_pages_override or MAX_LISTING_PAGES
 
-        # 1. Explicit CLI override — flat URLs, use global limit
         if self._category_urls:
             return [(u, fallback) for u in self._category_urls]
 
-        # 2. ScraperJob (from DB)
         if self.job_id:
             try:
                 from apps.scraping.models import ScraperJob
@@ -502,9 +683,7 @@ class FlipkartSpider(BaseWhydudSpider):
             except Exception as exc:
                 self.logger.warning(f"Could not load ScraperJob {self.job_id}: {exc}")
 
-        # 3. Fallback to seed categories
         if self._max_pages_override is not None:
-            # Quick mode: take top N categories only for small runs
             if self._max_pages_override <= 3:
                 self.logger.info(
                     f"Quick mode: using first {self.QUICK_MODE_CATEGORIES} categories "
@@ -512,9 +691,8 @@ class FlipkartSpider(BaseWhydudSpider):
                 )
                 return [
                     (url, self._max_pages_override)
-                    for url, _ in SEED_CATEGORY_URLS[:self.QUICK_MODE_CATEGORIES]
+                    for url, _ in SEED_CATEGORY_URLS[: self.QUICK_MODE_CATEGORIES]
                 ]
-            # CLI --max-pages overrides every per-category limit
             return [(url, self._max_pages_override) for url, _ in SEED_CATEGORY_URLS]
         return list(SEED_CATEGORY_URLS)
 
@@ -523,21 +701,24 @@ class FlipkartSpider(BaseWhydudSpider):
     # ------------------------------------------------------------------
 
     def parse_listing_page(self, response):
-        """Extract product links from a Flipkart search/category page.
-
-        Includes block detection for 403, 429, and Access Denied responses.
-        """
+        """Extract product links from a Flipkart search/category page."""
         self._listing_pages_scraped += 1
         block_retries = response.meta.get("block_retries", 0)
 
+        # Non-text response — can't parse with CSS/XPath
+        if not isinstance(response, TextResponse):
+            self.logger.warning(
+                f"Non-text listing response — skipping {response.url[:80]}"
+            )
+            self._blocked_count += 1
+            self.items_failed += 1
+            return
+
         # Block detection: 403/429 status codes
         if response.status in (403, 429):
-            # Check if it's a real block vs Flipkart's normal 403-with-content
             if not response.css('a[href*="/p/itm"]'):
                 self._blocked_count += 1
-
-                # With rotating proxies, retry once (next request gets new IP)
-                max_retries = 1 if self._is_rotating else 0
+                max_retries = 2  # camoufox is stealthier — allow 2 retries
                 if block_retries < max_retries:
                     self.logger.info(
                         f"Flipkart blocked listing HTTP {response.status} — "
@@ -549,11 +730,9 @@ class FlipkartSpider(BaseWhydudSpider):
                         errback=self.handle_error,
                         headers=self._make_headers(),
                         meta={
-                            "playwright": True,
-                            "playwright_page_init_callback": self._apply_stealth,
-                            "playwright_page_methods": [
-                                PageMethod("wait_for_load_state", "networkidle"),
-                            ],
+                            "camoufox": True,
+                            "camoufox_wait_ms": 10000,
+                            "camoufox_wait_selector": 'a[href*="/p/itm"]',
                             "category_slug": response.meta.get("category_slug"),
                             "block_retries": block_retries + 1,
                         },
@@ -570,24 +749,19 @@ class FlipkartSpider(BaseWhydudSpider):
 
         # Flipkart product links always contain /p/itm
         product_links = response.css('a[href*="/p/itm"]::attr(href)').getall()
-        # Deduplicate while preserving order
         seen: set[str] = set()
         unique_links: list[str] = []
         for link in product_links:
             full = response.urljoin(link)
-            # Normalise — strip query params and ref tags for dedup
             canon = full.split("?")[0]
             if canon not in seen:
                 seen.add(canon)
                 unique_links.append(full)
 
         if not unique_links:
-            # Check for Access Denied block
-            if "Access Denied" in response.text[:1000]:
+            if "Access Denied" in (response.text or "")[:1000]:
                 self._blocked_count += 1
-
-                # With rotating proxies, retry once
-                max_retries = 1 if self._is_rotating else 0
+                max_retries = 2
                 if block_retries < max_retries:
                     self.logger.info(
                         f"Flipkart Access Denied — retry {block_retries + 1}/{max_retries}: {response.url}"
@@ -598,11 +772,9 @@ class FlipkartSpider(BaseWhydudSpider):
                         errback=self.handle_error,
                         headers=self._make_headers(),
                         meta={
-                            "playwright": True,
-                            "playwright_page_init_callback": self._apply_stealth,
-                            "playwright_page_methods": [
-                                PageMethod("wait_for_load_state", "networkidle"),
-                            ],
+                            "camoufox": True,
+                            "camoufox_wait_ms": 10000,
+                            "camoufox_wait_selector": 'a[href*="/p/itm"]',
                             "category_slug": response.meta.get("category_slug"),
                             "block_retries": block_retries + 1,
                         },
@@ -619,11 +791,12 @@ class FlipkartSpider(BaseWhydudSpider):
 
         self.logger.info(f"Found {len(unique_links)} products on {response.url}")
 
-        category_slug = response.meta.get("category_slug") or self._resolve_category_from_url(response.url)
+        category_slug = response.meta.get(
+            "category_slug"
+        ) or self._resolve_category_from_url(response.url)
 
         for link in unique_links:
             # Phase 2: Try plain HTTP first for product pages
-            # No proxy_session — let middleware round-robin per request
             yield scrapy.Request(
                 link,
                 callback=self.parse_product_page,
@@ -632,7 +805,7 @@ class FlipkartSpider(BaseWhydudSpider):
                 meta={"category_slug": category_slug},
             )
 
-        # Pagination — follow "Next" link up to per-category max_pages
+        # Pagination
         base_url = re.sub(r"[&?]page=\d+", "", response.url)
         pages_so_far = self._pages_followed.get(base_url, 1)
         max_for_category = self._max_pages_map.get(base_url, MAX_LISTING_PAGES)
@@ -640,18 +813,15 @@ class FlipkartSpider(BaseWhydudSpider):
             next_link = self._find_next_page(response)
             if next_link:
                 self._pages_followed[base_url] = pages_so_far + 1
-                # Stay in Playwright for next listing page
                 yield scrapy.Request(
                     response.urljoin(next_link),
                     callback=self.parse_listing_page,
                     errback=self.handle_error,
                     headers=self._make_headers(),
                     meta={
-                        "playwright": True,
-                        "playwright_page_init_callback": self._apply_stealth,
-                        "playwright_page_methods": [
-                            PageMethod("wait_for_load_state", "networkidle"),
-                        ],
+                        "camoufox": True,
+                        "camoufox_wait_ms": 8000,
+                        "camoufox_wait_selector": 'a[href*="/p/itm"]',
                         "category_slug": category_slug,
                     },
                 )
@@ -659,62 +829,72 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _find_next_page(response) -> str | None:
         """Locate the "Next" pagination link."""
-        # Flipkart uses <nav> with numbered + next links
         for a in response.css("nav a"):
             text = a.css("::text").get("").strip().lower()
             if text == "next":
                 return a.attrib.get("href")
-        # Fallback: look for an anchor whose span contains "Next"
         nav_link = response.xpath(
             '//a[.//span[contains(text(),"Next")]]/@href'
         ).get()
         return nav_link
 
     # ------------------------------------------------------------------
-    # Phase 2: Product detail page (plain HTTP first → Playwright fallback)
+    # Phase 2: Product detail page (plain HTTP first → camoufox fallback)
     # ------------------------------------------------------------------
 
     def parse_product_page(self, response):
         """Extract product data — tries plain HTTP + JSON-LD first.
 
-        If JSON-LD has title + price → sufficient, no Playwright needed.
-        If incomplete and this was plain HTTP → retry with Playwright.
-        If this was already Playwright → extract whatever we can.
+        If JSON-LD has title + price → sufficient, no camoufox needed.
+        If incomplete and this was plain HTTP → retry with camoufox.
+        If this was already camoufox → extract whatever we can.
         """
         self._product_pages_scraped += 1
+        is_camoufox = response.meta.get("camoufox", False)
 
-        # Check middleware's CAPTCHA flag first (rotating proxy already detected it)
-        if response.meta.get("_rotating_proxy_captcha"):
-            self._captcha_count = getattr(self, "_captcha_count", 0) + 1
-            self.items_failed += 1
-            self.logger.debug(
-                f"CAPTCHA flagged by proxy middleware — skipping {response.url[:60]}"
-            )
-            return
-
-        is_playwright = response.meta.get("playwright", False)
-
-        if is_playwright:
-            self._product_pages_playwright += 1
+        if is_camoufox:
+            self._product_pages_camoufox += 1
         else:
             self._product_pages_plain_http += 1
 
-        # Block detection
-        if response.status in (403, 429) and not is_playwright:
-            # Plain HTTP got blocked — promote to Playwright
-            self.logger.info(f"HTTP {response.status} on product page — promoting to Playwright: {response.url}")
+        # Non-text response (binary/bot-detection page) — promote to camoufox
+        if not isinstance(response, TextResponse):
+            if not is_camoufox:
+                self.logger.info(
+                    f"Non-text response — promoting to camoufox: {response.url[:80]}"
+                )
+                yield scrapy.Request(
+                    response.url,
+                    callback=self.parse_product_page,
+                    errback=self.handle_error,
+                    headers=self._make_headers(),
+                    meta={
+                        "camoufox": True,
+                        "camoufox_wait_ms": 5000,
+                        "category_slug": response.meta.get("category_slug"),
+                    },
+                    dont_filter=True,
+                )
+                return
+            self.logger.warning(
+                f"Non-text response even with camoufox — skipping {response.url[:80]}"
+            )
+            self.items_failed += 1
+            return
+
+        # Block detection: HTTP 403/429 on plain HTTP → promote to camoufox
+        if response.status in (403, 429) and not is_camoufox:
+            self.logger.info(
+                f"HTTP {response.status} on product page — promoting to camoufox: {response.url}"
+            )
             yield scrapy.Request(
                 response.url,
                 callback=self.parse_product_page,
                 errback=self.handle_error,
                 headers=self._make_headers(),
                 meta={
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"},
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "domcontentloaded"),
-                    ],
+                    "camoufox": True,
+                    "camoufox_wait_ms": 5000,
                     "category_slug": response.meta.get("category_slug"),
                 },
                 dont_filter=True,
@@ -727,10 +907,9 @@ class FlipkartSpider(BaseWhydudSpider):
             self.items_failed += 1
             return
 
-        # Parse JSON-LD once — used by many extractors
         ld_json = self._parse_json_ld(response)
+        initial_state = self._parse_initial_state(response)
 
-        # Check if we have enough data from plain HTML + JSON-LD
         has_title = bool(
             (ld_json and ld_json.get("name"))
             or response.css("span.VU-ZEz::text").get()
@@ -738,20 +917,20 @@ class FlipkartSpider(BaseWhydudSpider):
         )
         has_price = bool(
             (ld_json and ld_json.get("offers"))
+            or (initial_state and initial_state.get("ppd", {}).get("finalPrice"))
             or response.css("div._30jeq3::text").get()
             or response.css("div.Nx9bqj::text").get()
         )
 
         if has_title and has_price:
-            # Success — extract from HTML + JSON-LD
             yield from self._build_item(response, fpid, ld_json)
             return
 
-        # Insufficient data — if plain HTTP, retry with Playwright
-        if not is_playwright:
+        # Insufficient data — if plain HTTP, retry with camoufox
+        if not is_camoufox:
             self.logger.info(
                 f"Incomplete data for FPID {fpid} (title={has_title}, price={has_price}) "
-                f"— promoting to Playwright"
+                f"— promoting to camoufox"
             )
             yield scrapy.Request(
                 response.url,
@@ -759,23 +938,21 @@ class FlipkartSpider(BaseWhydudSpider):
                 errback=self.handle_error,
                 headers=self._make_headers(),
                 meta={
-                    "playwright": True,
-                    "playwright_page_init_callback": self._apply_stealth,
-                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"},
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_load_state", "domcontentloaded"),
-                    ],
+                    "camoufox": True,
+                    "camoufox_wait_ms": 5000,
                     "category_slug": response.meta.get("category_slug"),
                 },
                 dont_filter=True,
             )
             return
 
-        # Already Playwright — extract whatever we can
+        # Already camoufox — extract whatever we can
         yield from self._build_item(response, fpid, ld_json)
 
     def _build_item(self, response, fpid: str, ld_json: dict | None):
-        """Build and yield a ProductItem from HTML + JSON-LD data."""
+        """Build and yield a ProductItem from HTML + JSON-LD + __INITIAL_STATE__."""
+        initial_state = self._parse_initial_state(response)
+
         title = self._extract_title(response, ld_json)
         if not title:
             self.logger.warning(f"No title found for FPID {fpid}")
@@ -791,35 +968,45 @@ class FlipkartSpider(BaseWhydudSpider):
         item["external_id"] = fpid
         item["url"] = self._canonical_url(response.url, fpid)
         item["title"] = title
-        item["brand"] = self._extract_brand(response, ld_json)
-        item["price"] = self._extract_price(response, ld_json)
-        item["mrp"] = self._extract_mrp(response)
+        item["brand"] = self._extract_brand(response, ld_json, initial_state)
+        item["price"] = self._extract_price(response, ld_json, initial_state)
+        item["mrp"] = self._extract_mrp(response, initial_state)
         item["images"] = self._extract_images(response, ld_json)
         item["rating"] = self._extract_rating(response, ld_json)
         item["review_count"] = self._extract_review_count(response, ld_json)
         item["specs"] = self._extract_specs(response)
-        item["seller_name"] = self._extract_seller(response, ld_json)
+        item["seller_name"] = self._extract_seller(response, ld_json, initial_state)
         item["seller_rating"] = self._extract_seller_rating(response)
-        item["in_stock"] = self._extract_availability(response, ld_json)
+        item["in_stock"] = self._extract_availability(response, ld_json, initial_state)
         item["fulfilled_by"] = self._extract_fulfilled_by(response)
         item["category_slug"] = response.meta.get("category_slug")
         item["about_bullets"] = self._extract_highlights(response)
         item["offer_details"] = self._extract_offers(response)
         item["raw_html_path"] = raw_html_path
 
-        # Extended fields — comprehensive product info
+        # Extended fields
         item["description"] = self._extract_description(response, ld_json)
         item["warranty"] = self._extract_warranty(response)
         item["delivery_info"] = self._extract_delivery_info(response)
-        item["return_policy"] = self._extract_return_policy(response)
+        item["return_policy"] = self._extract_return_policy(response, initial_state)
         item["breadcrumbs"] = self._extract_breadcrumbs(response)
-        item["variant_options"] = self._extract_variants(response)
+        item["variant_options"] = self._extract_variants(response, initial_state)
         specs = item["specs"]
-        item["country_of_origin"] = self._extract_from_specs(specs, ["Country of Origin", "country of origin", "Country Of Origin"])
-        item["manufacturer"] = self._extract_from_specs(specs, ["Manufacturer", "manufacturer"])
-        item["model_number"] = self._extract_from_specs(specs, ["Model Number", "Model Name", "model number"])
-        item["weight"] = self._extract_from_specs(specs, ["Weight", "Net Weight", "weight", "Product Weight"])
-        item["dimensions"] = self._extract_from_specs(specs, ["Dimensions", "Product Dimensions", "dimensions"])
+        item["country_of_origin"] = self._extract_from_specs(
+            specs, ["Country of Origin", "country of origin", "Country Of Origin"]
+        )
+        item["manufacturer"] = self._extract_from_specs(
+            specs, ["Manufacturer", "manufacturer"]
+        )
+        item["model_number"] = self._extract_from_specs(
+            specs, ["Model Number", "Model Name", "model number"]
+        )
+        item["weight"] = self._extract_from_specs(
+            specs, ["Weight", "Net Weight", "weight", "Product Weight"]
+        )
+        item["dimensions"] = self._extract_from_specs(
+            specs, ["Dimensions", "Product Dimensions", "dimensions"]
+        )
 
         self.items_scraped += 1
         self._products_extracted += 1
@@ -832,13 +1019,14 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _parse_json_ld(response) -> dict | None:
         """Extract the first schema.org Product JSON-LD block from the page."""
-        for script in response.css('script[type="application/ld+json"]::text').getall():
+        for script in response.css(
+            'script[type="application/ld+json"]::text'
+        ).getall():
             try:
                 data = json.loads(script)
             except (json.JSONDecodeError, ValueError):
                 continue
 
-            # Might be a single object or an array
             if isinstance(data, list):
                 for obj in data:
                     if isinstance(obj, dict) and obj.get("@type") == "Product":
@@ -846,10 +1034,64 @@ class FlipkartSpider(BaseWhydudSpider):
             elif isinstance(data, dict):
                 if data.get("@type") == "Product":
                     return data
-                # Sometimes nested inside @graph
                 for obj in data.get("@graph", []):
                     if isinstance(obj, dict) and obj.get("@type") == "Product":
                         return obj
+        return None
+
+    # ------------------------------------------------------------------
+    # __INITIAL_STATE__ extraction (Flipkart's Redux state)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_initial_state(response) -> dict | None:
+        """Extract product summary info (psi) from window.__INITIAL_STATE__.
+
+        Uses json.JSONDecoder.raw_decode for robust parsing — handles
+        the large embedded JSON blob even when followed by arbitrary JS.
+
+        Returns a dict with keys like:
+          ppd: {fsp, finalPrice, mrp, ...}
+          bd: brand name
+          pls: {sellerId, availabilityStatus, listingId, ...}
+          swa: [{attributeValue, attributeName}, ...]  (variants)
+          pi: {returnPolicy, isCODAvailable, isNoCostEmi}
+        Or None if not found.
+        """
+        try:
+            text = response.text
+        except Exception:
+            return None
+
+        marker = "window.__INITIAL_STATE__"
+        idx = text.find(marker)
+        if idx < 0:
+            return None
+
+        eq_idx = text.find("=", idx)
+        if eq_idx < 0:
+            return None
+        json_start = text.find("{", eq_idx)
+        if json_start < 0:
+            return None
+
+        try:
+            decoder = json.JSONDecoder()
+            state, _ = decoder.raw_decode(text, json_start)
+            psi = (
+                state.get("pageDataV4", {})
+                .get("page", {})
+                .get("pageData", {})
+                .get("pageContext", {})
+                .get("fdpEventTracking", {})
+                .get("events", {})
+                .get("psi", {})
+            )
+            if psi:
+                return psi
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            pass
+
         return None
 
     # ------------------------------------------------------------------
@@ -858,17 +1100,10 @@ class FlipkartSpider(BaseWhydudSpider):
 
     @staticmethod
     def _extract_fpid(response) -> str | None:
-        """Extract Flipkart Product ID (FPID) from URL.
-
-        Handles URL patterns:
-          /product-name/p/itmXXXX             (standard)
-          /product-name/p/itmXXXX?pid=XXXX    (with tracking)
-          /dl/product-name/p/itmXXXX          (deep link)
-        """
+        """Extract Flipkart Product ID (FPID) from URL."""
         match = FPID_RE.search(response.url)
         if match:
             return match.group(1)
-        # Fallback: look for pid parameter in URL query
         if "pid=" in response.url:
             pid = response.url.split("pid=")[-1].split("&")[0]
             if pid:
@@ -878,19 +1113,16 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _extract_title(response, ld_json: dict | None) -> str | None:
         """Extract product title."""
-        # JSON-LD
         if ld_json and ld_json.get("name"):
             return ld_json["name"].strip()
-        # CSS fallbacks — Flipkart class names change, try multiple patterns
         for sel in [
-            "span.VU-ZEz::text",       # Common product title class
-            "h1._6EBuvT span::text",    # Alternative wrapper
-            "h1 span.B_NuCI::text",     # Another variant
+            "span.VU-ZEz::text",
+            "h1._6EBuvT span::text",
+            "h1 span.B_NuCI::text",
         ]:
             text = response.css(sel).get()
             if text and text.strip():
                 return text.strip()
-        # XPath: first h1 or large span in the product info column
         title = response.xpath(
             '//div[contains(@class,"aMaAEs") or contains(@class,"hGSR34")]'
             '//span[string-length(text()) > 10]/text()'
@@ -898,29 +1130,32 @@ class FlipkartSpider(BaseWhydudSpider):
         return title.strip() if title else None
 
     @staticmethod
-    def _extract_brand(response, ld_json: dict | None) -> str | None:
-        """Extract brand name."""
-        # JSON-LD
+    def _extract_brand(
+        response, ld_json: dict | None, initial_state: dict | None = None
+    ) -> str | None:
+        """Extract brand name from JSON-LD, __INITIAL_STATE__, or CSS fallback."""
         if ld_json:
             brand_obj = ld_json.get("brand")
             if isinstance(brand_obj, dict) and brand_obj.get("name"):
                 return brand_obj["name"].strip()
             if isinstance(brand_obj, str) and brand_obj.strip():
                 return brand_obj.strip()
-        # CSS: breadcrumb often contains brand
-        breadcrumbs = response.css("div._1MR4o5 a::text, div._2whKao a::text").getall()
+        if initial_state and initial_state.get("bd"):
+            return str(initial_state["bd"]).strip()
+        breadcrumbs = response.css(
+            "div._1MR4o5 a::text, div._2whKao a::text"
+        ).getall()
         if len(breadcrumbs) >= 3:
-            # Breadcrumb pattern: Home > Category > Brand > ...
             return breadcrumbs[2].strip()
-        # XPath: Specs table sometimes has "Brand"
         brand = response.xpath(
             '//td[text()="Brand" or text()="brand"]/following-sibling::td//text()'
         ).get()
         return brand.strip() if brand else None
 
-    def _extract_price(self, response, ld_json: dict | None) -> Decimal | None:
+    def _extract_price(
+        self, response, ld_json: dict | None, initial_state: dict | None = None
+    ) -> Decimal | None:
         """Extract current sale price in paisa."""
-        # JSON-LD offers
         if ld_json:
             offers = ld_json.get("offers")
             if isinstance(offers, dict):
@@ -933,11 +1168,22 @@ class FlipkartSpider(BaseWhydudSpider):
                     if price is not None:
                         return price
 
-        # CSS fallbacks
+        if initial_state:
+            ppd = initial_state.get("ppd", {})
+            for key in ("finalPrice", "fsp"):
+                raw = ppd.get(key)
+                if raw is not None:
+                    try:
+                        rupees = Decimal(str(raw))
+                        if rupees > 0:
+                            return rupees * 100
+                    except (InvalidOperation, ValueError):
+                        pass
+
         for sel in [
-            "div._30jeq3::text",         # Common sale price class
-            "div._16Jk6d::text",          # Alternative
-            "div.Nx9bqj::text",           # Newer variant
+            "div._30jeq3::text",
+            "div._16Jk6d::text",
+            "div.Nx9bqj::text",
             "div.hl05eU div.Nx9bqj::text",
         ]:
             text = response.css(sel).get()
@@ -945,28 +1191,36 @@ class FlipkartSpider(BaseWhydudSpider):
             if price is not None:
                 return price
 
-        # XPath: look for the first ₹ price near the buy button area
         price_text = response.xpath(
             '//div[contains(@class,"CEmi") or contains(@class,"_30jeq")]//text()'
         ).get()
         return self._parse_price_text(price_text)
 
-    def _extract_mrp(self, response) -> Decimal | None:
-        """Extract MRP (strike-through price) in paisa.
+    def _extract_mrp(
+        self, response, initial_state: dict | None = None
+    ) -> Decimal | None:
+        """Extract MRP (strike-through price) in paisa."""
+        if initial_state:
+            ppd = initial_state.get("ppd", {})
+            raw = ppd.get("mrp")
+            if raw is not None:
+                try:
+                    rupees = Decimal(str(raw))
+                    if rupees > 0:
+                        return rupees * 100
+                except (InvalidOperation, ValueError):
+                    pass
 
-        JSON-LD only contains the sale price, so MRP is always from CSS.
-        """
         for sel in [
-            "div._3I9_wc::text",          # Common MRP class (strike-through)
-            "div._2p6lqe::text",           # Alternative
-            "div.yRaY8j::text",            # Newer variant
+            "div._3I9_wc::text",
+            "div._2p6lqe::text",
+            "div.yRaY8j::text",
         ]:
             text = response.css(sel).get()
             price = self._parse_price_text(text)
             if price is not None:
                 return price
 
-        # XPath: strike-through or "M.R.P" text
         mrp_text = response.xpath(
             '//span[contains(@class,"_2p6lq") or contains(@style,"line-through")]//text()'
         ).get()
@@ -976,7 +1230,6 @@ class FlipkartSpider(BaseWhydudSpider):
         """Extract all product image URLs (high resolution)."""
         images: list[str] = []
 
-        # JSON-LD images
         if ld_json:
             img = ld_json.get("image")
             if isinstance(img, str) and img:
@@ -986,7 +1239,6 @@ class FlipkartSpider(BaseWhydudSpider):
                     if isinstance(i, str) and i:
                         images.append(self._high_res_image(i))
 
-        # CSS: image gallery thumbnails → upgrade to full size
         for img_url in response.css(
             'div._3kidJX img::attr(src), '
             'ul._1-n69S li img::attr(src), '
@@ -999,7 +1251,6 @@ class FlipkartSpider(BaseWhydudSpider):
             if full not in images:
                 images.append(full)
 
-        # Fallback: any large product image on the page
         if not images:
             for img_url in response.css('img[src*="rukminim"]::attr(src)').getall():
                 full = self._high_res_image(img_url)
@@ -1011,7 +1262,6 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _extract_rating(response, ld_json: dict | None) -> Decimal | None:
         """Extract average star rating (0-5)."""
-        # JSON-LD
         if ld_json:
             agg = ld_json.get("aggregateRating")
             if isinstance(agg, dict):
@@ -1022,11 +1272,10 @@ class FlipkartSpider(BaseWhydudSpider):
                     except InvalidOperation:
                         pass
 
-        # CSS fallbacks
         for sel in [
-            "div._3LWZlK::text",       # Common rating badge
-            "span._1lRcqv::text",       # Alternative
-            "div.XQDdHH::text",         # Newer variant
+            "div._3LWZlK::text",
+            "span._1lRcqv::text",
+            "div.XQDdHH::text",
         ]:
             text = response.css(sel).get()
             if text:
@@ -1041,7 +1290,6 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _extract_review_count(response, ld_json: dict | None) -> int | None:
         """Extract total number of ratings/reviews."""
-        # JSON-LD
         if ld_json:
             agg = ld_json.get("aggregateRating")
             if isinstance(agg, dict):
@@ -1053,7 +1301,6 @@ class FlipkartSpider(BaseWhydudSpider):
                         except (ValueError, TypeError):
                             pass
 
-        # CSS: rating/review count text (e.g., "1,234 Ratings & 567 Reviews")
         for sel in [
             "span._2_R_DZ::text",
             "span._13vcW::text",
@@ -1064,7 +1311,6 @@ class FlipkartSpider(BaseWhydudSpider):
                 if match:
                     return int(match.group(1).replace(",", ""))
 
-        # XPath fallback
         count_text = response.xpath(
             '//*[contains(text(),"Rating") and contains(text(),"Review")]//text()'
         ).get()
@@ -1075,9 +1321,10 @@ class FlipkartSpider(BaseWhydudSpider):
         return None
 
     @staticmethod
-    def _extract_seller(response, ld_json: dict | None) -> str | None:
-        """Extract seller name."""
-        # JSON-LD offers.seller
+    def _extract_seller(
+        response, ld_json: dict | None, initial_state: dict | None = None
+    ) -> str | None:
+        """Extract seller name from JSON-LD, __INITIAL_STATE__, or CSS."""
         if ld_json:
             offers = ld_json.get("offers")
             if isinstance(offers, dict):
@@ -1090,7 +1337,12 @@ class FlipkartSpider(BaseWhydudSpider):
                     if isinstance(seller, dict) and seller.get("name"):
                         return seller["name"].strip()
 
-        # CSS: seller info section
+        if initial_state:
+            pls = initial_state.get("pls", {})
+            seller_id = pls.get("sellerId")
+            if seller_id:
+                return seller_id
+
         for sel in [
             "#sellerName span span::text",
             "div._3enH3G span span::text",
@@ -1107,7 +1359,7 @@ class FlipkartSpider(BaseWhydudSpider):
         """Extract seller rating (shown next to seller name)."""
         for sel in [
             "#sellerName div._3LWZlK::text",
-            'div._3enH3G div._3LWZlK::text',
+            "div._3enH3G div._3LWZlK::text",
         ]:
             text = response.css(sel).get()
             if text:
@@ -1120,9 +1372,10 @@ class FlipkartSpider(BaseWhydudSpider):
         return None
 
     @staticmethod
-    def _extract_availability(response, ld_json: dict | None) -> bool:
+    def _extract_availability(
+        response, ld_json: dict | None, initial_state: dict | None = None
+    ) -> bool:
         """Determine if product is in stock."""
-        # JSON-LD
         if ld_json:
             offers = ld_json.get("offers")
             if isinstance(offers, dict):
@@ -1137,37 +1390,40 @@ class FlipkartSpider(BaseWhydudSpider):
                     if "InStock" in avail:
                         return True
 
-        # CSS: check for "Coming Soon" or "Sold Out" or "Currently Unavailable"
-        page_text = " ".join(response.css("div._16FRp0::text, div._1dVbu9::text").getall()).lower()
-        if "sold out" in page_text or "coming soon" in page_text or "currently unavailable" in page_text:
+        if initial_state:
+            pls = initial_state.get("pls", {})
+            status = pls.get("availabilityStatus", "")
+            if status == "IN_STOCK":
+                return True
+            if status in ("OUT_OF_STOCK", "UNAVAILABLE"):
+                return False
+            nb = initial_state.get("nb", {})
+            if nb.get("isNonBuyable"):
+                return False
+
+        page_text = " ".join(
+            response.css("div._16FRp0::text, div._1dVbu9::text").getall()
+        ).lower()
+        if (
+            "sold out" in page_text
+            or "coming soon" in page_text
+            or "currently unavailable" in page_text
+        ):
             return False
 
-        # If there's an "Add to Cart" or "Buy Now" button, assume in stock
-        buy_btn = response.css(
-            'button._2KpZ6l::text, button.QqFHMw::text, '
-            'button[class*="BUY"]::text, button[class*="add-to-cart"]::text'
-        ).getall()
-        for btn_text in buy_btn:
-            lower = btn_text.strip().lower()
-            if "buy now" in lower or "add to cart" in lower:
-                return True
-
-        # Default: if we found a price, assume in stock
         return bool(response.css("div._30jeq3, div.Nx9bqj"))
 
     @staticmethod
     def _extract_fulfilled_by(response) -> str | None:
         """Extract fulfilment info — Flipkart Assured or seller-fulfilled."""
-        # Flipkart Assured badge
         assured = response.css(
-            'img[src*="fa_62673a"]::attr(src), '  # Assured icon URL pattern
+            'img[src*="fa_62673a"]::attr(src), '
             'img[alt*="Assured"]::attr(alt), '
             'img[src*="fk-advantage"]::attr(src)'
         ).get()
         if assured:
             return "Flipkart"
 
-        # XPath: look for "Flipkart Assured" text
         assured_text = response.xpath(
             '//*[contains(text(),"Flipkart Assured") or contains(text(),"F-Assured")]'
         ).get()
@@ -1178,29 +1434,26 @@ class FlipkartSpider(BaseWhydudSpider):
 
     @staticmethod
     def _extract_specs(response) -> dict[str, str]:
-        """Extract technical specifications as key-value pairs.
-
-        Flipkart organises specs in tables under a "Specifications" heading,
-        grouped by category (General, Display, Performance, etc.).
-        """
+        """Extract technical specifications as key-value pairs."""
         specs: dict[str, str] = {}
 
-        # Primary: specification tables (multiple grouped tables)
         for row in response.css("div._14cfVK tr, table._14cfVK tr"):
             key = row.css("td:first-child::text").get("").strip()
-            val = row.css("td:last-child li::text, td:last-child::text").get("").strip()
+            val = row.css("td:last-child li::text, td:last-child::text").get(
+                ""
+            ).strip()
             if key and val and key != val:
                 specs[key] = val
 
-        # Alternative class names
         if not specs:
-            for row in response.css("div._3k-BhJ tr, table.G4BRas tr, table._3npaEj tr"):
+            for row in response.css(
+                "div._3k-BhJ tr, table.G4BRas tr, table._3npaEj tr"
+            ):
                 key = row.css("td:first-child::text").get("").strip()
                 val = row.css("td:last-child::text").get("").strip()
                 if key and val and key != val:
                     specs[key] = val
 
-        # XPath fallback: look for the "Specifications" section
         if not specs:
             spec_rows = response.xpath(
                 '//div[.//text()="Specifications" or .//text()="SPECIFICATIONS"]'
@@ -1219,7 +1472,6 @@ class FlipkartSpider(BaseWhydudSpider):
         """Extract product highlights / key features bullet points."""
         bullets: list[str] = []
 
-        # Primary selectors
         for sel in [
             "div._2418kt li::text",
             "div.xFVion li::text",
@@ -1230,7 +1482,6 @@ class FlipkartSpider(BaseWhydudSpider):
                 bullets = [b.strip() for b in items if b.strip()]
                 break
 
-        # XPath fallback: section headed "Highlights"
         if not bullets:
             items = response.xpath(
                 '//div[.//text()="Highlights" or .//text()="HIGHLIGHTS"]'
@@ -1245,11 +1496,10 @@ class FlipkartSpider(BaseWhydudSpider):
         """Extract bank offers, exchange offers, and EMI details."""
         offers: list[dict] = []
 
-        # Offer cards on Flipkart — usually in a specific section
         offer_selectors = [
-            "div._3Ht4Hy li",      # Offer list items
-            "div.DaXhCo li",       # Alternative
-            "div._16eBzU li",      # Another variant
+            "div._3Ht4Hy li",
+            "div.DaXhCo li",
+            "div._16eBzU li",
         ]
 
         offer_elements = []
@@ -1284,7 +1534,6 @@ class FlipkartSpider(BaseWhydudSpider):
 
             offers.append(offer)
 
-        # XPath fallback: look for "Available offers" section
         if not offers:
             offer_items = response.xpath(
                 '//div[.//text()="Available offers" or .//text()="Available Offers"]'
@@ -1309,22 +1558,21 @@ class FlipkartSpider(BaseWhydudSpider):
         return offers[:10]
 
     # ------------------------------------------------------------------
-    # Extended field extraction (description, warranty, delivery, etc.)
+    # Extended field extraction
     # ------------------------------------------------------------------
 
     @staticmethod
     def _extract_description(response, ld_json: dict | None) -> str | None:
         """Extract product description from JSON-LD or page content."""
-        # JSON-LD description
         if ld_json and ld_json.get("description"):
             return ld_json["description"].strip()[:5000]
 
-        # Flipkart product description section
-        desc_parts = response.css("div._1mXcCf p::text, div._1mXcCf::text").getall()
+        desc_parts = response.css(
+            "div._1mXcCf p::text, div._1mXcCf::text"
+        ).getall()
         if desc_parts:
             return " ".join(t.strip() for t in desc_parts if t.strip())[:5000]
 
-        # Fallback: look for "Description" section
         desc = response.xpath(
             '//div[.//text()="Description" or .//text()="DESCRIPTION"]'
             '//following-sibling::div[1]//text()'
@@ -1337,13 +1585,15 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _extract_warranty(response) -> str | None:
         """Extract warranty information from specs or dedicated section."""
-        # Check specs table for warranty
-        for row in response.css("div._14cfVK tr, table._14cfVK tr, div._3k-BhJ tr"):
+        for row in response.css(
+            "div._14cfVK tr, table._14cfVK tr, div._3k-BhJ tr"
+        ):
             key = row.css("td:first-child::text").get("").strip().lower()
             if "warranty" in key:
-                return row.css("td:last-child::text, td:last-child li::text").get("").strip()
+                return row.css(
+                    "td:last-child::text, td:last-child li::text"
+                ).get("").strip()
 
-        # XPath fallback for "Warranty" section
         warranty = response.xpath(
             '//td[contains(translate(text(),"WARRANTY","warranty"),"warranty")]'
             '/following-sibling::td//text()'
@@ -1353,7 +1603,6 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _extract_delivery_info(response) -> str | None:
         """Extract delivery estimate."""
-        # Flipkart delivery info near pincode section
         for sel in [
             "div._3XINqE::text",
             "div._1TPvmH span::text",
@@ -1365,9 +1614,18 @@ class FlipkartSpider(BaseWhydudSpider):
         return None
 
     @staticmethod
-    def _extract_return_policy(response) -> str | None:
+    def _extract_return_policy(
+        response, initial_state: dict | None = None
+    ) -> str | None:
         """Extract return policy text."""
-        # Flipkart return policy is often in the offers/services section
+        if initial_state:
+            pi = initial_state.get("pi", {})
+            rp = pi.get("returnPolicy")
+            if rp and isinstance(rp, str):
+                readable = rp.replace("_", " ").replace("action", "").strip()
+                if readable:
+                    return readable
+
         for sel in [
             "div._3n2dkM::text",
             "div._2TnXLR span::text",
@@ -1376,7 +1634,6 @@ class FlipkartSpider(BaseWhydudSpider):
             if text and text.strip() and "return" in text.lower():
                 return text.strip()
 
-        # XPath for return policy section
         ret = response.xpath(
             '//*[contains(text(),"Return Policy") or contains(text(),"day replacement")]//text()'
         ).get()
@@ -1385,19 +1642,35 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _extract_breadcrumbs(response) -> list[str]:
         """Extract navigation breadcrumb trail."""
-        crumbs = response.css("div._1MR4o5 a::text, div._2whKao a::text").getall()
+        crumbs = response.css(
+            "div._1MR4o5 a::text, div._2whKao a::text"
+        ).getall()
         if crumbs:
             return [c.strip() for c in crumbs if c.strip()]
-        # XPath fallback
-        crumbs = response.xpath('//div[contains(@class,"breadcrumb")]//a//text()').getall()
+        crumbs = response.xpath(
+            '//div[contains(@class,"breadcrumb")]//a//text()'
+        ).getall()
         return [c.strip() for c in crumbs if c.strip()]
 
     @staticmethod
-    def _extract_variants(response) -> list[dict]:
+    def _extract_variants(
+        response, initial_state: dict | None = None
+    ) -> list[dict]:
         """Extract available variant options (color, RAM, storage, etc.)."""
         variants: list[dict] = []
 
-        # Flipkart variant selectors (thumbnail swatches and text options)
+        if initial_state:
+            swa = initial_state.get("swa", [])
+            if isinstance(swa, list):
+                for attr in swa:
+                    if isinstance(attr, dict):
+                        name = attr.get("attributeName", "")
+                        value = attr.get("attributeValue", "")
+                        if name and value:
+                            variants.append({"name": name, "value": value})
+                if variants:
+                    return variants[:30]
+
         for swatch in response.css("div._3V2wfe a, div._1fGeJ5 a, a._2GcJMG"):
             label = swatch.css("::attr(title)").get() or swatch.css("::text").get()
             href = swatch.css("::attr(href)").get()
@@ -1406,12 +1679,6 @@ class FlipkartSpider(BaseWhydudSpider):
                 if href and "/p/" in href:
                     variant["url"] = response.urljoin(href)
                 variants.append(variant)
-
-        # ID-based variant buttons (RAM/Storage selection)
-        for btn in response.css("div._3V2wfe div, li._1fGeJ5"):
-            text = btn.css("a::text").get() or btn.css("::text").get()
-            if text and text.strip():
-                variants.append({"value": text.strip()})
 
         return variants[:30]
 
@@ -1435,10 +1702,10 @@ class FlipkartSpider(BaseWhydudSpider):
     @staticmethod
     def _resolve_category_from_url(url: str) -> str | None:
         """Extract the Whydud category slug from a Flipkart search URL."""
-        from urllib.parse import parse_qs, urlparse
+        from urllib.parse import parse_qs, urlparse as _urlparse
 
         try:
-            parsed = urlparse(url)
+            parsed = _urlparse(url)
             params = parse_qs(parsed.query)
             keyword = params.get("q", [None])[0]
             if keyword:
@@ -1454,10 +1721,7 @@ class FlipkartSpider(BaseWhydudSpider):
 
     @staticmethod
     def _json_ld_price(offer: dict) -> Decimal | None:
-        """Extract price in paisa from a JSON-LD Offer object.
-
-        JSON-LD prices are in rupees (e.g., ``"price": "24999"`` or ``24999``).
-        """
+        """Extract price in paisa from a JSON-LD Offer object."""
         raw = offer.get("price")
         if raw is None:
             return None
@@ -1465,7 +1729,7 @@ class FlipkartSpider(BaseWhydudSpider):
             rupees = Decimal(str(raw).replace(",", ""))
             if rupees <= 0:
                 return None
-            return rupees * 100  # → paisa
+            return rupees * 100
         except (InvalidOperation, ValueError):
             return None
 
@@ -1491,22 +1755,16 @@ class FlipkartSpider(BaseWhydudSpider):
 
     @staticmethod
     def _high_res_image(url: str) -> str:
-        """Upgrade Flipkart image URL to high resolution.
-
-        Flipkart image URLs (hosted on flixcart.com) contain a size segment
-        like ``/image/312/312/`` — replace with ``/image/832/832/`` for
-        higher resolution.
-        """
+        """Upgrade Flipkart image URL to high resolution."""
         return re.sub(r"/image/\d+/\d+/", "/image/832/832/", url)
 
     @staticmethod
     def _canonical_url(response_url: str, fpid: str) -> str:
-        """Build a clean canonical URL for the product.
-
-        Strips tracking params but keeps the product path and FPID.
-        """
-        # Extract just the path up to and including the FPID
-        match = re.search(r"(https://www\.flipkart\.com/.+/p/" + re.escape(fpid) + r")", response_url)
+        """Build a clean canonical URL for the product."""
+        match = re.search(
+            r"(https://www\.flipkart\.com/.+/p/" + re.escape(fpid) + r")",
+            response_url,
+        )
         if match:
             return match.group(1)
         return f"https://www.flipkart.com/product/p/{fpid}"

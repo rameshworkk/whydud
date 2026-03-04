@@ -35,11 +35,18 @@ REQUIRED_FIELDS = ("marketplace_slug", "external_id", "url", "title")
 class ValidationPipeline:
     """Drop ProductItems that lack required fields (skip ReviewItems)."""
 
-    def process_item(self, item, spider):
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipe = cls()
+        pipe._crawler = crawler
+        return pipe
+
+    def process_item(self, item):
         if isinstance(item, ReviewItem):
             return item  # ReviewItems validated by ReviewValidationPipeline
         missing = [f for f in REQUIRED_FIELDS if not item.get(f)]
         if missing:
+            spider = self._crawler.spider
             spider.items_failed = getattr(spider, "items_failed", 0) + 1
             raise DropItem(f"Missing required fields: {missing}")
         return item
@@ -52,7 +59,7 @@ class ValidationPipeline:
 class ReviewValidationPipeline:
     """Validates ReviewItems — drops if missing required fields."""
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
         if not isinstance(item, ReviewItem):
             return item  # Pass through ProductItems
         if not item.get("marketplace_slug") or not item.get("product_external_id"):
@@ -76,7 +83,7 @@ class NormalizationPipeline:
         r"^(visit the\s+|brand:\s*)", flags=re.IGNORECASE
     )
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
         # Title: collapse whitespace, strip
         if item.get("title"):
             item["title"] = self._WHITESPACE_RE.sub(" ", item["title"]).strip()
@@ -137,7 +144,13 @@ class ProductPipeline:
       5. Recompute Product.current_best_price across all its listings.
     """
 
-    def open_spider(self, spider):
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipe = cls()
+        pipe._crawler = crawler
+        return pipe
+
+    def open_spider(self):
         """Ensure Django is initialised (needed when Scrapy runs standalone)."""
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
         import django
@@ -145,7 +158,7 @@ class ProductPipeline:
         django.setup()
         logger.info("ProductPipeline: Django initialised")
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
         if isinstance(item, ReviewItem):
             return item  # ReviewItems handled by ReviewPersistencePipeline
 
@@ -171,7 +184,7 @@ class ProductPipeline:
             marketplace = Marketplace.objects.get(slug=item["marketplace_slug"])
         except Marketplace.DoesNotExist:
             logger.error(f"Marketplace '{item['marketplace_slug']}' not found — skipping item")
-            spider.items_failed = getattr(spider, "items_failed", 0) + 1
+            self._crawler.spider.items_failed = getattr(self._crawler.spider, "items_failed", 0) + 1
             raise DropItem(f"Unknown marketplace: {item['marketplace_slug']}")
 
         # ------- 2. Seller ------------------------------------------------
@@ -265,7 +278,7 @@ class ProductPipeline:
         update_canonical_product(product)
 
         # Track product ID for batch Meilisearch sync in close_spider
-        self._track_product(spider, str(product.id))
+        self._track_product(self._crawler.spider, str(product.id))
 
         return item
 
@@ -446,7 +459,13 @@ class ProductPipeline:
 class ReviewPersistencePipeline:
     """Persists ReviewItems to the Review model."""
 
-    def process_item(self, item, spider):
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipe = cls()
+        pipe._crawler = crawler
+        return pipe
+
+    def process_item(self, item):
         if not isinstance(item, ReviewItem):
             return item
 
@@ -521,7 +540,7 @@ class ReviewPersistencePipeline:
             variant_info=item.get("variant", "")[:300],
         )
 
-        spider.reviews_saved = getattr(spider, "reviews_saved", 0) + 1
+        self._crawler.spider.reviews_saved = getattr(self._crawler.spider, "reviews_saved", 0) + 1
         return item
 
 
@@ -537,11 +556,18 @@ class MeilisearchIndexPipeline:
     Per-item ``process_item`` is a no-op (batch is more efficient).
     """
 
-    def process_item(self, item, spider):
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipe = cls()
+        pipe._crawler = crawler
+        return pipe
+
+    def process_item(self, item):
         return item
 
-    def close_spider(self, spider):
+    def close_spider(self):
         """Sync all products from this spider run to Meilisearch."""
+        spider = self._crawler.spider
         _attr = getattr(ProductPipeline, "_product_ids_attr", "_synced_product_ids")
         product_ids = list(getattr(spider, _attr, set()))
         if not product_ids:
@@ -570,21 +596,30 @@ class SpiderStatsUpdatePipeline:
     Final update happens in close_spider.
     """
 
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipe = cls()
+        pipe._crawler = crawler
+        pipe._count = 0
+        pipe._last_update = 0
+        return pipe
+
     def __init__(self):
         self._count = 0
         self._last_update = 0
 
-    def process_item(self, item, spider):
+    def process_item(self, item):
         self._count += 1
         if self._count - self._last_update >= 50:
-            self._update_job(spider)
+            self._update_job()
             self._last_update = self._count
         return item
 
-    def close_spider(self, spider):
-        self._update_job(spider)
+    def close_spider(self):
+        self._update_job()
 
-    def _update_job(self, spider):
+    def _update_job(self):
+        spider = self._crawler.spider
         job_id = getattr(spider, "job_id", None)
         if not job_id:
             return

@@ -2175,3 +2175,347 @@ Built a **sitemap-based, HTTP-only** spider for JioMart (jiomart.com). JioMart's
 cd backend
 python -m apps.scraping.runner jiomart --max-pages 1
 ```
+
+---
+
+### 2026-03-03 — Tier 3 Playwright Spiders: Tata CLiQ, Croma, Meesho
+
+**Status:** Built (untested — needs live run with `--max-pages 1`)
+
+Built Playwright-based spiders for the three hardest-to-scrape Indian marketplaces. All use XHR/fetch interception as the primary extraction strategy, with DOM/JSON-LD/HTML fallbacks.
+
+#### Shared Architecture (all 3 spiders)
+- **XHR Interception**: `page.add_init_script()` patches `window.fetch` and `XMLHttpRequest.prototype` BEFORE page scripts load — captures all JSON API responses into `window.__whydud_xhr` array
+- **DOM Injection**: After page load, `PageMethod("evaluate")` serializes captured XHR data into a `<script id="__whydud_data">` element for Scrapy to parse
+- **DataImpulse Proxy**: `http://7be2cfc014934c04249e:dd4d0a314e025711@gw.dataimpulse.com:823` configured per-context
+- **2 Browser Contexts**: Round-robin rotation (`{name}_0`, `{name}_1`) for IP diversity
+- **playwright-stealth**: Applied via `self.STEALTH.apply_stealth_async(page)` in page init callback
+- **Extraction chain**: XHR API data → framework state (__NEXT_DATA__/__INITIAL_DATA__) → JSON-LD → HTML CSS selectors
+
+#### Tata CLiQ Spider (`tatacliq_spider.py`)
+- **Anti-bot**: Cloudflare Bot Management (`__cf_bm` cookie)
+- **Site type**: Pure SPA — every page returns `<div id="root">`, all data loaded via XHR
+- **Delays**: 5-10s between pages, `CONCURRENT_REQUESTS=2`
+- **XHR keys**: `/api/`, `/searchProducts`, `/product/`, `mplSearchResult`, `productDetails`
+- **Categories**: 16 seed categories covering electronics, fashion, home, beauty
+
+#### Croma Spider (`croma_spider.py`)
+- **Anti-bot**: Akamai Bot Manager (blocks ALL HTTP requests)
+- **Site type**: React SSR + SAP Hybris backend
+- **Strategy**: Homepage warm-up first (Akamai sensor challenge runs on first page load, sets `_abck` cookie), then category pages
+- **Delays**: 10-15s (Akamai rate-limits to ~5 req/min), `CONCURRENT_REQUESTS_PER_DOMAIN=1`
+- **XHR keys**: `/search`, `/products`, `hybris`, Hybris API responses with classifications/stockInfo
+- **Categories**: 39 seed categories (electronics-focused)
+
+#### Meesho Spider (`meesho_spider.py`)
+- **Anti-bot**: Akamai Bot Manager (most aggressive anti-bot of the three)
+- **Site type**: Next.js with empty `__next` div (data loaded entirely via API)
+- **Delays**: 7-12s, `CONCURRENT_REQUESTS=2`, `MAX_LISTING_PAGES=3` (conservative)
+- **XHR keys**: `catalogs`, `catalog_id`, `catalog_data`, `/api/`, `product`
+- **Categories**: 19 seed categories covering fashion, home, beauty, electronics
+
+#### Celery Beat Schedules (updated)
+| Spider | Schedule | IST |
+|--------|----------|-----|
+| tata-cliq | `crontab(minute=30, hour=6)` — 06:30 UTC | 12:00 IST |
+| croma | `crontab(minute=0, hour=8)` — 08:00 UTC | 13:30 IST |
+| meesho | `crontab(minute=0, hour=10)` — 10:00 UTC | 15:30 IST |
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/tatacliq_spider.py` | Complete rewrite — Playwright + XHR interception, Cloudflare bypass, DataImpulse proxy |
+| `apps/scraping/spiders/croma_spider.py` | Complete rewrite — Playwright-first with homepage warm-up, Akamai bypass, Hybris API extraction |
+| `apps/scraping/spiders/meesho_spider.py` | Complete rewrite — Playwright + XHR interception, Akamai bypass, Next.js API capture |
+| `whydud/celery.py` | Updated Beat schedules: tata-cliq 06:30 UTC, croma 08:00 UTC, meesho 10:00 UTC |
+
+#### Test Commands
+```
+cd backend
+python -m apps.scraping.runner tata_cliq --max-pages 1
+python -m apps.scraping.runner croma --max-pages 1
+python -m apps.scraping.runner meesho --max-pages 1
+```
+
+---
+
+### 2026-03-04 — TataCLiQ Spider: Live Testing & Fixes
+
+**Status:** Tested & Working
+
+Ran the TataCLiQ spider live and fixed 8 issues discovered during testing.
+
+#### Issues Found & Fixed
+
+1. **Middleware overriding spider's Playwright context** — `PlaywrightProxyMiddleware._process_rotating_request` overwrote `playwright_context` and `playwright_context_kwargs`, removing spider-specific settings like `bypass_csp: True`. Fix: Added `_skip_proxy_middleware` meta flag check in middleware's `process_request` and `process_response`.
+
+2. **SPA redirect to /404 not detected as block** — TataCLiQ's SPA client-side redirects to `/404` when bot-detected, but `_is_blocked` only checked HTTP status codes. Fix: Added URL pattern check for `/404`, title check for "page not found"/"404", gadget-clp redirect detection, and captcha body check (small pages only).
+
+3. **No homepage warmup** — Cloudflare Bot Management requires `__cf_bm` session cookie established first. Fix: Added homepage warmup visit in `start_requests` with `_after_warmup`/`_warmup_failed` callbacks.
+
+4. **Product page visits fail with ERR_PROXY_AUTH_UNSUPPORTED** — Individual product page requests through DataImpulse proxy failed with Chromium proxy auth errors. Fix: Eliminated product page visits entirely — extract all data directly from listing page XHR/DOM data.
+
+5. **Marketplace slug mismatch ('tata-cliq' vs 'tata_cliq')** — DB has `tata_cliq` (underscore), spider used `tata-cliq` (hyphen). Pipeline logged "Marketplace 'tata-cliq' not found — skipping item". Fix: Changed `MARKETPLACE_SLUG = "tata_cliq"`.
+
+6. **Pagination URL loses search query params** — `response.url.split("?")[0]` stripped the search text, producing `search/?page=1&size=40` instead of preserving `searchCategory=all&text=smartphones`. Fix: Rewrote pagination with `urllib.parse` to preserve all existing query params.
+
+7. **XHR capture missing Request object URLs** — `fetch()` calls using `new Request(url)` showed as empty string because capture JS only checked `typeof arguments[0] === 'string'`. Fix: Added fallbacks to check `a0.url` and `r.url`.
+
+8. **Generic search terms redirect to promo CLP pages** — Terms like "laptops", "television" redirect to `gadget-clp` promo page instead of search results. Fix: Updated seed queries to use brand-specific terms and reordered known-working queries first.
+
+#### Architecture Changes
+- **Listing-only extraction**: Spider no longer visits individual product pages. All data extracted from search page XHR (Hybris `searchab` API) or DOM fallback
+- **Proxy made optional**: Reads from `SCRAPING_PROXY_LIST` env var, works without proxy when empty (direct connections)
+- **XHR priority**: `_find_products_in_xhr` now prioritizes Hybris `/searchab/` API responses
+- **Wait time increased**: From 5-10s to 8-15s to ensure XHR responses are captured
+
+#### Test Results (`--max-pages 1`)
+- **40 items scraped** — from 1 successful search query ("smartphones")
+- **100% extraction rate** — 40/40 product attempts succeeded
+- **0 failures** — zero items dropped by pipeline
+- **XHR-only extraction** — all 40 products from Hybris searchab API, 0 from DOM fallback
+- Products created in DB with brand matching working (Sony, OnePlus, Apple, Realme, CMF)
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/tatacliq_spider.py` | Major rework — listing-only extraction, homepage warmup, optional proxy, XHR priority, brand-specific search queries, pagination fix |
+| `apps/scraping/middlewares.py` | Added `_skip_proxy_middleware` meta flag check in `PlaywrightProxyMiddleware.process_request` and `process_response` |
+
+#### Run Command
+```
+cd backend
+python -m apps.scraping.runner tata_cliq --max-pages 1
+```
+
+---
+
+### 2026-03-04 — Wave 2 Spider Setup: Giva + FirstCry Marketplace Seed Data & Giva Spider
+
+#### What Was Done
+
+**Prompt 0: Marketplace Seed Data**
+- Added **Giva** (`slug: giva`, `base_url: https://www.giva.co`) and **FirstCry** (`slug: firstcry`, `base_url: https://www.firstcry.com`) to `seed_marketplaces.py`
+- Both set to `scraper_status: development` (not active in daily scrape rotation)
+- Updated marketplace count: 12 -> 14
+- Registered both spiders in `ScrapingConfig.spider_map()` in `common/app_settings.py`
+- Fixed slug migration logic in `seed_marketplaces.py` to handle case where both old (`amazon_in`) and new (`amazon-in`) slugs exist (UniqueViolation crash)
+- Fixed Unicode arrow character in seed command output (cp1252 encoding crash on Windows)
+
+**Prompt 1A: Giva Spider (Shopify JSON API)**
+- Created `apps/scraping/spiders/giva_spider.py` -- pure HTTP spider, no Playwright
+- **Architecture change**: Giva's `/collections/{slug}.json` endpoints are broken (404/empty). Switched to single-phase `/products.json` approach which returns all ~5,000 products across 20 pages (250 per page)
+- Prices converted from rupees to paisa (* 100)
+- Deduplication via `_seen_ids` set
+- Structured tag parsing: Giva uses `Key_Value` format tags (e.g., `Metal_925 Silver`, `Color_Rose Gold`, `plating_Rose Gold Micron`)
+- Specs extracted: Material, Color, Plating, Stone, Weight, Lock Type, Length, Thickness, Hallmark, Category, Style, SKU
+- Fixed brotli encoding issue: removed `br` from Accept-Encoding (brotli package not installed)
+- Settings: 0.5s download delay, 2 concurrent requests, 3 retries
+
+#### Test Results (`--max-pages 1`)
+- **250 items scraped** from 1 API page (250 per page)
+- **100% success rate** -- 250/250, 0 failures
+- **206 canonical products** created in DB (some shared across collections)
+- **250 product listings** with correct marketplace linkage
+- **Price snapshots** recorded in TimescaleDB hypertable
+- **Meilisearch** synced: 206 products indexed
+- **~20 seconds** total runtime for 250 products
+- Prices verified: Rs 2,499 = 249900 paisa (correct conversion)
+- Specs quality: Material (925 Silver), Color (Rose Gold), Plating, Hallmark (BIS 925), Weight, etc.
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/products/management/commands/seed_marketplaces.py` | Added Giva + FirstCry entries (14 total), fixed slug migration UniqueViolation, fixed Unicode cp1252 crash |
+| `common/app_settings.py` | Added `giva` and `firstcry` to `ScrapingConfig.spider_map()` |
+| `apps/scraping/spiders/giva_spider.py` | **NEW** -- Giva spider using Shopify /products.json API, single-phase, structured tag parsing |
+
+#### Run Command
+```
+cd backend
+python -m apps.scraping.runner giva --max-pages 1
+```
+
+### 2026-03-04 — FirstCry Spider (Prompt 2B: Baby & Kids Marketplace)
+
+#### What Was Done
+
+**Reconnaissance Findings** (deviated from dev plan assumptions):
+- **Server:** Apache/2.4.54 with OpenSSL — no Cloudflare/Akamai protection
+- **Category URLs broken:** `/baby-care`, `/toys`, `/diapers` all return 404
+- **Search works:** `/search?q={query}` redirects to listing pages with SSR HTML
+- **Product URL pattern:** `/brand/slug/PID/product-detail` (NOT `.html` as dev plan assumed)
+- **JSON-LD broken:** Present on product pages but empty/unparseable
+- **Goldmine:** `CurrentProductDetailJSON` embedded JS variable contains full product data (name, MRP, discount%, images, age groups, colors, sizes)
+- **Pagination:** `?page=N` works, 20 products per page
+
+**Spider Implementation** (`apps/scraping/spiders/firstcry_spider.py` — ~580 lines):
+- `FirstCryCurlCffiMiddleware` — curl_cffi Session with `impersonate="chrome131"`, intercepts all firstcry.com requests
+- `FirstCrySpider` inherits `BaseWhydudSpider`
+- **Discovery:** 24 seed search queries across 8 categories (baby care, feeding, clothing, toys, gear, nursery, footwear, school supplies)
+- **Listing extraction:** CSS `div.li_inner_block a[href*='/product-detail']` for product links, pagination via `?page=N`
+- **Detail extraction:** `CurrentProductDetailJSON` via `json.JSONDecoder().raw_decode()`, plus `avg_rating` and `totalreview` JS variables
+- **Price calculation:** `selling_price = mrp * (100 - Dis) / 100`, then * 100 for paisa
+- **Image extraction:** Semicolon-separated `Img` field → CDN URLs (`cdn.fcglcdn.com/brainbees/images/products/438x531/`)
+- **Age groups:** Parsed from `hashAgeG` (e.g., `["0#0-3 Months", "1#3-6 Months"]`) → stored in variant_options
+- **Colors:** Parsed from `hashCols` (e.g., `["10#Multi Color"]`) → stored in variant_options
+- **Settings:** `DOWNLOAD_DELAY=1.5s`, `CONCURRENT_REQUESTS=4`, `CONCURRENT_REQUESTS_PER_DOMAIN=3`
+
+**Celery Beat Schedule:**
+- Added `scrape-firstcry-daily` at 09:30 UTC (15:00 IST) in `whydud/celery.py`
+
+**Documentation:**
+- Updated `docs/Scraping-logic.md`: file structure, spider count (15), Section 5 entry, anti-bot table, Celery Beat schedule table
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/firstcry_spider.py` | **NEW** — FirstCry spider with curl_cffi middleware, search-based discovery, CurrentProductDetailJSON extraction |
+| `whydud/celery.py` | Added `scrape-firstcry-daily` Beat schedule entry (09:30 UTC) |
+| `docs/Scraping-logic.md` | Added FirstCry to file structure, spider count, Section 5 reference, anti-bot table, Beat schedule table |
+
+#### Run Command
+```
+cd backend
+python -m apps.scraping.runner firstcry --max-pages 1
+```
+
+---
+
+### 2026-03-04 — AJIO Spider (Prompt 3A recon + 3B build)
+
+**Reconnaissance (Prompt 3A):**
+- Created `apps/scraping/spiders/test_ajio_recon.py` — probed AJIO site structure
+- **All HTTP blocked:** Akamai Bot Manager returns 403 Access Denied on every endpoint
+- Internal APIs (`/api/category`, `/api/search`, `/api/p/`) all blocked
+- `curl_cffi` Chrome 131 TLS impersonation insufficient — Akamai detects it
+- `_abck` cookies and `edgesuite.net` error references confirm Akamai infrastructure
+- **Difficulty revised: 8/10** (up from initial 7/10 estimate)
+
+**Spider Build (Prompt 3B):**
+- Created `apps/scraping/spiders/ajio_spider.py` — full Playwright spider
+- **Architecture:** Full Playwright + stealth for BOTH listing and product phases (no HTTP fallback possible)
+- **Listing phase:** Playwright → `networkidle` → extract `a[href*="/p/"]` links → `?page=N` pagination
+- **Detail phase:** Playwright → `domcontentloaded` → JSON-LD first → CSS selector fallback
+- **Block detection:** Checks for 403 + "Access Denied" text, retries once with rotating proxy
+- **10 seed categories:** men-t-shirts, men-shirts, men-jeans, women-kurtas, women-tops, women-dresses, men-shoes, women-shoes, bags-wallets, watches
+- **Settings:** `DOWNLOAD_DELAY=5s`, `CONCURRENT_REQUESTS=1`, serial only (Akamai rate-sensitive)
+- **Note:** Residential proxy rotation likely required for production success rates — Akamai blocks datacenter IPs aggressively
+
+**Marketplace seed data:** AJIO already exists in `seed_marketplaces.py` (slug: `ajio`)
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/ajio_spider.py` | **NEW** — AJIO spider with full Playwright, Akamai block detection, JSON-LD + CSS extraction |
+| `apps/scraping/spiders/test_ajio_recon.py` | **NEW** — AJIO recon script (curl_cffi probes, API endpoint checks, Akamai detection) |
+
+#### Run Command
+```
+cd backend
+python -m apps.scraping.runner ajio --max-pages 1
+```
+
+### 2026-03-04 — AJIO Spider Rewrite: Camoufox (replaces Playwright)
+
+**Problem:** Playwright + stealth + residential proxy got 100% blocked by Akamai Bot Manager (all HTTP 403).
+
+**Solution:** Rewrote the AJIO spider to use **camoufox** (anti-detection Firefox), following the same pattern as `meesho_spider.py`.
+
+**Test results:**
+- **Run 1:** Camoufox bypassed Akamai successfully — HTTP 200 on all 3 listing pages, 45 products extracted per page, first product detail page loaded with full data (title, brand, price ₹2399, MRP ₹3999, images, variants)
+- **Run 2:** Akamai rate-limited the IP after Run 1's heavy activity — all 403s. Expected behavior; production needs IP rotation between runs.
+
+**Key changes:**
+- Replaced Playwright with `AJIOCamoufoxMiddleware` (in-file downloader middleware)
+- Disabled Playwright download handlers, added camoufox at middleware priority 100
+- Added threading lock to serialise camoufox page operations (prevents greenlet cross-thread errors)
+- Fixed specs to use comma-separated strings instead of lists (pipeline compatibility)
+- Filtered empty variant values
+- Removed all Playwright-specific code (PageMethod, stealth callbacks, playwright meta)
+
+**Architecture:** Same as Meesho spider — camoufox sync API runs in thread pool via `run_in_executor`, single browser context persists for cookie/session continuity.
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/ajio_spider.py` | **REWRITTEN** — Camoufox-based spider replacing Playwright |
+
+### 2026-03-04 — Myntra Spider Rewrite: Camoufox (replaces Playwright)
+
+**Problem:** Myntra (Flipkart Group) uses PerimeterX / HUMAN anti-bot. Playwright with stealth gets blocked. Recon confirmed PerimeterX markers and SPA rendering requirement.
+
+**Solution:** Rewrote `myntra_spider.py` to use **camoufox** (anti-detection Firefox), following the proven pattern from AJIO and Meesho spiders.
+
+**Architecture:**
+- `MyntraCamoufoxMiddleware` — in-file downloader middleware, camoufox sync API in thread pool via `run_in_executor`
+- Threading lock serialises page operations (prevents greenlet cross-thread errors)
+- Single browser context persists across requests for cookie/session continuity
+- Disabled Playwright download handlers; camoufox at middleware priority 100
+
+**Two-phase extraction:**
+- **Phase 1 (Listing):** Category pages (`/{category}?p={n}`) via camoufox → extract product URLs from `window.__myx` state (primary) or DOM product cards (fallback)
+- **Phase 2 (Detail):** Product pages via camoufox → 4-strategy extraction cascade:
+  1. `window.__myx` embedded JSON (pdpData, productData) — richest source
+  2. JSON-LD structured data (`schema.org/Product`)
+  3. DOM parsing (CSS selectors: `h1.pdp-title`, `span.pdp-price`, `.image-grid-image`, etc.)
+  4. Listing data fallback (from Phase 1 state extraction)
+
+**Features:**
+- 26 seed category URLs (men/women fashion, footwear, accessories, beauty)
+- Full ProductItem extraction: title, brand, price/MRP (paisa), images, rating, review_count, specs (articleAttributes), sizes, colours/variants, breadcrumbs, delivery info, return policy
+- PerimeterX-specific block detection (px-captcha, Press & Hold, window._pxAppId markers)
+- Quick mode: `--max-pages 3` uses first 5 categories only
+- Spider args: `job_id`, `category_urls`, `urls` (direct product URLs), `max_pages`
+- Custom settings: DOWNLOAD_DELAY=5, CONCURRENT_REQUESTS=1, RETRY_TIMES=2
+
+**Test command:**
+```bash
+cd backend
+python -m apps.scraping.runner myntra --max-pages 1
+```
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/myntra_spider.py` | **REWRITTEN** — Camoufox-based spider replacing Playwright version |
+
+### 2026-03-04 — Flipkart Spider: Fix All Errors (greenlet crash, brotli, deprecations)
+
+**Problem:** Flipkart spider was crashing with multiple errors:
+1. **CRITICAL — `greenlet.error: Cannot switch to a different thread`:** Camoufox middleware used `run_in_executor(None, ...)` which dispatches to *different* threads from the default pool. Playwright's sync API uses greenlets bound to a single OS thread — concurrent requests from different threads crashed.
+2. **`brotli` not installed:** Flipkart serves brotli-compressed (`br`) responses. Without the package, `HttpCompressionMiddleware` couldn't decode them → responses arrived as non-text → every product page unnecessarily fell back to camoufox, which then also crashed from the greenlet issue.
+3. **LeakWarning:** Camoufox warned about `block_images` causing WAF detection issues.
+4. **Scrapy 2.14 deprecation warnings:** `start_requests()` deprecated for `start()`, and all middleware/pipeline methods with explicit `spider` argument deprecated.
+
+**Fixes:**
+1. **Greenlet fix:** Replaced default `ThreadPoolExecutor` with a **single-worker executor** (`max_workers=1, thread_name_prefix="camoufox"`). All browser operations now serialised on the same OS thread — no greenlet cross-thread switches possible. Removed the `threading.Lock` (no longer needed).
+2. **Brotli:** Added `brotli>=1.1.0` to `requirements/base.txt` and installed. Product detail pages now decode properly via plain HTTP — massively reduces camoufox fallback load.
+3. **LeakWarning:** Added `i_know_what_im_doing=True` to Camoufox constructor.
+4. **Deprecation fixes:**
+   - `FlipkartSpider.start_requests()` → `async def start()` (Scrapy 2.13+ async generator)
+   - `FlipkartCamoufoxMiddleware.process_request(request, spider)` → `process_request(request, spider=None)`
+   - `BackoffRetryMiddleware` — removed `spider` from `process_response`/`process_exception`, added `from_crawler()`, uses module `logger` instead of `spider.logger`
+   - All 7 pipelines updated: added `from_crawler()` class method, removed `spider` arg from `process_item`/`open_spider`/`close_spider`, access spider via `self._crawler.spider`
+
+**Test command:**
+```bash
+cd backend
+python -m apps.scraping.runner flipkart --max-pages 1
+```
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/scraping/spiders/flipkart_spider.py` | Fixed greenlet crash (single-thread executor), `start()` async, `i_know_what_im_doing`, removed unused `threading` import |
+| `apps/scraping/middlewares.py` | `BackoffRetryMiddleware` — removed `spider` arg, added `from_crawler()` |
+| `apps/scraping/pipelines.py` | All 7 pipelines updated: `from_crawler()` + removed `spider` arg from all methods |
+| `requirements/base.txt` | Added `brotli>=1.1.0` |

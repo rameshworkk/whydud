@@ -303,6 +303,9 @@ class PlaywrightProxyMiddleware:
             return None
         if self.pool.is_empty:
             return None
+        # Spider manages its own proxy context — don't override.
+        if request.meta.get("_skip_proxy_middleware"):
+            return None
 
         if self._is_rotating:
             return self._process_rotating_request(request)
@@ -384,6 +387,8 @@ class PlaywrightProxyMiddleware:
     # ------------------------------------------------------------------
 
     def process_response(self, request, response, spider):
+        if request.meta.get("_skip_proxy_middleware"):
+            return response
         context_name = request.meta.get("_proxy_context_name")
         if not context_name:
             return response
@@ -633,7 +638,13 @@ class BackoffRetryMiddleware(RetryMiddleware):
     BACKOFF_MAX = 60
     BACKOFF_JITTER = 0.3
 
-    def _add_backoff(self, result, request, spider):
+    @classmethod
+    def from_crawler(cls, crawler):
+        mw = super().from_crawler(crawler)
+        mw._crawler = crawler
+        return mw
+
+    def _add_backoff(self, result, request):
         from scrapy.http import Request as ScrapyRequest
 
         if not isinstance(result, ScrapyRequest):
@@ -642,15 +653,15 @@ class BackoffRetryMiddleware(RetryMiddleware):
         delay = min(self.BACKOFF_BASE * (2 ** retries), self.BACKOFF_MAX)
         delay *= 1 + random.uniform(-self.BACKOFF_JITTER, self.BACKOFF_JITTER)
         result.meta["download_delay"] = delay
-        spider.logger.info(
+        logger.info(
             f"Backoff retry #{retries}: {delay:.1f}s delay for {request.url[:80]}"
         )
         return result
 
-    def process_response(self, request, response, spider):
-        result = super().process_response(request, response, spider)
-        return self._add_backoff(result, request, spider)
+    def process_response(self, request, response):
+        result = super().process_response(request, response)
+        return self._add_backoff(result, request)
 
-    def process_exception(self, request, exception, spider):
-        result = super().process_exception(request, exception, spider)
-        return self._add_backoff(result, request, spider)
+    def process_exception(self, request, exception):
+        result = super().process_exception(request, exception)
+        return self._add_backoff(result, request)

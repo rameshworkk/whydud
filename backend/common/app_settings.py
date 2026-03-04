@@ -146,6 +146,8 @@ class ScrapingConfig:
                 "myntra": "myntra",
                 "ajio": "ajio",
                 "meesho": "meesho",
+                "giva": "giva",
+                "firstcry": "firstcry",
             },
         )
 

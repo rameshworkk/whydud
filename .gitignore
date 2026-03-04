@@ -69,3 +69,9 @@ backend/data/
 
 # ---- Postgres replication (old SQL with hardcoded password — replaced by .sh) ----
 docker/postgres/init-replication.sql
+docs/WHydud vs Buyhatke.md
+.gitignore
+error logs/ajio logs.py
+docs/WHydud vs Buyhatke.txt
+error logs/flipkart spider logs.txt
+error logs/meesho docker logs.ini
