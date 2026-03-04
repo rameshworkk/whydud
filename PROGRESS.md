@@ -2986,3 +2986,35 @@ Users can set which marketplaces they want to see. When preferences are set, pro
   - Empty state when no listings match preferences
   - Recalculates best price from filtered set
   - All new props optional — backwards-compatible
+
+---
+
+### 2026-03-05 — Whydud URL Prefix Feature
+
+**Feature:** Users prepend `whydud.` to any shopping URL to instantly research a product on Whydud.
+Example: `whydud.amazon.in/dp/B0CZLQT2GG` → Caddy 302 redirects to `whydud.com/lookup?url=https://amazon.in/dp/B0CZLQT2GG` → frontend parses URL, calls API lookup → redirects to `/product/{slug}`.
+
+**Backend — ProductLookupView:**
+- `backend/apps/products/views.py`: Added `ProductLookupView` — `GET /api/v1/products/lookup?marketplace={slug}&external_id={id}`
+  - Queries `ProductListing` by marketplace slug + external_id
+  - Returns product slug + title on match, 404 if not found
+  - `AllowAny` permissions (public endpoint)
+- `backend/apps/products/urls.py`: Added `products/lookup/` route (before `products/<slug>/` to avoid collision)
+
+**Frontend — Lookup Page:**
+- `frontend/src/app/(public)/lookup/page.tsx`: Client component with full URL-prefix flow
+  - Reads `?url=` query parameter
+  - Parses URL to extract marketplace slug via domain mapping (14 marketplaces, with/without www)
+  - Extracts external product ID using marketplace-specific regex patterns (Amazon ASIN, Flipkart FPID, etc.)
+  - Calls `productsApi.lookup()` → redirects to `/product/{slug}` on match
+  - Shows "Product not found" card with search fallback and original URL link on miss
+  - Shows "Unsupported URL" card for unrecognized domains
+  - Shows "URL Prefix" explainer card when accessed without `?url=`
+- `frontend/src/lib/api/products.ts`: Added `productsApi.lookup()` method
+
+**Caddy — Subdomain Routing:**
+- `docker/Caddyfile`: Added 14 separate server blocks for `whydud.{marketplace}` subdomains
+  - Each redirects `whydud.{domain}{uri}` → `whydud.com/lookup?url=https://{domain}{uri}` (302)
+  - Uses `{uri}` (path + query string) to preserve full URL including query params
+  - Covers: Amazon.in, Flipkart, Myntra, Nykaa, Snapdeal, Croma, Reliance Digital, AJIO, Meesho, TataCLiQ, JioMart, Vijay Sales, FirstCry, Giva
+  - DNS requirement: wildcard CNAME `*.amazon.in`, `*.flipkart.com`, etc. pointing to whydud.com server, OR individual CNAME records per subdomain

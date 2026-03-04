@@ -822,3 +822,53 @@ class DeleteStockAlertView(APIView):
             return error_response("not_found", "Stock alert not found.", status=404)
         alert.delete()
         return success_response({"detail": "Stock alert removed."})
+
+
+# ---------------------------------------------------------------------------
+# Product Lookup (URL Prefix Feature)
+# ---------------------------------------------------------------------------
+
+
+class ProductLookupView(APIView):
+    """GET /api/v1/products/lookup?marketplace={slug}&external_id={id}
+
+    Looks up a product by its marketplace-specific external ID.
+    Used by the whydud.com URL prefix feature: users prepend whydud.com/
+    to any shopping URL to research a product.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        marketplace_slug = request.query_params.get("marketplace")
+        external_id = request.query_params.get("external_id")
+
+        if not marketplace_slug or not external_id:
+            return error_response(
+                "invalid_params",
+                "Both 'marketplace' and 'external_id' query params are required.",
+                status=400,
+            )
+
+        listing = (
+            ProductListing.objects.filter(
+                marketplace__slug=marketplace_slug,
+                external_id=external_id,
+            )
+            .select_related("product")
+            .first()
+        )
+
+        if not listing:
+            return error_response(
+                "not_found",
+                "Product not found in our database.",
+                status=404,
+            )
+
+        return success_response({
+            "slug": listing.product.slug,
+            "title": listing.product.title,
+            "marketplace": marketplace_slug,
+            "external_id": external_id,
+        })

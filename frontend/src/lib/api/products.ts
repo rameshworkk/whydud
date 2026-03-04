@@ -55,6 +55,13 @@ export const productsApi = {
     apiClient.get<ProductDetail[]>(`/api/v1/compare`, {
       params: { slugs: slugs.join(",") },
     }),
+
+  /** Lookup a product by marketplace slug + external ID (URL prefix feature) */
+  lookup: (marketplace: string, externalId: string) =>
+    apiClient.get<{ slug: string; title: string; marketplace: string; externalId: string }>(
+      "/api/v1/products/lookup",
+      { params: { marketplace, external_id: externalId } },
+    ),
 };
 
 export const clicksApi = {

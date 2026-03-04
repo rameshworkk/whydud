@@ -55,3 +55,71 @@ whydud.com, www.whydud.com {
         format json
     }
 }
+
+# ---------------------------------------------------------------------------
+# URL Prefix Feature: whydud.{marketplace-domain}
+#
+# Users prepend "whydud." to any shopping URL to research a product.
+# Example: whydud.amazon.in/dp/B0CZLQT2GG
+#        → 302 redirect to whydud.com/lookup?url=https://amazon.in/dp/B0CZLQT2GG
+#
+# DNS requirement: Add a wildcard CNAME *.whydud.com → whydud.com
+# or individual CNAME records per marketplace domain listed below.
+# Caddy will auto-provision TLS for each via Let's Encrypt.
+# ---------------------------------------------------------------------------
+
+whydud.amazon.in {
+    redir https://whydud.com/lookup?url=https://amazon.in{uri} 302
+}
+
+whydud.flipkart.com {
+    redir https://whydud.com/lookup?url=https://flipkart.com{uri} 302
+}
+
+whydud.myntra.com {
+    redir https://whydud.com/lookup?url=https://myntra.com{uri} 302
+}
+
+whydud.nykaa.com {
+    redir https://whydud.com/lookup?url=https://nykaa.com{uri} 302
+}
+
+whydud.snapdeal.com {
+    redir https://whydud.com/lookup?url=https://snapdeal.com{uri} 302
+}
+
+whydud.croma.com {
+    redir https://whydud.com/lookup?url=https://croma.com{uri} 302
+}
+
+whydud.reliancedigital.in {
+    redir https://whydud.com/lookup?url=https://reliancedigital.in{uri} 302
+}
+
+whydud.ajio.com {
+    redir https://whydud.com/lookup?url=https://ajio.com{uri} 302
+}
+
+whydud.meesho.com {
+    redir https://whydud.com/lookup?url=https://meesho.com{uri} 302
+}
+
+whydud.tatacliq.com {
+    redir https://whydud.com/lookup?url=https://tatacliq.com{uri} 302
+}
+
+whydud.jiomart.com {
+    redir https://whydud.com/lookup?url=https://jiomart.com{uri} 302
+}
+
+whydud.vijaysales.com {
+    redir https://whydud.com/lookup?url=https://vijaysales.com{uri} 302
+}
+
+whydud.firstcry.com {
+    redir https://whydud.com/lookup?url=https://firstcry.com{uri} 302
+}
+
+whydud.giva.co {
+    redir https://whydud.com/lookup?url=https://giva.co{uri} 302
+}
