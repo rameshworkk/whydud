@@ -2698,3 +2698,122 @@ Created `backend/scripts/test_all_spiders.sh` — a connectivity test script for
 | File | Change |
 |------|--------|
 | `backend/scripts/test_all_spiders.sh` | New file — production spider connectivity test script |
+
+---
+
+### Automated PostgreSQL Backups & System Health Check
+
+**Date:** 2026-03-04
+
+#### Backup System (`backend/scripts/backup.sh`)
+
+Automated PostgreSQL backup script with incremental strategy:
+
+- **pg_dump** with custom format (`-Fc`), excludes TimescaleDB internal schemas
+- **Incremental strategy:** Tracks row counts in time-series tables (`price_snapshots`, `dudscore_history`) via manifest file. Skips unchanged hypertable data on subsequent runs to save storage
+- **Compression:** gzip -9 on dump files
+- **S3 upload:** IDrive S3-compatible via rclone (fallback to AWS CLI). Configured via `RCLONE_S3_ENDPOINT`, `RCLONE_S3_ACCESS_KEY`, `RCLONE_S3_SECRET_KEY` env vars
+- **Retention:** 7 days local, 180 days remote
+- **Discord notifications:** Success/failure embeds via existing `DISCORD_WEBHOOK_URL`
+- **Cron:** Every 6 hours (`0 */6 * * *`) via dedicated `backup` container in docker-compose.primary.yml
+
+#### Health Check Command (`python manage.py health_check`)
+
+7-point system health check with `--json` output option:
+
+| Check | Pass Criteria |
+|-------|---------------|
+| PostgreSQL | Connected + reports 17 table counts (products, users, reviews, etc.) + DB size |
+| Redis | Connected + memory usage stats + key counts |
+| Meilisearch | `/health` returns 200 + document counts per index |
+| Celery Workers | At least 1 worker responding via `inspect.active()` + queue listing |
+| Scraper Recency | Per-marketplace last scrape < 48h ago (warn if some stale, fail if all stale) |
+| Disk Usage | < 80% pass, 80-90% warn, > 90% fail |
+| Last Backup | < 12h pass, 12-24h warn, > 24h fail |
+
+Exit code 1 if any critical check fails. Supports `--json` flag for machine-readable output.
+
+#### Configuration
+
+- `BackupConfig` added to `common/app_settings.py` (backup_dir, s3_bucket, retention days, max_backup_age_hours)
+- Backup container added to `docker-compose.primary.yml` with `backup_data` volume
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/scripts/backup.sh` | New — automated pg_dump + S3 upload + retention + Discord |
+| `backend/apps/accounts/management/commands/health_check.py` | New — 7-check system health command |
+| `backend/common/app_settings.py` | Added `BackupConfig` class |
+| `docker-compose.primary.yml` | Added `backup` service + `backup_data` volume |
+
+---
+
+### Write a Review — Backend API (2026-03-04)
+
+**Status:** ✅ Complete
+
+Implemented the Write a Review backend API per architecture.md §3 (US-3.6 through US-3.11) and §13.
+
+#### What Was Built
+
+**Service layer** (`backend/apps/reviews/services.py` — NEW):
+- `create_review(user, product, validated_data)` — central business logic
+- `_generate_content_hash()` — SHA-256 from body_positive + body_negative for duplicate detection
+- `_check_verified_purchase()` — validates purchase_platform against Marketplace slugs in DB
+- Queues `compute_dudscore` Celery task after review creation
+- Queues `award_points_task` for reviewer rewards
+
+**Serializer updates** (`backend/apps/reviews/serializers.py` — MODIFIED):
+- Added missing fields: `media`, `has_purchase_proof`, `purchase_proof_url`
+- Added `validate_title()` — enforces 5-200 character length
+- Added `validate_purchase_price_paid()` — must be > 0 if provided
+- Added `validate_media()` — validates array of `{url, type}` objects (image/video)
+- Moved creation logic from serializer's `create()` to `services.create_review()`
+
+**Existing infrastructure (already working, no changes needed):**
+- `POST /api/v1/products/{slug}/reviews` — ProductReviewsView (IsAuthenticated)
+- `GET /api/v1/products/{slug}/review-features` — ReviewFeaturesView (AllowAny)
+- 48-hour publish hold via `is_published=False` + `publish_at`
+- `publish_pending_reviews` Celery Beat task (hourly)
+- UNIQUE(user, product) constraint — one review per product per user
+
+#### Business Rules Implemented
+1. One review per product per user (DB constraint + serializer validation)
+2. 48-hour publish hold (`is_published=False`, `publish_at=now()+48h`)
+3. Source set to `whydud`, user set to `request.user`
+4. Verified purchase: `has_purchase_proof=True` AND `purchase_platform` matches a Marketplace slug → `is_verified_purchase=True`
+5. Content hash generated from `body_positive + body_negative` for duplicate detection
+6. DudScore recalc queued after creation via `compute_dudscore.delay()`
+7. Rewards points awarded via `award_points_task.delay()`
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/reviews/services.py` | New — review creation service layer |
+| `backend/apps/reviews/serializers.py` | Updated WriteReviewSerializer: added fields, validations, delegated to service |
+
+---
+
+### Session — 2026-03-04: Write a Review Frontend Enhancements
+
+Enhanced the existing Write a Review 4-tab form with missing features from architecture.md §13.
+
+#### What Was Added
+
+1. **StarRatingInput hover labels** — Shows text label ("Poor", "Fair", "Good", "Very Good", "Excellent") next to stars on hover/selection. New `showLabel` prop. Enabled on the overall rating in LeaveReviewTab.
+
+2. **localStorage draft persistence** — Review form state auto-saves to `localStorage` (key: `review_draft_{slug}`) on every change. Restores form + active tab on page mount. Clears on successful submission. File objects (invoice, media) are excluded from serialization.
+
+3. **Textarea character limits** — "What did you like?" and "What you didn't like?" textareas now enforce 500-character max with live counter display.
+
+4. **Media upload file limit** — Max 5 files enforced. Upload button shows count and hides at capacity.
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `frontend/src/components/reviews/star-rating-input.tsx` | Added `STAR_LABELS`, `showLabel` prop, hover label display |
+| `frontend/src/components/review/leave-review-tab.tsx` | Added `MAX_BODY_CHARS` (500), `MAX_MEDIA_FILES` (5), char counter, file limit enforcement, `showLabel` on overall rating |
+| `frontend/src/app/(public)/product/[slug]/review/page.tsx` | Added `saveDraft`/`loadDraft`/`clearDraft` helpers, auto-save effect, load-on-mount, clear-on-submit |

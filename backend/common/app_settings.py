@@ -417,6 +417,39 @@ class ClickTrackingConfig:
 # Subscription
 # ---------------------------------------------------------------------------
 
+class BackupConfig:
+    """Tunable settings for automated PostgreSQL backups."""
+
+    @classmethod
+    def backup_dir(cls) -> str:
+        """Local directory for backup files."""
+        return _get("BACKUP_DIR", "/backups")
+
+    @classmethod
+    def s3_bucket(cls) -> str:
+        """S3-compatible bucket name for remote backup storage."""
+        return _get("BACKUP_S3_BUCKET", "whydud-backups")
+
+    @classmethod
+    def local_retention_days(cls) -> int:
+        """Days to keep local backup files."""
+        return _get("BACKUP_LOCAL_RETENTION_DAYS", 7)
+
+    @classmethod
+    def remote_retention_days(cls) -> int:
+        """Days to keep remote backup files."""
+        return _get("BACKUP_REMOTE_RETENTION_DAYS", 180)
+
+    @classmethod
+    def max_backup_age_hours(cls) -> int:
+        """Health check threshold: alert if last backup is older than this."""
+        return _get("BACKUP_MAX_AGE_HOURS", 12)
+
+
+# ---------------------------------------------------------------------------
+# Subscription
+# ---------------------------------------------------------------------------
+
 class SubscriptionConfig:
     """Tunable settings for Razorpay subscription plans."""
 

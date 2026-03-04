@@ -1,5 +1,4 @@
 """Serializers for the reviews app."""
-from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Review, ReviewerProfile, ReviewVote
@@ -55,17 +54,35 @@ class ReviewSerializer(serializers.ModelSerializer):
 
 
 class WriteReviewSerializer(serializers.ModelSerializer):
-    """Validates and creates a Whydud-native review with 48hr publish hold."""
+    """Validates and creates a Whydud-native review with 48hr publish hold.
+
+    Accepts all four tabs of the review form as a single POST:
+      Tab 1: Purchase verification (optional)
+      Tab 2: Review content (rating + title required)
+      Tab 3: Feature ratings (optional, category-specific)
+      Tab 4: Seller feedback (optional)
+    """
 
     feature_ratings = serializers.JSONField(required=False, default=dict)
+    media = serializers.JSONField(required=False, default=list)
+    has_purchase_proof = serializers.BooleanField(required=False, default=False)
+    purchase_proof_url = serializers.CharField(
+        max_length=500, required=False, allow_blank=True, default=""
+    )
 
     class Meta:
         model = Review
         fields = [
-            "rating", "title", "body_positive", "body_negative",
-            "nps_score", "feature_ratings",
+            # Tab 1: Verify Purchase
+            "has_purchase_proof", "purchase_proof_url",
             "purchase_platform", "purchase_seller",
             "purchase_delivery_date", "purchase_price_paid",
+            # Tab 2: Leave a Review
+            "rating", "title", "body_positive", "body_negative",
+            "media", "nps_score",
+            # Tab 3: Rate Features
+            "feature_ratings",
+            # Tab 4: Seller Feedback
             "seller_delivery_rating", "seller_packaging_rating",
             "seller_accuracy_rating", "seller_communication_rating",
         ]
@@ -73,6 +90,18 @@ class WriteReviewSerializer(serializers.ModelSerializer):
     def validate_rating(self, value: int) -> int:
         if not 1 <= value <= 5:
             raise serializers.ValidationError("Rating must be between 1 and 5.")
+        return value
+
+    def validate_title(self, value: str) -> str:
+        if len(value) < 5:
+            raise serializers.ValidationError("Title must be at least 5 characters.")
+        if len(value) > 200:
+            raise serializers.ValidationError("Title must be at most 200 characters.")
+        return value
+
+    def validate_purchase_price_paid(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Price paid must be greater than 0.")
         return value
 
     def validate_feature_ratings(self, value: dict) -> dict:
@@ -87,6 +116,22 @@ class WriteReviewSerializer(serializers.ModelSerializer):
                 )
         return value
 
+    def validate_media(self, value: list) -> list:
+        if not isinstance(value, list):
+            raise serializers.ValidationError("media must be a JSON array.")
+        for item in value:
+            if not isinstance(item, dict):
+                raise serializers.ValidationError("Each media item must be an object.")
+            if "url" not in item or "type" not in item:
+                raise serializers.ValidationError(
+                    "Each media item must have 'url' and 'type' fields."
+                )
+            if item["type"] not in ("image", "video"):
+                raise serializers.ValidationError(
+                    "Media type must be 'image' or 'video'."
+                )
+        return value
+
     def validate(self, attrs: dict) -> dict:
         user = self.context["request"].user
         product = self.context["product"]
@@ -97,29 +142,11 @@ class WriteReviewSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data: dict) -> Review:
+        from .services import create_review
+
         user = self.context["request"].user
         product = self.context["product"]
-        has_proof = bool(
-            validated_data.get("purchase_platform")
-            or validated_data.get("purchase_seller")
-            or validated_data.get("purchase_price_paid")
-        )
-        review = Review.objects.create(
-            **validated_data,
-            user=user,
-            product=product,
-            reviewer_name=user.get_full_name() or user.email,
-            source=Review.Source.WHYDUD,
-            is_published=False,
-            publish_at=timezone.now() + timezone.timedelta(hours=48),
-            has_purchase_proof=has_proof,
-            review_date=timezone.now().date(),
-        )
-
-        from apps.rewards.tasks import award_points_task
-        award_points_task.delay(str(user.pk), 'write_review', str(review.pk))
-
-        return review
+        return create_review(user, product, validated_data)
 
 
 class MyReviewsSerializer(serializers.ModelSerializer):

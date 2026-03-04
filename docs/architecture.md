@@ -2640,12 +2640,62 @@ Run migrations → Health check → Rollback on failure
 
 ### Backup Strategy
 
+Automated via dedicated `backup` container in `docker-compose.primary.yml`, running every 6 hours.
+
 ```
-PostgreSQL: pg_dump every 6 hours → compress → Backblaze B2 (free 10GB)
-Redis: AOF persistence (data is cache — loss is recoverable)
-Meilisearch: Daily snapshot (can rebuild from PostgreSQL)
-VPS: Weekly Contabo snapshot
+Schedule:    0 */6 * * *  (cron inside backup container)
+Script:      backend/scripts/backup.sh
+Container:   whydud-backup (timescale/timescaledb:latest-pg16 + rclone + cron)
 ```
+
+**PostgreSQL Backups:**
+- `pg_dump -Fc` (custom format) with `--no-owner --no-privileges`
+- Excludes `_timescaledb_*` internal schemas (restored automatically by TimescaleDB)
+- **Incremental strategy:** Manifest file tracks row counts of append-only hypertables (`price_snapshots`, `dudscore_history`). On subsequent runs, skips data dump for unchanged tables — schema always included
+- Compressed with `gzip -9`
+- Uploaded to IDrive S3 via `rclone` (S3-compatible endpoint)
+- Bucket: `whydud-backups`, path: `daily/whydud_YYYYMMDD_HHMMSS.dump.gz`
+
+**Retention:**
+- Local: 7 days (auto-cleaned by `find -mtime +7`)
+- Remote: 180 days (auto-cleaned by `rclone delete --min-age 180d`)
+
+**Notifications:** Success/failure Discord embeds via `DISCORD_WEBHOOK_URL`
+
+**Environment variables required:**
+```
+RCLONE_S3_ENDPOINT=<idrive-s3-endpoint>
+RCLONE_S3_ACCESS_KEY=<access-key>
+RCLONE_S3_SECRET_KEY=<secret-key>
+BACKUP_S3_BUCKET=whydud-backups          # default
+```
+
+**Other data:**
+- Redis: AOF persistence (data is cache — loss is recoverable)
+- Meilisearch: Daily snapshot (can rebuild from PostgreSQL via `sync_meilisearch`)
+- VPS: Weekly Contabo snapshot
+
+### System Health Check
+
+Management command: `python manage.py health_check` (located in `apps.accounts.management.commands`).
+
+```
+Usage:   python manage.py health_check          # human-readable
+         python manage.py health_check --json   # machine-readable
+Exit:    0 = all pass, 1 = critical failure
+```
+
+| # | Check | Pass | Warn | Fail |
+|---|-------|------|------|------|
+| 1 | **PostgreSQL** — connectivity + 17 table counts + DB size | Connected | — | Cannot connect |
+| 2 | **Redis** — connectivity + memory usage + key counts | Connected | — | Cannot connect |
+| 3 | **Meilisearch** — `/health` + document counts per index | HTTP 200 | — | Unreachable |
+| 4 | **Celery Workers** — `inspect.active()` + queue listing | ≥1 worker | — | No workers |
+| 5 | **Scraper Recency** — last completed scrape per marketplace | All < 48h | Some stale | All stale |
+| 6 | **Disk Usage** — `shutil.disk_usage("/")` | < 80% | 80-90% | > 90% |
+| 7 | **Last Backup** — reads `/backups/.last_backup_time` | < 12h | 12-24h | > 24h |
+
+Configuration via `common/app_settings.py` → `BackupConfig` (backup_dir, s3_bucket, retention days, max_backup_age_hours).
 
 ---
 
@@ -2676,8 +2726,9 @@ Structured JSON logging (Python `structlog`):
 ### Tools
 
 - Better Stack (free: 5 monitors, 3-min interval) for uptime
-- Cron health check script → Telegram bot notification on failure
-- Scraper failure → Telegram alert
+- `python manage.py health_check` — 7-point system health (see §14 Backup Strategy)
+- Discord webhook notifications (`common/discord.py`) for all Celery task outcomes + backup status
+- Sentry (`SENTRY_DSN`) for error tracking in Django + Celery
 - Django Silk (debug) or django-prometheus (production) for API metrics
 
 ---

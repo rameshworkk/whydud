@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -64,6 +64,75 @@ const INITIAL_STATE: ReviewFormState = {
   },
 };
 
+// ── localStorage helpers ─────────────────────────────────────────────────────
+
+function draftKey(slug: string): string {
+  return `review_draft_${slug}`;
+}
+
+/** Serializable subset of ReviewFormState (File objects are not stored). */
+interface SerializableDraft {
+  purchase: Omit<VerifyPurchaseData, "invoiceFile">;
+  review: Omit<LeaveReviewData, "mediaFiles">;
+  features: RateFeaturesData;
+  seller: SellerFeedbackData;
+  activeTab: string;
+}
+
+function saveDraft(slug: string, form: ReviewFormState, activeTab: string): void {
+  try {
+    const draft: SerializableDraft = {
+      purchase: {
+        hasPurchaseProof: form.purchase.hasPurchaseProof,
+        platform: form.purchase.platform,
+        sellerName: form.purchase.sellerName,
+        deliveryDate: form.purchase.deliveryDate,
+        pricePaid: form.purchase.pricePaid,
+      },
+      review: {
+        rating: form.review.rating,
+        title: form.review.title,
+        bodyPositive: form.review.bodyPositive,
+        bodyNegative: form.review.bodyNegative,
+        npsScore: form.review.npsScore,
+      },
+      features: form.features,
+      seller: form.seller,
+      activeTab,
+    };
+    localStorage.setItem(draftKey(slug), JSON.stringify(draft));
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+function loadDraft(slug: string): { form: ReviewFormState; activeTab: string } | null {
+  try {
+    const raw = localStorage.getItem(draftKey(slug));
+    if (!raw) return null;
+    const draft: SerializableDraft = JSON.parse(raw);
+    return {
+      form: {
+        purchase: { ...draft.purchase, invoiceFile: null },
+        review: { ...draft.review, mediaFiles: [] },
+        features: draft.features,
+        seller: draft.seller,
+      },
+      activeTab: draft.activeTab || "verify",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft(slug: string): void {
+  try {
+    localStorage.removeItem(draftKey(slug));
+  } catch {
+    // ignore
+  }
+}
+
 // ── Tab config ────────────────────────────────────────────────────────────────
 
 const REVIEW_TABS = [
@@ -89,6 +158,18 @@ export default function WriteReviewPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const draftLoaded = useRef(false);
+
+  // ── Load draft from localStorage on mount ─────────────────
+  useEffect(() => {
+    if (draftLoaded.current) return;
+    draftLoaded.current = true;
+    const saved = loadDraft(slug);
+    if (saved) {
+      setForm(saved.form);
+      setActiveTab(saved.activeTab);
+    }
+  }, [slug]);
 
   // ── Auth guard ──────────────────────────────────────────────
   useEffect(() => {
@@ -118,6 +199,12 @@ export default function WriteReviewPage() {
       cancelled = true;
     };
   }, [slug]);
+
+  // ── Persist draft to localStorage on every change ──────────
+  useEffect(() => {
+    if (!draftLoaded.current) return; // don't save before initial load
+    saveDraft(slug, form, activeTab);
+  }, [slug, form, activeTab]);
 
   // ── Tab data updaters ───────────────────────────────────────
   const updatePurchase = useCallback(
@@ -164,6 +251,7 @@ export default function WriteReviewPage() {
 
   // ── Handlers ────────────────────────────────────────────────
   function handleSubmitSuccess() {
+    clearDraft(slug);
     setSubmitMessage({
       type: "success",
       text: "Your review has been submitted successfully!",

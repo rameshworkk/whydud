@@ -23,6 +23,9 @@ interface LeaveReviewTabProps {
   onRateFeatures?: () => void;
 }
 
+const MAX_BODY_CHARS = 500;
+const MAX_MEDIA_FILES = 5;
+
 // ── NPS Scale ─────────────────────────────────────────────────────────────────
 
 const NPS_VALUES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
@@ -47,7 +50,14 @@ export function LeaveReviewTab({
   function handleMediaChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files?.length) return;
-    onChange({ mediaFiles: [...data.mediaFiles, ...Array.from(files)] });
+    const remaining = MAX_MEDIA_FILES - data.mediaFiles.length;
+    if (remaining <= 0) return;
+    onChange({
+      mediaFiles: [
+        ...data.mediaFiles,
+        ...Array.from(files).slice(0, remaining),
+      ],
+    });
     e.target.value = "";
   }
 
@@ -95,6 +105,7 @@ export function LeaveReviewTab({
             value={data.rating}
             onChange={(rating) => onChange({ rating })}
             size="lg"
+            showLabel
           />
         </div>
       </div>
@@ -141,7 +152,10 @@ export function LeaveReviewTab({
             <textarea
               id="lr-positive"
               value={data.bodyPositive}
-              onChange={(e) => onChange({ bodyPositive: e.target.value })}
+              onChange={(e) =>
+                onChange({ bodyPositive: e.target.value.slice(0, MAX_BODY_CHARS) })
+              }
+              maxLength={MAX_BODY_CHARS}
               placeholder="Tell us what you enjoyed about this product..."
               rows={5}
               className={cn(
@@ -151,6 +165,9 @@ export function LeaveReviewTab({
                 "transition-colors"
               )}
             />
+            <p className="text-xs text-[#94A3B8] text-right">
+              {data.bodyPositive.length}/{MAX_BODY_CHARS}
+            </p>
           </div>
 
           {/* What you didn't like? */}
@@ -164,7 +181,10 @@ export function LeaveReviewTab({
             <textarea
               id="lr-negative"
               value={data.bodyNegative}
-              onChange={(e) => onChange({ bodyNegative: e.target.value })}
+              onChange={(e) =>
+                onChange({ bodyNegative: e.target.value.slice(0, MAX_BODY_CHARS) })
+              }
+              maxLength={MAX_BODY_CHARS}
               placeholder="Share your concerns or issues you experienced..."
               rows={5}
               className={cn(
@@ -174,6 +194,9 @@ export function LeaveReviewTab({
                 "transition-colors"
               )}
             />
+            <p className="text-xs text-[#94A3B8] text-right">
+              {data.bodyNegative.length}/{MAX_BODY_CHARS}
+            </p>
           </div>
         </div>
       </div>
@@ -215,19 +238,21 @@ export function LeaveReviewTab({
           ))}
 
           {/* Upload button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className={cn(
-              "flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-medium",
-              "text-[#1E293B] hover:bg-[#F8FAFC] active:bg-[#F1F5F9]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]",
-              "transition-colors"
-            )}
-          >
-            <Camera className="h-4 w-4 text-[#64748B]" />
-            Upload
-          </button>
+          {data.mediaFiles.length < MAX_MEDIA_FILES && (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-medium",
+                "text-[#1E293B] hover:bg-[#F8FAFC] active:bg-[#F1F5F9]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]",
+                "transition-colors"
+              )}
+            >
+              <Camera className="h-4 w-4 text-[#64748B]" />
+              Upload ({data.mediaFiles.length}/{MAX_MEDIA_FILES})
+            </button>
+          )}
         </div>
       </div>
 
