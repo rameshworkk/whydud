@@ -383,6 +383,21 @@ class DealDetectionConfig:
         """Products processed per batch in detect_deals."""
         return _get("DEAL_DETECTION_BATCH_SIZE", 200)
 
+    @classmethod
+    def recent_snapshot_hours(cls) -> int:
+        """Only process products with snapshots in the last N hours."""
+        return _get("DEAL_RECENT_SNAPSHOT_HOURS", 6)
+
+    @classmethod
+    def overnight_drop_threshold(cls) -> float:
+        """Minimum overnight price drop fraction (0.40 = 40%) for error pricing."""
+        return _get("DEAL_OVERNIGHT_DROP_THRESHOLD", 0.40)
+
+    @classmethod
+    def flash_sale_drop_threshold(cls) -> float:
+        """Minimum overnight drop fraction (0.20 = 20%) to flag as flash sale."""
+        return _get("DEAL_FLASH_SALE_DROP_THRESHOLD", 0.20)
+
 
 # ---------------------------------------------------------------------------
 # Click Tracking

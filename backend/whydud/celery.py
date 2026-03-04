@@ -77,9 +77,9 @@ app.conf.beat_schedule = {
         "task": "apps.scoring.tasks.full_dudscore_recalculation",
         "schedule": crontab(minute=0, hour=3, day_of_month=1),  # 1st of month, 03:00 UTC
     },
-    "detect-deals-2h": {
+    "detect-deals-30m": {
         "task": "apps.deals.tasks.detect_blockbuster_deals",
-        "schedule": crontab(minute=0, hour="*/2"),  # every 2 hours at :00
+        "schedule": crontab(minute="0,30"),  # every 30 minutes
         "options": {"queue": "scoring"},
     },
     # Independent daily review scrapes (catch-up, supplements chain from product spider)

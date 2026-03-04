@@ -3040,3 +3040,31 @@ Example: `whydud.amazon.in/dp/B0CZLQT2GG` → Caddy 302 redirects to `whydud.com
 - `email_intel/views.py`: `SendEmailView`, `ReplyEmailView` → `[EmailSendThrottle]`
 
 All throttled endpoints return standard DRF 429 with `Retry-After` header.
+
+---
+
+### 2026-03-05 — Deal Detection Engine (Real Logic)
+
+Replaced the deal detection stub with full classification logic per architecture spec.
+
+**Modified files:**
+- `backend/apps/deals/detection.py` — complete rewrite with real detection logic
+- `backend/apps/deals/tasks.py` — added time limits to Celery task
+- `backend/whydud/celery.py` — changed Beat schedule from every 2h to every 30m
+- `backend/common/app_settings.py` — added 3 new tuneable config values
+
+**Detection logic implemented:**
+1. Scope narrowing: only processes products with a new `PriceSnapshot` in the last 6 hours (configurable via `DEAL_RECENT_SNAPSHOT_HOURS`)
+2. Previous-day price lookup via 18–30h window to handle irregular scraping schedules
+3. Four-tier classification with priority order:
+   - `error_price` (HIGH confidence): overnight drop > 40% AND price < 30-day avg × 0.5
+   - `lowest_ever` (HIGH confidence): current price ≤ all-time lowest
+   - `flash_sale` (LOW confidence): overnight drop > 20% but not error pricing
+   - `genuine_discount` (MEDIUM confidence): 15%+ below 30-day average
+4. Deactivation of stale deals: inactive products, out-of-stock listings, AND price recovery (listing price ≥ reference price via F expression)
+5. Edge cases handled: ₹0 prices skipped, products with < 2 snapshots skipped, duplicate active deals resolved via update_or_create with MultipleObjectsReturned fallback
+
+**New config values in `DealDetectionConfig`:**
+- `DEAL_RECENT_SNAPSHOT_HOURS` (default 6)
+- `DEAL_OVERNIGHT_DROP_THRESHOLD` (default 0.40)
+- `DEAL_FLASH_SALE_DROP_THRESHOLD` (default 0.20)

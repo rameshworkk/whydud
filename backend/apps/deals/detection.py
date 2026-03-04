@@ -1,13 +1,20 @@
 """Deal detection engine.
 
 Scans active products for genuine deals: error pricing, lowest-ever prices,
-and real discounts. Called periodically by the Celery beat schedule.
+flash sales, and real discounts. Called periodically by the Celery beat schedule.
+
+Detection Logic:
+  1. Scope: only products with a new price snapshot in the last N hours.
+  2. Compare current_price against 30-day average, previous-day price,
+     and all-time lowest.
+  3. Classify into: error_price > lowest_ever > flash_sale > genuine_discount.
+  4. Deactivate old deals whose price has recovered.
 """
 import logging
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, F
 from django.utils import timezone
 
 from apps.deals.models import Deal
@@ -18,23 +25,45 @@ from common.app_settings import DealDetectionConfig
 logger = logging.getLogger(__name__)
 
 
-def _get_avg_price_30d(listing_id: str, window_start) -> Decimal | None:
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_avg_price_30d(listing_id, window_start) -> Decimal | None:
     """Return average price for a listing over the configured window.
 
     Returns None if fewer than ``DealDetectionConfig.min_snapshots_for_avg``
     snapshots exist in the window.
     """
-    result = (
-        PriceSnapshot.objects.filter(
-            listing_id=listing_id,
-            time__gte=window_start,
-            in_stock=True,
-        )
-        .aggregate(avg_price=Avg("price"), snap_count=Count("time"))
-    )
+    result = PriceSnapshot.objects.filter(
+        listing_id=listing_id,
+        time__gte=window_start,
+        in_stock=True,
+    ).aggregate(avg_price=Avg("price"), snap_count=Count("time"))
     if result["snap_count"] < DealDetectionConfig.min_snapshots_for_avg():
         return None
     return result["avg_price"]
+
+
+def _get_previous_day_price(listing_id, now) -> Decimal | None:
+    """Return the most recent price snapshot from approximately 24h ago.
+
+    Uses an 18–30 h window to handle irregular scraping schedules.
+    """
+    yesterday_end = now - timedelta(hours=18)
+    yesterday_start = now - timedelta(hours=30)
+    return (
+        PriceSnapshot.objects.filter(
+            listing_id=listing_id,
+            time__gte=yesterday_start,
+            time__lte=yesterday_end,
+            in_stock=True,
+        )
+        .order_by("-time")
+        .values_list("price", flat=True)
+        .first()
+    )
 
 
 def _calc_discount_pct(current_price: Decimal, reference_price: Decimal) -> Decimal:
@@ -46,65 +75,173 @@ def _calc_discount_pct(current_price: Decimal, reference_price: Decimal) -> Deci
     )
 
 
-def _map_confidence(deal_type: str) -> str:
-    """Map deal type to a Deal.Confidence value."""
-    if deal_type in ("error_price", "lowest_ever"):
-        return Deal.Confidence.HIGH
-    return Deal.Confidence.MEDIUM
+# ---------------------------------------------------------------------------
+# Classification
+# ---------------------------------------------------------------------------
+
+
+def _classify_deal(
+    price: Decimal,
+    avg_30d: Decimal | None,
+    previous_day_price: Decimal | None,
+    lowest_price_ever: Decimal | None,
+    error_ratio: Decimal,
+    discount_ratio: Decimal,
+    overnight_drop_threshold: float,
+    flash_sale_drop_threshold: float,
+) -> tuple[str | None, str | None, Decimal | None]:
+    """Classify a listing's current price into a deal type.
+
+    Returns ``(deal_type, confidence, reference_price)`` or
+    ``(None, None, None)`` when no deal is detected.
+
+    Priority order: error_price > lowest_ever > flash_sale > genuine_discount.
+    """
+    # 1. Error pricing: overnight drop > 40% AND price < 30-day avg * 0.5
+    if previous_day_price and previous_day_price > 0 and avg_30d:
+        overnight_drop = (previous_day_price - price) / previous_day_price
+        if (
+            float(overnight_drop) > overnight_drop_threshold
+            and price < avg_30d * error_ratio
+        ):
+            return Deal.DealType.ERROR_PRICE, Deal.Confidence.HIGH, avg_30d
+
+    # 2. Lowest ever: current <= all-time lowest
+    if (
+        lowest_price_ever is not None
+        and lowest_price_ever > 0
+        and price <= lowest_price_ever
+    ):
+        return (
+            Deal.DealType.LOWEST_EVER,
+            Deal.Confidence.HIGH,
+            avg_30d or lowest_price_ever,
+        )
+
+    # 3. Flash sale: significant overnight drop (>20%) that didn't qualify
+    #    as error pricing — likely a short-lived promotion.
+    if previous_day_price and previous_day_price > 0:
+        overnight_drop = float(
+            (previous_day_price - price) / previous_day_price
+        )
+        if overnight_drop > flash_sale_drop_threshold:
+            return (
+                Deal.DealType.FLASH_SALE,
+                Deal.Confidence.LOW,
+                previous_day_price,
+            )
+
+    # 4. Genuine discount: 15 %+ below 30-day avg (price < avg * 0.85)
+    if avg_30d and price < avg_30d * discount_ratio:
+        return Deal.DealType.GENUINE_DISCOUNT, Deal.Confidence.MEDIUM, avg_30d
+
+    return None, None, None
+
+
+# ---------------------------------------------------------------------------
+# Deactivation
+# ---------------------------------------------------------------------------
 
 
 def _deactivate_stale_deals() -> int:
-    """Mark deals as ended when their listing is no longer in stock or
-    the product is no longer active."""
+    """Mark deals as ended when conditions no longer hold.
+
+    Deactivation triggers:
+    - Product is no longer active.
+    - Listing is out of stock.
+    - Listing price has risen back to or above the reference price.
+    """
     now = timezone.now()
+    count = 0
+
+    # Inactive products.
     stale = Deal.objects.filter(is_active=True).exclude(
         product__status=Product.Status.ACTIVE,
     )
-    count = stale.update(is_active=False, ended_at=now)
+    count += stale.update(is_active=False, ended_at=now)
 
-    # Also deactivate deals whose listing went out of stock.
-    listing_stale = Deal.objects.filter(
+    # Out-of-stock listings.
+    listing_oos = Deal.objects.filter(
         is_active=True,
         listing__isnull=False,
         listing__in_stock=False,
     )
-    count += listing_stale.update(is_active=False, ended_at=now)
+    count += listing_oos.update(is_active=False, ended_at=now)
+
+    # Price recovered — listing price >= reference price.
+    price_recovered = Deal.objects.filter(
+        is_active=True,
+        listing__isnull=False,
+        reference_price__isnull=False,
+        listing__current_price__gte=F("reference_price"),
+    )
+    count += price_recovered.update(is_active=False, ended_at=now)
 
     if count:
-        logger.info("Deactivated %d stale deals", count)
+        logger.info("deactivated_stale_deals count=%d", count)
     return count
 
 
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+
 def detect_deals() -> dict:
-    """Scan active products for genuine deals.
+    """Scan products with recent price data for genuine deals.
+
+    Only processes products that received a new price snapshot in the
+    last ``DealDetectionConfig.recent_snapshot_hours()`` hours to avoid
+    redundant work on products with stale data.
 
     Returns a summary dict with counts of deals found per type.
     """
     now = timezone.now()
     window_days = DealDetectionConfig.avg_price_window_days()
     window_start = now - timedelta(days=window_days)
+    recent_hours = DealDetectionConfig.recent_snapshot_hours()
+    recent_cutoff = now - timedelta(hours=recent_hours)
     error_ratio = Decimal(str(DealDetectionConfig.error_price_ratio()))
     discount_ratio = Decimal(str(DealDetectionConfig.genuine_discount_ratio()))
+    overnight_drop_threshold = DealDetectionConfig.overnight_drop_threshold()
+    flash_sale_drop_threshold = DealDetectionConfig.flash_sale_drop_threshold()
     batch_size = DealDetectionConfig.batch_size()
 
     stats: dict[str, int] = {
         "error_price": 0,
         "lowest_ever": 0,
         "genuine_discount": 0,
+        "flash_sale": 0,
+        "skipped_zero_price": 0,
+        "skipped_insufficient_data": 0,
         "deactivated": 0,
     }
 
     # Phase 1: deactivate stale deals.
     stats["deactivated"] = _deactivate_stale_deals()
 
-    # Phase 2: scan active products in batches.
+    # Phase 2: narrow scope to products with recent snapshots.
+    product_ids_recent = (
+        PriceSnapshot.objects.filter(time__gte=recent_cutoff)
+        .values("product_id")
+        .distinct()
+    )
+
     products_qs = (
-        Product.objects.filter(status=Product.Status.ACTIVE)
+        Product.objects.filter(
+            id__in=product_ids_recent,
+            status=Product.Status.ACTIVE,
+        )
         .only("id", "lowest_price_ever")
         .iterator(chunk_size=batch_size)
     )
 
     for product in products_qs:
+        # Edge case: skip products with only 1 snapshot (insufficient data).
+        if PriceSnapshot.objects.filter(product_id=product.id).count() < 2:
+            stats["skipped_insufficient_data"] += 1
+            continue
+
         listings = (
             ProductListing.objects.filter(product=product, in_stock=True)
             .select_related("marketplace")
@@ -112,66 +249,91 @@ def detect_deals() -> dict:
         )
 
         best_deal_type: str | None = None
+        best_confidence: str | None = None
         best_listing: ProductListing | None = None
         best_reference_price: Decimal | None = None
 
         for listing in listings:
-            deal_type = None
             price = listing.current_price
 
-            # 1. Error pricing: price < threshold of 30-day avg.
+            # Edge case: skip ₹0 / negative prices (data errors).
+            if not price or price <= 0:
+                stats["skipped_zero_price"] += 1
+                continue
+
             avg_30d = _get_avg_price_30d(listing.id, window_start)
-            if avg_30d and price < avg_30d * error_ratio:
-                deal_type = Deal.DealType.ERROR_PRICE
-            # 2. Lowest ever.
-            elif (
-                product.lowest_price_ever is not None
-                and price <= product.lowest_price_ever
-            ):
-                deal_type = Deal.DealType.LOWEST_EVER
-            # 3. Genuine discount: price below threshold of MRP.
-            elif listing.mrp and price < listing.mrp * discount_ratio:
-                deal_type = Deal.DealType.GENUINE_DISCOUNT
+            previous_day_price = _get_previous_day_price(listing.id, now)
+
+            deal_type, confidence, reference = _classify_deal(
+                price=price,
+                avg_30d=avg_30d,
+                previous_day_price=previous_day_price,
+                lowest_price_ever=product.lowest_price_ever,
+                error_ratio=error_ratio,
+                discount_ratio=discount_ratio,
+                overnight_drop_threshold=overnight_drop_threshold,
+                flash_sale_drop_threshold=flash_sale_drop_threshold,
+            )
 
             if deal_type is None:
                 continue
 
             # Keep the best deal across all listings for this product.
-            # Priority: error_price > lowest_ever > genuine_discount.
             type_priority = {
-                Deal.DealType.ERROR_PRICE: 3,
-                Deal.DealType.LOWEST_EVER: 2,
+                Deal.DealType.ERROR_PRICE: 4,
+                Deal.DealType.LOWEST_EVER: 3,
+                Deal.DealType.FLASH_SALE: 2,
                 Deal.DealType.GENUINE_DISCOUNT: 1,
             }
             if best_deal_type is None or type_priority.get(
                 deal_type, 0
             ) > type_priority.get(best_deal_type, 0):
                 best_deal_type = deal_type
+                best_confidence = confidence
                 best_listing = listing
-                best_reference_price = avg_30d or listing.mrp
+                best_reference_price = reference
 
-        if best_deal_type and best_listing:
+        if best_deal_type and best_listing and best_confidence:
             reference = best_reference_price or Decimal("0")
-            Deal.objects.update_or_create(
-                product=product,
-                listing=best_listing,
-                defaults={
-                    "marketplace": best_listing.marketplace,
-                    "deal_type": best_deal_type,
-                    "current_price": best_listing.current_price,
-                    "reference_price": reference,
-                    "discount_pct": _calc_discount_pct(
+            try:
+                Deal.objects.update_or_create(
+                    product=product,
+                    listing=best_listing,
+                    is_active=True,
+                    defaults={
+                        "marketplace": best_listing.marketplace,
+                        "deal_type": best_deal_type,
+                        "current_price": best_listing.current_price,
+                        "reference_price": reference,
+                        "discount_pct": _calc_discount_pct(
+                            best_listing.current_price, reference
+                        ),
+                        "confidence": best_confidence,
+                        "ended_at": None,
+                    },
+                )
+            except Deal.MultipleObjectsReturned:
+                # Race condition: deactivate duplicates and create fresh.
+                Deal.objects.filter(
+                    product=product, listing=best_listing, is_active=True,
+                ).update(is_active=False, ended_at=now)
+                Deal.objects.create(
+                    product=product,
+                    listing=best_listing,
+                    is_active=True,
+                    marketplace=best_listing.marketplace,
+                    deal_type=best_deal_type,
+                    current_price=best_listing.current_price,
+                    reference_price=reference,
+                    discount_pct=_calc_discount_pct(
                         best_listing.current_price, reference
                     ),
-                    "confidence": _map_confidence(best_deal_type),
-                    "is_active": True,
-                    "ended_at": None,
-                },
-            )
+                    confidence=best_confidence,
+                )
             stats[best_deal_type] = stats.get(best_deal_type, 0) + 1
 
     logger.info(
-        "Deal detection complete: %s",
-        ", ".join(f"{k}={v}" for k, v in stats.items()),
+        "deal_detection_complete %s",
+        " ".join(f"{k}={v}" for k, v in stats.items()),
     )
     return stats
