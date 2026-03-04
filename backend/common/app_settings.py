@@ -482,3 +482,100 @@ class SubscriptionConfig:
     def order_cache_ttl(cls) -> int:
         """Seconds to keep a pending Razorpay order in cache (default 30 min)."""
         return _get("SUBSCRIPTION_ORDER_CACHE_TTL", 1800)
+
+
+# ---------------------------------------------------------------------------
+# Rewards & Points
+# ---------------------------------------------------------------------------
+
+class RewardsConfig:
+    """Tunable point values, caps, and anti-gaming thresholds."""
+
+    # -- Point awards per action ------------------------------------------------
+    @classmethod
+    def points_write_review(cls) -> int:
+        return _get("REWARDS_POINTS_WRITE_REVIEW", 20)
+
+    @classmethod
+    def points_connect_email(cls) -> int:
+        return _get("REWARDS_POINTS_CONNECT_EMAIL", 50)
+
+    @classmethod
+    def points_referral_signup(cls) -> int:
+        return _get("REWARDS_POINTS_REFERRAL_SIGNUP", 30)
+
+    @classmethod
+    def points_daily_login_streak(cls) -> int:
+        """Awarded once after 7 consecutive daily logins."""
+        return _get("REWARDS_POINTS_DAILY_LOGIN_STREAK", 10)
+
+    @classmethod
+    def points_review_popular(cls) -> int:
+        """Bonus when a review reaches the popular threshold in upvotes."""
+        return _get("REWARDS_POINTS_REVIEW_POPULAR", 5)
+
+    @classmethod
+    def points_first_purchase_tracked(cls) -> int:
+        return _get("REWARDS_POINTS_FIRST_PURCHASE_TRACKED", 25)
+
+    @classmethod
+    def points_verified_purchase_review(cls) -> int:
+        return _get("REWARDS_POINTS_VERIFIED_PURCHASE_REVIEW", 40)
+
+    @classmethod
+    def points_review_with_photo(cls) -> int:
+        return _get("REWARDS_POINTS_REVIEW_WITH_PHOTO", 30)
+
+    @classmethod
+    def points_review_with_video(cls) -> int:
+        return _get("REWARDS_POINTS_REVIEW_WITH_VIDEO", 50)
+
+    # -- Caps -------------------------------------------------------------------
+    @classmethod
+    def daily_cap(cls) -> int:
+        """Max points a user can earn per day."""
+        return _get("REWARDS_DAILY_CAP", 100)
+
+    @classmethod
+    def monthly_cap(cls) -> int:
+        """Max points a user can earn per month."""
+        return _get("REWARDS_MONTHLY_CAP", 500)
+
+    # -- Expiry -----------------------------------------------------------------
+    @classmethod
+    def expiry_days(cls) -> int:
+        """Points expire after this many days."""
+        return _get("REWARDS_EXPIRY_DAYS", 365)
+
+    # -- Anti-gaming ------------------------------------------------------------
+    @classmethod
+    def review_hold_hours(cls) -> int:
+        """Hours to delay points after review submission (anti-gaming)."""
+        return _get("REWARDS_REVIEW_HOLD_HOURS", 48)
+
+    @classmethod
+    def min_review_chars(cls) -> int:
+        """Reviews shorter than this don't earn points."""
+        return _get("REWARDS_MIN_REVIEW_CHARS", 20)
+
+    @classmethod
+    def popular_review_threshold(cls) -> int:
+        """Upvotes required to trigger 'review_popular' bonus."""
+        return _get("REWARDS_POPULAR_REVIEW_THRESHOLD", 10)
+
+    # -- Reviewer levels (points-based thresholds) ------------------------------
+    @classmethod
+    def level_thresholds(cls) -> dict[str, int]:
+        """Minimum points for each reviewer level."""
+        return _get("REWARDS_LEVEL_THRESHOLDS", {
+            "bronze": 0,
+            "silver": 100,
+            "gold": 300,
+            "platinum": 600,
+        })
+
+    # -- Points-to-currency conversion -----------------------------------------
+    @classmethod
+    def points_per_rupee(cls) -> int:
+        """How many points equal ₹1 for gift card redemption."""
+        return _get("REWARDS_POINTS_PER_RUPEE", 10)

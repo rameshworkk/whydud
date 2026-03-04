@@ -84,9 +84,20 @@ def create_review(user, product, validated_data: dict) -> Review:
 
     compute_dudscore.delay(str(product.pk))
 
-    # Award review-writing points
-    from apps.rewards.tasks import award_points_task
+    # Award review-writing points (anti-gaming: skip if review too short)
+    from common.app_settings import RewardsConfig
 
-    award_points_task.delay(str(user.pk), "write_review", str(review.pk))
+    review_text = f"{body_positive}{body_negative}".strip()
+    if len(review_text) >= RewardsConfig.min_review_chars():
+        from apps.rewards.tasks import award_points_task
+
+        award_points_task.delay(
+            str(user.pk), "write_review", str(review.pk), "review",
+        )
+    else:
+        logger.info(
+            "review_too_short_for_points user=%s review=%s len=%d min=%d",
+            user.pk, review.pk, len(review_text), RewardsConfig.min_review_chars(),
+        )
 
     return review

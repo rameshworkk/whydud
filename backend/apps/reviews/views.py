@@ -138,6 +138,8 @@ class ReviewVoteView(APIView):
                     upvotes=F("upvotes") + 1,
                     vote_score=F("vote_score") + 1,
                 )
+                # Award bonus points when review reaches popular threshold
+                self._check_popular_review(review)
             else:
                 Review.objects.filter(pk=pk).update(
                     downvotes=F("downvotes") + 1,
@@ -145,6 +147,25 @@ class ReviewVoteView(APIView):
                 )
 
         return success_response({"vote": vote_value})
+
+    @staticmethod
+    def _check_popular_review(review: Review) -> None:
+        """Award bonus points if review just crossed the popular upvote threshold."""
+        from common.app_settings import RewardsConfig
+
+        threshold = RewardsConfig.popular_review_threshold()
+        # Refresh to get updated count (the F() update already committed)
+        review.refresh_from_db(fields=["upvotes"])
+        if review.upvotes == threshold and review.user_id:
+            from apps.rewards.tasks import award_points_task
+
+            award_points_task.delay(
+                str(review.user_id),
+                "review_popular",
+                str(review.pk),
+                "review",
+                f"Review reached {threshold}+ upvotes",
+            )
 
     @transaction.atomic
     def delete(self, request: Request, pk: str) -> Response:
@@ -206,9 +227,22 @@ class ReviewDetailView(APIView):
 
     def delete(self, request: Request, pk: str) -> Response:
         review = get_object_or_404(Review, pk=pk)
-        if review.user_id != request.user.id:
+        is_own_review = review.user_id == request.user.id
+        is_moderator = request.user.is_staff
+
+        if not is_own_review and not is_moderator:
             return error_response("forbidden", "You can only delete your own reviews.", status=403)
+
+        review_user_id = review.user_id
+        review_id = str(review.pk)
         review.delete()
+
+        # Clawback points if review removed by moderator (not self-delete)
+        if is_moderator and not is_own_review and review_user_id:
+            from apps.rewards.tasks import clawback_review_points_task
+
+            clawback_review_points_task.delay(str(review_user_id), review_id)
+
         return success_response({"detail": "Review deleted."})
 
 

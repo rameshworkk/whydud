@@ -5,6 +5,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.app_settings import RewardsConfig
 from common.pagination import CursorPagination
 from common.utils import error_response, success_response
 
@@ -16,13 +17,14 @@ from .serializers import (
     RewardBalanceSerializer,
     RewardPointsLedgerSerializer,
 )
+from .services import deduct_points, get_balance
 
 
 class RewardBalanceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        balance, _ = RewardBalance.objects.get_or_create(user=request.user)
+        balance = get_balance(request.user.pk)
         return success_response(RewardBalanceSerializer(balance).data)
 
 
@@ -31,6 +33,12 @@ class RewardHistoryView(APIView):
 
     def get(self, request: Request) -> Response:
         qs = RewardPointsLedger.objects.filter(user=request.user).order_by("-created_at")
+
+        # Optional action_type filter
+        action_type = request.query_params.get("action_type")
+        if action_type:
+            qs = qs.filter(action_type=action_type)
+
         paginator = CursorPagination()
         page = paginator.paginate_queryset(qs, request)
         if page is not None:
@@ -71,26 +79,24 @@ class RedeemView(APIView):
         if denomination not in [d for d in catalog.denominations]:
             return error_response("invalid_denomination", "This denomination is not available.")
 
-        # 1 point = ₹1 conversion (100 paisa); denomination is in rupees
-        points_required = int(denomination)
-        balance, _ = RewardBalance.objects.select_for_update().get_or_create(user=request.user)
+        # Conversion: points_per_rupee points = ₹1
+        points_per_rupee = RewardsConfig.points_per_rupee()
+        points_required = int(denomination) * points_per_rupee
+        balance = RewardBalance.objects.select_for_update().filter(user=request.user).first()
 
-        if balance.current_balance < points_required:
+        if not balance or balance.current_balance < points_required:
+            current = balance.current_balance if balance else 0
             return error_response(
                 "insufficient_points",
-                f"You need {points_required} points but have {balance.current_balance}.",
+                f"You need {points_required} points but have {current}.",
             )
 
-        # Deduct points
-        balance.current_balance -= points_required
-        balance.total_spent += points_required
-        balance.save(update_fields=["current_balance", "total_spent", "updated_at"])
-
-        # Record ledger entry
-        RewardPointsLedger.objects.create(
-            user=request.user,
-            points=-points_required,
+        # Deduct via service layer
+        deduct_points(
+            user_id=request.user.pk,
+            points=points_required,
             action_type="redemption",
+            reference_type="gift_card",
             description=f"Redeemed {catalog.brand_name} ₹{denomination} gift card",
         )
 
@@ -104,7 +110,10 @@ class RedeemView(APIView):
             status=GiftCardRedemption.Status.PENDING,
         )
 
-        # TODO Sprint 4: trigger fulfillment Celery task
+        # Queue fulfillment task
+        from .tasks import fulfill_gift_card
+
+        fulfill_gift_card.delay(str(redemption.pk))
 
         return success_response(GiftCardRedemptionSerializer(redemption).data, status=201)
 

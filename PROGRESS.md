@@ -3068,3 +3068,77 @@ Replaced the deal detection stub with full classification logic per architecture
 - `DEAL_RECENT_SNAPSHOT_HOURS` (default 6)
 - `DEAL_OVERNIGHT_DROP_THRESHOLD` (default 0.40)
 - `DEAL_FLASH_SALE_DROP_THRESHOLD` (default 0.20)
+
+### 2026-03-05 — Reward Points Engine (Architecture §3 Epic 6)
+
+Full implementation of the reward points engine with anti-gaming protections, configurable point values, and integration hooks.
+
+**Created `backend/apps/rewards/services.py`** — core reward service layer:
+- `award_points(user_id, points, action_type, reference_type, reference_id, description)`:
+  - Idempotent per `(user, action_type, reference_id)` — prevents double-awarding
+  - Daily cap: 100 points/day per user (configurable via `REWARDS_DAILY_CAP`)
+  - Monthly cap: 500 points/month per user (configurable via `REWARDS_MONTHLY_CAP`)
+  - Creates `RewardPointsLedger` row with 365-day expiry
+  - Atomically updates `RewardBalance` (total_earned, current_balance) using `F()` expressions
+  - If action crosses a level threshold → creates `Notification` (type=level_up) and updates `ReviewerProfile.reviewer_level`
+- `deduct_points(user_id, points, action_type, ...)` — clamps to current balance, creates negative ledger entry
+- `get_balance(user_id)` — get-or-create wrapper
+- `clawback_review_points(user_id, review_id)` — finds original award, reverses it
+- `_level_for_points(total_earned)` — points-based level assignment (Bronze 0, Silver 100, Gold 300, Platinum 600)
+- `_check_level_up(user_id)` — detects level transitions, fires notification + syncs ReviewerProfile
+
+**Added `RewardsConfig` to `backend/common/app_settings.py`** — 18 tuneable values:
+- Point values: `write_review` (20), `connect_email` (50), `referral_signup` (30), `daily_login_streak` (10), `review_popular` (5), `first_purchase_tracked` (25), `verified_purchase_review` (40), `review_with_photo` (30), `review_with_video` (50)
+- Caps: `daily_cap` (100), `monthly_cap` (500)
+- Anti-gaming: `review_hold_hours` (48), `min_review_chars` (20), `popular_review_threshold` (10)
+- Levels: `level_thresholds` ({bronze: 0, silver: 100, gold: 300, platinum: 600})
+- Expiry: `expiry_days` (365)
+- Conversion: `points_per_rupee` (10)
+
+**Replaced `backend/apps/rewards/tasks.py`** — 4 Celery tasks:
+- `award_points_task` — delegates to `services.award_points()` with full parameter passthrough
+- `expire_points` — monthly task: sums expired entries per user, updates RewardBalance (current_balance -= , total_expired +=), marks entries processed
+- `fulfill_gift_card` — placeholder for external API integration (logs for manual admin fulfillment)
+- `clawback_review_points_task` — delegates to `services.clawback_review_points()`
+
+**Updated `backend/apps/rewards/views.py`**:
+- `RewardBalanceView` — now uses `services.get_balance()`
+- `RewardHistoryView` — added `?action_type=` query filter
+- `RedeemView` — uses `services.deduct_points()` for atomic deduction, points conversion via `RewardsConfig.points_per_rupee()`, queues `fulfill_gift_card.delay()` after redemption
+
+**Updated `backend/apps/rewards/engine.py`** — backward-compatible wrapper delegating to `services.py`
+
+**Updated `backend/apps/rewards/admin.py`** — registered all 4 models with search, filter, ordering
+
+**Wired triggers in reviews app:**
+
+1. **Review quality check** (`backend/apps/reviews/services.py`):
+   - Reviews shorter than `RewardsConfig.min_review_chars()` (20 chars) don't earn points
+   - Logs skip reason for audit trail
+
+2. **Popular review bonus** (`backend/apps/reviews/views.py` → `ReviewVoteView`):
+   - When an upvote brings a review to exactly `RewardsConfig.popular_review_threshold()` (10) upvotes
+   - Awards `review_popular` bonus (5 pts) to the review author via `award_points_task.delay()`
+   - Idempotent: won't double-award if review crosses 10 multiple times
+
+3. **Moderator clawback** (`backend/apps/reviews/views.py` → `ReviewDetailView.delete`):
+   - When a moderator (is_staff) deletes another user's review, queues `clawback_review_points_task.delay()`
+   - Self-deletions do NOT trigger clawback (user's own decision)
+
+**Anti-gaming protections (per architecture.md §2):**
+- 48-hour review hold before points (existing `publish_at` mechanism + quality gate)
+- Quality check: reviews < 20 chars don't earn points
+- Daily cap: 100 pts/day per user
+- Monthly cap: 500 pts/month per user
+- Clawback: moderator-removed reviews lose their points
+- Idempotency: duplicate awards blocked by `(user, action_type, reference_id)` check
+
+**Modified files:**
+- `backend/apps/rewards/services.py` — NEW: full reward service layer
+- `backend/apps/rewards/engine.py` — rewritten as backward-compatible wrapper
+- `backend/apps/rewards/tasks.py` — 4 real tasks (was 1 real + 1 stub)
+- `backend/apps/rewards/views.py` — uses services, configurable conversion, fulfillment task
+- `backend/apps/rewards/admin.py` — all 4 models registered with filters
+- `backend/apps/reviews/services.py` — quality gate on point awards
+- `backend/apps/reviews/views.py` — popular review bonus + moderator clawback
+- `backend/common/app_settings.py` — RewardsConfig (18 tuneable values)

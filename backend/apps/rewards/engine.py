@@ -1,49 +1,34 @@
-"""Rewards engine — point award logic."""
-from datetime import timedelta
+"""Rewards engine — backward-compatible wrapper around services.py.
 
-from django.db.models import F
-from django.utils.timezone import now
+Existing callers (tasks.py, reviews/services.py) import from here.
+All logic now lives in services.py.
+"""
+from common.app_settings import RewardsConfig
 
-from .models import RewardBalance, RewardPointsLedger
+from .services import award_points as _award_points
 
+# Legacy dict kept for reference — actual values come from RewardsConfig.
 ACTION_POINTS = {
-    'write_review': 20,
-    'review_with_photo': 30,       # bonus for photos
-    'review_with_video': 50,       # bonus for video
-    'connect_email': 50,
-    'referral_signup': 30,
-    'first_purchase_tracked': 25,
-    'verified_purchase_review': 40,
+    "write_review": RewardsConfig.points_write_review,
+    "review_with_photo": RewardsConfig.points_review_with_photo,
+    "review_with_video": RewardsConfig.points_review_with_video,
+    "connect_email": RewardsConfig.points_connect_email,
+    "referral_signup": RewardsConfig.points_referral_signup,
+    "first_purchase_tracked": RewardsConfig.points_first_purchase_tracked,
+    "verified_purchase_review": RewardsConfig.points_verified_purchase_review,
+    "daily_login_streak": RewardsConfig.points_daily_login_streak,
+    "review_popular": RewardsConfig.points_review_popular,
 }
 
 
-def award_points(user_id, action_type, reference_id=None):
-    """Award points for an action. Idempotent per reference_id."""
+def award_points(user_id, action_type: str, reference_id=None):
+    """Award points for an action. Delegates to services.award_points."""
+    from .services import _get_points_for_action
 
-    if reference_id:
-        exists = RewardPointsLedger.objects.filter(
-            user_id=user_id, action_type=action_type, reference_id=reference_id
-        ).exists()
-        if exists:
-            return  # Already awarded
-
-    points = ACTION_POINTS.get(action_type, 0)
-    if points == 0:
-        return
-
-    RewardPointsLedger.objects.create(
-        user_id=user_id, points=points, action_type=action_type,
-        reference_id=reference_id, expires_at=now() + timedelta(days=365)
+    points = _get_points_for_action(action_type)
+    _award_points(
+        user_id=user_id,
+        points=points,
+        action_type=action_type,
+        reference_id=reference_id,
     )
-
-    updated = RewardBalance.objects.filter(user_id=user_id).update(
-        total_earned=F('total_earned') + points,
-        current_balance=F('current_balance') + points
-    )
-    # Create balance row if it doesn't exist yet
-    if updated == 0:
-        RewardBalance.objects.create(
-            user_id=user_id,
-            total_earned=points,
-            current_balance=points,
-        )
