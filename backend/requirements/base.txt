@@ -57,6 +57,9 @@ pydantic==2.12.5
 # Structured logging
 structlog==25.5.0
 
+# Error monitoring
+sentry-sdk[django]==2.26.1
+
 # Utils
 python-decouple==3.8
 python-dotenv==1.2.1

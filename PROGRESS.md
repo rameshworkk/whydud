@@ -2583,3 +2583,34 @@ python -m apps.scraping.runner firstcry --max-pages 1
 | `frontend/src/app/accounts/[...path]/route.ts` | Use `INTERNAL_API_URL` instead of `NEXT_PUBLIC_API_URL` |
 | `frontend/src/app/oauth/[...path]/route.ts` | Use `INTERNAL_API_URL` instead of `NEXT_PUBLIC_API_URL` |
 | `docker/Caddyfile` | Add `/accounts/*` and `/oauth/*` → `reverse_proxy backend:8000` |
+
+---
+
+### 2026-03-04 — Sentry Error Monitoring for Django Backend
+
+#### What Was Done
+
+Configured Sentry SDK for Django backend error monitoring with Celery integration.
+
+- `sentry-sdk[django]==2.26.1` added to requirements
+- `sentry_sdk.init()` in `settings/base.py` — guarded by `SENTRY_DSN` env var, 10% traces/profiles sampling, PII disabled
+- Separate `sentry_sdk.init()` in `celery.py` with `CeleryIntegration(monitor_beat_tasks=True)` for Celery worker processes
+- `SENTRY_DSN` env var added to all backend services in both `docker-compose.primary.yml` and `docker-compose.replica.yml`
+- `SENTRY_DSN` added to `backend/.env.example` (root `.env.example` already had it)
+
+#### Verification
+
+```bash
+docker compose exec backend python -c "import sentry_sdk; sentry_sdk.capture_message('Whydud Sentry test')"
+```
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/requirements/base.txt` | Add `sentry-sdk[django]==2.26.1` |
+| `backend/whydud/settings/base.py` | Add `sentry_sdk.init()` after imports, guarded by `SENTRY_DSN` |
+| `backend/whydud/celery.py` | Add `sentry_sdk.init()` with `CeleryIntegration` for worker processes |
+| `docker-compose.primary.yml` | Add `SENTRY_DSN` to backend, celery-worker, celery-beat services |
+| `docker-compose.replica.yml` | Add `SENTRY_DSN` to backend, celery-scraping services |
+| `backend/.env.example` | Add `SENTRY_DSN=` entry |

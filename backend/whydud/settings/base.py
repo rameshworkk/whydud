@@ -2,7 +2,21 @@
 import os
 from pathlib import Path
 
+import sentry_sdk
 import structlog
+
+# ---------------------------------------------------------------------------
+# Sentry — error monitoring (only if SENTRY_DSN is set)
+# ---------------------------------------------------------------------------
+
+if _sentry_dsn := os.environ.get("SENTRY_DSN"):
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        traces_sample_rate=0.1,
+        profiles_sample_rate=0.1,
+        environment=os.environ.get("DJANGO_ENV", "development"),
+        send_default_pii=False,
+    )
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 

@@ -8,6 +8,23 @@ from celery.signals import task_failure, task_retry, task_success
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
+# ---------------------------------------------------------------------------
+# Sentry — Celery integration (piggybacks on Django init from settings)
+# ---------------------------------------------------------------------------
+
+if os.environ.get("SENTRY_DSN"):
+    import sentry_sdk
+    from sentry_sdk.integrations.celery import CeleryIntegration
+
+    sentry_sdk.init(
+        dsn=os.environ["SENTRY_DSN"],
+        integrations=[CeleryIntegration(monitor_beat_tasks=True)],
+        traces_sample_rate=0.1,
+        profiles_sample_rate=0.1,
+        environment=os.environ.get("DJANGO_ENV", "development"),
+        send_default_pii=False,
+    )
+
 app = Celery("whydud")
 
 # Load config from Django settings, using CELERY_ namespace.

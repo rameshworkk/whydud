@@ -127,6 +127,7 @@ services:
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@10.0.0.1:6379/0
       MEILISEARCH_URL: http://meilisearch:7700
       MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
       NODE_ROLE: replica
     depends_on:
       postgres:
@@ -194,6 +195,7 @@ services:
       SCRAPING_PROXY_LIST: ${SCRAPING_PROXY_LIST}
       SCRAPING_PROXY_TYPE: ${SCRAPING_PROXY_TYPE:-rotating}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+      SENTRY_DSN: ${SENTRY_DSN:-}
       NODE_ROLE: replica
     depends_on:
       - backend

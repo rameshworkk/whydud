@@ -135,6 +135,7 @@ services:
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       MEILISEARCH_URL: http://meilisearch:7700
       MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
       NODE_ROLE: primary
     depends_on:
       postgres:
@@ -199,6 +200,7 @@ services:
       MEILISEARCH_URL: http://meilisearch:7700
       MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+      SENTRY_DSN: ${SENTRY_DSN:-}
       NODE_ROLE: primary
     depends_on:
       - backend
@@ -226,6 +228,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-whydud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whydud}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SENTRY_DSN: ${SENTRY_DSN:-}
     depends_on:
       - backend
     deploy:
