@@ -237,6 +237,7 @@ class ClickHistoryView(APIView):
             .order_by("-clicked_at")
         )
         paginator = CursorPagination()
+        paginator.ordering = "-clicked_at"
         page = paginator.paginate_queryset(qs, request)
         if page is not None:
             return paginator.get_paginated_response(

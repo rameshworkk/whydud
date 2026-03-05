@@ -3305,3 +3305,51 @@ Configured structlog + django-structlog for structured JSON logging per architec
   - `--coverage` for coverage report, `--parallel` for pytest-xdist
   - Auto-detects backend directory (works in any deployment path)
   - Uses `sys.executable` for correct Python interpreter
+
+### 2026-03-05 — Comprehensive Auth API Tests
+
+- Created `backend/tests/api/__init__.py` + `backend/tests/api/test_auth.py`
+- 30 tests across 8 test classes covering all auth endpoints:
+  - `TestRegister` (8 tests): success, duplicate email, weak/missing password, missing email, invalid format, optional name, referral code
+  - `TestLogin` (5 tests): success, wrong password, nonexistent user, missing fields, token validity round-trip
+  - `TestProfile` (3 tests): authenticated, unauthenticated, response field verification
+  - `TestLogout` (3 tests): success, unauthenticated, token invalidation after logout
+  - `TestPasswordChange` (5 tests): success + new token returned, wrong current password, weak new password, unauthenticated, new token works
+  - `TestWhydudEmail` (6 tests): availability check, missing param, invalid domain, create, duplicate (already_exists), unauthenticated, status get/404
+  - `TestVerifyEmail` (2 tests): missing fields, invalid OTP
+  - `TestForgotPassword` (3 tests): existing email, nonexistent email (no enumeration leak), missing email
+- All tests use actual endpoint paths, field names, and response envelope (`{success, data}` / `{success, error}`)
+- Uses existing conftest fixtures: `api_client`, `test_user`, `auth_token`, `authenticated_client`
+- Commit: `28d1047`
+
+### 2026-03-05 — Product, Search, Compare, Pricing API Tests
+
+- Created `backend/tests/api/test_products.py` — 83 tests across 18 test classes:
+  - `TestProductList` (11 tests): 200, response shape, contains product, required fields, category/brand/price/keyword filters, sort options, invalid sort/price
+  - `TestProductDetail` (6 tests): 200, full data fields, listings, marketplace info, review summary, 404
+  - `TestProductListings` (3 tests): 200, response shape, 404
+  - `TestBestPrice` (2 tests): 200, product info
+  - `TestSimilarProducts` (2 tests): 200, 404
+  - `TestAlternativeProducts` (1 test): 200
+  - `TestShareProduct` (2 tests): 200, OG data
+  - `TestProductLookup` (3 tests): 200 with marketplace/external_id, missing params 400, not found 404
+  - `TestSearch` (8 tests): 200, finds product via DB fallback, response shape, empty/missing q 400, category/price filters, sort options
+  - `TestAutocomplete` (3 tests): 200, finds product, short query returns empty
+  - `TestCompare` (4 tests): needs 2 slugs 400, no slugs 400, valid 2-slug compare 200, nonexistent slug 404
+  - `TestShareCompare` (2 tests): needs 2 slugs 400, OG data
+  - `TestPriceHistory` (2 tests): 501 stub, 501 for missing product (no slug check yet)
+  - `TestProductReviews` (3 tests): 200, 404, sort options
+  - `TestDeals` (3 tests): 200, type filter, category filter
+  - `TestOffers` (2 tests): 200, marketplace filter
+  - `TestTrending` (3 tests): products, rising, price-dropping all 200
+  - `TestCategoryEndpoints` (5 tests): leaderboard/most-loved/most-hated 200, 404 for missing, has products with dud_score
+  - `TestBankCards` (2 tests): banks list 200, variants 404 for missing
+  - `TestPriceAlerts` (5 tests): unauth 401, auth list 200, create 201, missing product 400, triggered 200
+  - `TestStockAlerts` (3 tests): unauth 401, list 200, create 201
+  - `TestRecentlyViewed` (4 tests): unauth 401, list 200, log view 201, missing slug 400
+  - `TestClickTracking` (4 tests): track click 201, missing listing 400, history unauth 401, history auth 200
+- Fixed conftest.py:
+  - Removed invalid `in_stock=True` from Product fixture (field is on ProductListing)
+  - Fixed auth login URL: `/api/v1/auth/login` (no trailing slash)
+  - Added `_disable_throttling` autouse fixture to prevent rate-limit flakes
+- Fixed bug in `apps/pricing/views.py:ClickHistoryView`: CursorPagination used default `created_at` ordering but ClickEvent has `clicked_at` — added `paginator.ordering = "-clicked_at"`

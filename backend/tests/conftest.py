@@ -12,6 +12,27 @@ from rest_framework.test import APIClient
 
 User = get_user_model()
 
+# ── Session-scoped Setup ──
+
+
+@pytest.fixture(autouse=True)
+def _disable_throttling(settings):
+    """Set very high throttle rates during tests to avoid rate-limit flakes."""
+    settings.REST_FRAMEWORK = {
+        **getattr(settings, 'REST_FRAMEWORK', {}),
+        'DEFAULT_THROTTLE_CLASSES': [],
+        'DEFAULT_THROTTLE_RATES': {
+            'auth': '9999/minute',
+            'search': '9999/minute',
+            'review': '9999/minute',
+            'email_send': '9999/minute',
+            'anon_search': '9999/minute',
+            'user_search': '9999/minute',
+            'product_view': '9999/minute',
+        },
+    }
+
+
 # ── Core Fixtures ──
 
 
@@ -48,7 +69,7 @@ def test_user_2(db):
 @pytest.fixture
 def auth_token(api_client, test_user):
     """Get auth token for the test user."""
-    response = api_client.post('/api/v1/auth/login/', {
+    response = api_client.post('/api/v1/auth/login', {
         'email': 'testuser@example.com',
         'password': 'TestPass123!',
     }, format='json')
@@ -143,7 +164,6 @@ def test_product(db, test_category, test_brand, test_marketplace):
         avg_rating=Decimal('4.50'),
         total_reviews=1250,
         dud_score=Decimal('82.50'),
-        in_stock=True,
         images=['https://example.com/iphone16.jpg'],
     )
 
