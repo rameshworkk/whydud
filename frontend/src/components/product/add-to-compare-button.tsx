@@ -21,7 +21,9 @@ export function AddToCompareButton({
   const active = isInCompare(product.slug);
   const disabled = !active && isFull;
 
-  function handleClick() {
+  function handleClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     if (active) {
       removeFromCompare(product.slug);
     } else if (!isFull) {

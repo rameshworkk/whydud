@@ -35,7 +35,7 @@ class TestPublicPages:
         ('/',               'Homepage'),
         ('/search',         'Search'),
         ('/deals',          'Deals'),
-        ('/categories',     'Categories'),
+        ('/leaderboard',    'Leaderboard'),
         ('/login',          'Login'),
         ('/register',       'Register'),
     ])

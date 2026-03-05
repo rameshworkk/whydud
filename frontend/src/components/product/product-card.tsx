@@ -94,10 +94,7 @@ export function ProductCard({ product }: ProductCardProps) {
         )}
 
         {/* Compare button overlay */}
-        <div
-          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          onClick={(e) => e.preventDefault()}
-        >
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <AddToCompareButton product={product} className="shadow-sm" />
         </div>
       </div>
