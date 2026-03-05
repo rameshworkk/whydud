@@ -1,4 +1,4 @@
-"""DudScore configuration and history models.
+"""DudScore configuration, history, and Brand Trust Score models.
 
 PostgreSQL schema: scoring
 """
@@ -42,3 +42,62 @@ class DudScoreHistory(models.Model):
     class Meta:
         db_table = 'scoring"."dudscore_history'
         managed = False  # TimescaleDB hypertable
+
+
+class BrandTrustScore(models.Model):
+    """Aggregated trust score for a brand, computed weekly from product DudScores.
+
+    Only brands with >= 5 DudScore-rated products are scored.
+    """
+
+    class TrustTier(models.TextChoices):
+        EXCELLENT = "excellent", "Excellent"
+        GOOD = "good", "Good"
+        AVERAGE = "average", "Average"
+        POOR = "poor", "Poor"
+        AVOID = "avoid", "Avoid"
+
+    brand = models.OneToOneField(
+        "products.Brand",
+        on_delete=models.CASCADE,
+        related_name="trust_score",
+    )
+    avg_dud_score = models.DecimalField(
+        max_digits=5, decimal_places=2,
+        help_text="Average DudScore across all scored products.",
+    )
+    product_count = models.IntegerField(
+        help_text="Number of products with a DudScore for this brand.",
+    )
+    avg_fake_review_pct = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Average percentage of flagged reviews across products.",
+    )
+    avg_price_stability = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Average price stability component (0-100) from DudScores.",
+    )
+    quality_consistency = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="STDDEV of DudScores — lower = more consistent.",
+    )
+    trust_tier = models.CharField(
+        max_length=20,
+        choices=TrustTier.choices,
+        help_text="Derived tier: excellent (>=80), good (>=65), average (>=50), poor (>=35), avoid (<35).",
+    )
+    computed_at = models.DateTimeField(
+        help_text="When this score was last computed.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'scoring"."brand_trust_scores'
+        indexes = [
+            models.Index(fields=["-avg_dud_score"]),
+            models.Index(fields=["trust_tier"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.brand.name}: {self.avg_dud_score} ({self.trust_tier})"

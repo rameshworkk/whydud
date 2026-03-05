@@ -12,8 +12,10 @@ import { AlternativeProducts } from "@/components/product/AlternativeProducts";
 import { ShareButton } from "@/components/product/share-button";
 import { AddToCompareButton } from "@/components/product/add-to-compare-button";
 import { RecentlyViewedTracker } from "@/components/product/recently-viewed-tracker";
+import { BrandTrustBadge } from "@/components/product/brand-trust-badge";
 import { DiscussionSection } from "@/components/discussions/DiscussionSection";
 import { productsApi } from "@/lib/api/products";
+import { brandsApi } from "@/lib/api/brands";
 import { formatPrice } from "@/lib/utils";
 import { config } from "@/config";
 import {
@@ -28,7 +30,7 @@ import {
   MemoryStick,
   Info,
 } from "lucide-react";
-import type { ProductDetail, ProductSummary, PricePoint, Review, DudScoreLabel } from "@/types";
+import type { ProductDetail, ProductSummary, PricePoint, Review, DudScoreLabel, BrandTrustScore } from "@/types";
 import { Suspense } from "react";
 import type { LucideIcon } from "lucide-react";
 
@@ -202,7 +204,14 @@ async function fetchProductData(slug: string) {
   const priceHistory: PricePoint[] = priceRes.success ? priceRes.data : [];
   const reviews: Review[] = reviewsRes.success ? reviewsRes.data : [];
 
-  return { product, priceHistory, reviews };
+  // Fetch brand trust score (non-blocking — page works without it)
+  let brandTrust: BrandTrustScore | null = null;
+  if (product?.brand?.slug) {
+    const brandRes = await brandsApi.getTrustScore(product.brand.slug);
+    brandTrust = brandRes.success ? brandRes.data : null;
+  }
+
+  return { product, priceHistory, reviews, brandTrust };
 }
 
 // ── Metadata ─────────────────────────────────────────────────────────────────
@@ -253,7 +262,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const { product: p, priceHistory, reviews } = await fetchProductData(slug);
+  const { product: p, priceHistory, reviews, brandTrust } = await fetchProductData(slug);
 
   if (!p) {
     notFound();
@@ -409,9 +418,23 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
           {/* Brand + category + actions */}
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              {p.brand.name} · {p.category.name}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <Link href={`/brand/${p.brand.slug}`} className="hover:text-[#4DB6AC] transition-colors">
+                  {p.brand.name}
+                </Link>
+                {" "}· {p.category.name}
+              </p>
+              {brandTrust && (
+                <BrandTrustBadge
+                  brandSlug={p.brand.slug}
+                  brandName={p.brand.name}
+                  avgDudScore={brandTrust.avgDudScore}
+                  trustTier={brandTrust.trustTier}
+                  compact
+                />
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <AddToCompareButton product={productSummary} />
               <ShareButton

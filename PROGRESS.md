@@ -3244,3 +3244,28 @@ Configured structlog + django-structlog for structured JSON logging per architec
 - Input suffix now shows `@{selectedDomain}` dynamically instead of hardcoded `@whyd.xyz`
 - Availability check re-triggers when domain selection changes
 - Updated marketplace instruction copy from "@whyd.xyz" to "shopping email"
+
+### 2026-03-05 — Brand Trust Score (#36)
+
+**Backend:**
+- New model: `BrandTrustScore` in `scoring` app (table: `scoring.brand_trust_scores`)
+  - Fields: avg_dud_score, product_count, avg_fake_review_pct, avg_price_stability, quality_consistency, trust_tier
+  - Trust tiers: excellent (>=80), good (>=65), average (>=50), poor (>=35), avoid (<35)
+  - Indexes on -avg_dud_score and trust_tier
+- Migration: `scoring/0004_brandtrustscore.py`
+- Celery task: `recompute_brand_trust_scores()` (weekly, scoring queue)
+  - Computes for brands with >= 5 DudScore-rated products
+  - Aggregates: AVG(dud_score), STDDEV(dud_score), fake review %, price stability from DudScoreHistory
+  - Cleans up stale scores for brands that no longer qualify
+- API: `GET /api/v1/brands/{slug}/trust-score` — single brand trust score
+- API: `GET /api/v1/brands/leaderboard` — top/bottom 20 brands by trust score
+- `BrandTrustConfig` added to `common/app_settings.py` (min_products, leaderboard_size)
+- Admin: `BrandTrustScoreAdmin` with list filters and search
+
+**Frontend:**
+- New types: `BrandTrustScore`, `BrandTrustTier`, `BrandLeaderboard` in `types/product.ts`
+- New API client: `lib/api/brands.ts` (getTrustScore, getLeaderboard, getProducts)
+- Brand profile page: `/brand/[slug]` with trust gauge, product grid, breadcrumbs
+- Components: `brand-trust-gauge.tsx`, `brand-trust-badge.tsx`, `brand-leaderboard.tsx`
+- Product detail page: brand trust badge (compact shield icon + score) next to brand name, links to brand page
+- Leaderboard page: added "Brand Trust" tab alongside "Top Reviewers" with top/bottom brand toggle

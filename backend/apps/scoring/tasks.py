@@ -1,4 +1,4 @@
-"""Celery tasks for DudScore computation."""
+"""Celery tasks for DudScore and Brand Trust Score computation."""
 import json
 import logging
 from decimal import Decimal
@@ -145,3 +145,175 @@ def full_dudscore_recalculation() -> dict:
 
     logger.info("full_dudscore_recalculation: dispatched %d tasks", dispatched)
     return {"dispatched": dispatched, "total_products": len(product_ids)}
+
+
+def _derive_trust_tier(avg_score: float) -> str:
+    """Map an average DudScore to a trust tier label."""
+    if avg_score >= 80:
+        return "excellent"
+    if avg_score >= 65:
+        return "good"
+    if avg_score >= 50:
+        return "average"
+    if avg_score >= 35:
+        return "poor"
+    return "avoid"
+
+
+@shared_task(queue="scoring")
+def recompute_brand_trust_scores() -> dict:
+    """Weekly: recompute BrandTrustScore for all qualifying brands.
+
+    A brand qualifies when it has >= ``BrandTrustConfig.min_products`` products
+    with a non-NULL dud_score.
+
+    Metrics computed per brand:
+      - avg_dud_score: AVG(dud_score) of scored products
+      - product_count: COUNT of scored products
+      - avg_fake_review_pct: AVG fake-review % across products
+      - avg_price_stability: AVG price_stability component from latest DudScoreHistory
+      - quality_consistency: STDDEV(dud_score) — lower = more consistent
+      - trust_tier: derived from avg_dud_score
+    """
+    from django.db.models import Avg, Count, Q, StdDev
+
+    from apps.products.models import Brand, Product
+    from apps.scoring.models import BrandTrustScore
+
+    from common.app_settings import BrandTrustConfig
+
+    min_products = BrandTrustConfig.min_products()
+    now = timezone.now()
+
+    # Find brands with enough scored products
+    qualifying_brands = (
+        Brand.objects.annotate(
+            scored_count=Count(
+                "products",
+                filter=Q(products__dud_score__isnull=False, products__status=Product.Status.ACTIVE),
+            ),
+        )
+        .filter(scored_count__gte=min_products)
+    )
+
+    updated = 0
+    created = 0
+
+    for brand in qualifying_brands:
+        scored_products = Product.objects.filter(
+            brand=brand,
+            dud_score__isnull=False,
+            status=Product.Status.ACTIVE,
+        )
+
+        agg = scored_products.aggregate(
+            avg_score=Avg("dud_score"),
+            stddev_score=StdDev("dud_score"),
+            count=Count("id"),
+        )
+
+        avg_dud_score = float(agg["avg_score"] or 0)
+        product_count = agg["count"] or 0
+        quality_consistency = float(agg["stddev_score"]) if agg["stddev_score"] is not None else None
+
+        # Avg fake review percentage: ratio of flagged reviews per product
+        avg_fake_review_pct = _compute_avg_fake_review_pct(scored_products)
+
+        # Avg price stability from most recent DudScoreHistory per product
+        avg_price_stability = _compute_avg_price_stability(scored_products)
+
+        trust_tier = _derive_trust_tier(avg_dud_score)
+
+        _, was_created = BrandTrustScore.objects.update_or_create(
+            brand=brand,
+            defaults={
+                "avg_dud_score": Decimal(str(round(avg_dud_score, 2))),
+                "product_count": product_count,
+                "avg_fake_review_pct": (
+                    Decimal(str(round(avg_fake_review_pct, 2)))
+                    if avg_fake_review_pct is not None
+                    else None
+                ),
+                "avg_price_stability": (
+                    Decimal(str(round(avg_price_stability, 2)))
+                    if avg_price_stability is not None
+                    else None
+                ),
+                "quality_consistency": (
+                    Decimal(str(round(quality_consistency, 2)))
+                    if quality_consistency is not None
+                    else None
+                ),
+                "trust_tier": trust_tier,
+                "computed_at": now,
+            },
+        )
+
+        if was_created:
+            created += 1
+        else:
+            updated += 1
+
+    # Clean up brand trust scores for brands that no longer qualify
+    stale = BrandTrustScore.objects.exclude(
+        brand__in=qualifying_brands,
+    )
+    stale_count = stale.count()
+    if stale_count:
+        logger.info("recompute_brand_trust_scores: removing %d stale scores", stale_count)
+        stale.delete()
+
+    logger.info(
+        "recompute_brand_trust_scores: created=%d updated=%d removed=%d",
+        created, updated, stale_count,
+    )
+    return {"created": created, "updated": updated, "removed": stale_count}
+
+
+def _compute_avg_fake_review_pct(scored_products) -> float | None:
+    """Compute average fake review percentage across a queryset of products."""
+    from apps.reviews.models import Review
+
+    product_ids = list(scored_products.values_list("id", flat=True))
+    if not product_ids:
+        return None
+
+    # For each product: flagged_count / total_count * 100
+    totals = []
+    for pid in product_ids:
+        reviews = Review.objects.filter(product_id=pid, status="published")
+        total = reviews.count()
+        if total == 0:
+            continue
+        flagged = reviews.filter(is_flagged=True).count()
+        totals.append((flagged / total) * 100)
+
+    return sum(totals) / len(totals) if totals else None
+
+
+def _compute_avg_price_stability(scored_products) -> float | None:
+    """Compute average price stability component from latest DudScoreHistory entries."""
+    product_ids = list(scored_products.values_list("id", flat=True))
+    if not product_ids:
+        return None
+
+    # Use raw SQL to get the most recent component_scores per product
+    # and extract the price_stability value from JSONB
+    placeholders = ", ".join(["%s"] * len(product_ids))
+    query = f"""
+        SELECT AVG((component_scores->>'price_stability')::numeric)
+        FROM (
+            SELECT DISTINCT ON (product_id) product_id, component_scores
+            FROM "scoring"."dudscore_history"
+            WHERE product_id = ANY(%s)
+            ORDER BY product_id, time DESC
+        ) latest
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, [list(str(pid) for pid in product_ids)])
+        row = cursor.fetchone()
+
+    if row and row[0] is not None:
+        return float(row[0])
+    return None

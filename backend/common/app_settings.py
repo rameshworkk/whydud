@@ -579,3 +579,21 @@ class RewardsConfig:
     def points_per_rupee(cls) -> int:
         """How many points equal ₹1 for gift card redemption."""
         return _get("REWARDS_POINTS_PER_RUPEE", 10)
+
+
+# ---------------------------------------------------------------------------
+# Brand Trust Score
+# ---------------------------------------------------------------------------
+
+class BrandTrustConfig:
+    """Tunable thresholds for brand trust score computation."""
+
+    @classmethod
+    def min_products(cls) -> int:
+        """Minimum products with DudScores before computing brand trust."""
+        return _get("BRAND_TRUST_MIN_PRODUCTS", 5)
+
+    @classmethod
+    def leaderboard_size(cls) -> int:
+        """Number of brands in top/bottom leaderboard."""
+        return _get("BRAND_TRUST_LEADERBOARD_SIZE", 20)

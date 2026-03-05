@@ -344,3 +344,25 @@ export interface ShareData {
   ogDescription: string;
   ogImage: string;
 }
+
+export type BrandTrustTier = "excellent" | "good" | "average" | "poor" | "avoid";
+
+export interface BrandTrustScore {
+  id: number;
+  brandName: string;
+  brandSlug: string;
+  brandLogoUrl: string;
+  brandVerified: boolean;
+  avgDudScore: number;
+  productCount: number;
+  avgFakeReviewPct: number | null;
+  avgPriceStability: number | null;
+  qualityConsistency: number | null;
+  trustTier: BrandTrustTier;
+  computedAt: string;
+}
+
+export interface BrandLeaderboard {
+  top: BrandTrustScore[];
+  bottom: BrandTrustScore[];
+}

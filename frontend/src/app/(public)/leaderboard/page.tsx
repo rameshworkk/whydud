@@ -10,11 +10,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Star,
+  Shield,
 } from "lucide-react";
 import { reviewsApi } from "@/lib/api/reviews";
 import { cn } from "@/lib/utils/index";
 import type { ReviewerProfile } from "@/lib/api/types";
 import type { PaginatedApiResponse } from "@/types/api";
+import { BrandLeaderboard } from "@/components/product/brand-leaderboard";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -338,6 +340,7 @@ function ReviewerRow({
 // ---------------------------------------------------------------------------
 
 export default function LeaderboardPage() {
+  const [tab, setTab] = useState<"reviewers" | "brands">("reviewers");
   const [reviewers, setReviewers] = useState<ReviewerProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("");
@@ -390,6 +393,41 @@ export default function LeaderboardPage() {
     <>
       <Header />
       <main className="mx-auto max-w-[1280px] px-4 py-8">
+        {/* ── Tab Switcher ── */}
+        <div className="flex items-center gap-1 mb-8 border-b border-[#E2E8F0]">
+          <button
+            type="button"
+            onClick={() => setTab("reviewers")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px",
+              tab === "reviewers"
+                ? "border-[#F97316] text-[#F97316]"
+                : "border-transparent text-[#64748B] hover:text-[#1E293B]",
+            )}
+          >
+            <Trophy className="h-4 w-4" />
+            Top Reviewers
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("brands")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px",
+              tab === "brands"
+                ? "border-[#F97316] text-[#F97316]"
+                : "border-transparent text-[#64748B] hover:text-[#1E293B]",
+            )}
+          >
+            <Shield className="h-4 w-4" />
+            Brand Trust
+          </button>
+        </div>
+
+        {/* ── Brand Leaderboard Tab ── */}
+        {tab === "brands" && <BrandLeaderboard />}
+
+        {/* ── Reviewer Leaderboard Tab ── */}
+        {tab === "reviewers" && (<>
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
@@ -524,6 +562,7 @@ export default function LeaderboardPage() {
             </button>
           </div>
         )}
+        </>)}
       </main>
       <Footer />
     </>
