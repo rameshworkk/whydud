@@ -95,6 +95,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
     trust_score = models.DecimalField(max_digits=3, decimal_places=2, default="0.50")
     is_suspended = models.BooleanField(default=False)
+    deletion_requested_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     last_login_at = models.DateTimeField(null=True, blank=True)

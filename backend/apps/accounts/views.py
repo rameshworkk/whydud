@@ -25,6 +25,7 @@ from .models import (
 )
 from .serializers import (
     ChangePasswordSerializer,
+    DeleteAccountSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
     MarketplacePreferenceSerializer,
@@ -133,7 +134,12 @@ class LoginView(APIView):
                 cache.touch(lockout_key, self.LOCKOUT_DURATION)
             return error_response("invalid_credentials", "Invalid email or password.", status=401)
 
-        if not user.is_active or getattr(user, "is_suspended", False):
+        if not user.is_active:
+            return error_response("account_suspended", "Your account has been suspended.", status=403)
+
+        # Allow login for users with pending deletion (so they can restore),
+        # but block truly suspended users (no deletion request).
+        if user.is_suspended and user.deletion_requested_at is None:
             return error_response("account_suspended", "Your account has been suspended.", status=403)
 
         # Clear lockout on successful login
@@ -371,8 +377,12 @@ class MeView(APIView):
         return success_response(UserSerializer(request.user).data)
 
     def delete(self, request: Request) -> Response:
-        # TODO Sprint 4: DPDP-compliant account deletion
-        return error_response("not_implemented", "Account deletion available in Sprint 4.", status=501)
+        # Redirect to dedicated DeleteAccountView endpoint
+        return error_response(
+            "use_dedicated_endpoint",
+            "Use DELETE /api/v1/me/account with password confirmation.",
+            status=400,
+        )
 
 
 class WhydudEmailView(APIView):
@@ -486,3 +496,147 @@ class MarketplacePreferenceView(APIView):
             return error_response("validation_error", str(serializer.errors))
         serializer.save()
         return success_response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# DPDP Compliance: Account deletion, restoration, and data export
+# ---------------------------------------------------------------------------
+
+DELETION_GRACE_PERIOD_DAYS = 30
+
+
+class DeleteAccountView(APIView):
+    """DELETE /api/v1/me/account — soft-delete with 30-day grace period."""
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request) -> Response:
+        serializer = DeleteAccountSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response("validation_error", str(serializer.errors))
+
+        if not request.user.check_password(serializer.validated_data["password"]):
+            return error_response("wrong_password", "Password is incorrect.", status=400)
+
+        if request.user.deletion_requested_at is not None:
+            return error_response(
+                "already_requested",
+                "Account deletion already requested.",
+            )
+
+        user = request.user
+        now = timezone.now()
+
+        # Soft-delete: mark as suspended + record deletion request time
+        user.is_suspended = True
+        user.deletion_requested_at = now
+        user.save(update_fields=["is_suspended", "deletion_requested_at"])
+
+        # Immediately revoke OAuth tokens (don't wait 30 days)
+        from .models import OAuthConnection
+        OAuthConnection.objects.filter(user=user).delete()
+
+        # Invalidate auth token
+        Token.objects.filter(user=user).delete()
+
+        # Schedule hard delete after grace period
+        from .tasks import hard_delete_user
+        hard_delete_user.apply_async(
+            args=[str(user.pk)],
+            countdown=DELETION_GRACE_PERIOD_DAYS * 86400,
+        )
+
+        # Send confirmation email
+        from .tasks import send_deletion_confirmation_email
+        send_deletion_confirmation_email.delay(str(user.pk))
+
+        return success_response({
+            "detail": (
+                f"Your account will be permanently deleted in "
+                f"{DELETION_GRACE_PERIOD_DAYS} days. "
+                f"You can restore it before then by logging in."
+            ),
+            "deletion_requested_at": now.isoformat(),
+            "permanent_deletion_at": (
+                now + timezone.timedelta(days=DELETION_GRACE_PERIOD_DAYS)
+            ).isoformat(),
+        })
+
+
+class RestoreAccountView(APIView):
+    """POST /api/v1/me/account/restore — cancel pending deletion."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        user = request.user
+
+        if user.deletion_requested_at is None:
+            return error_response(
+                "no_deletion_pending",
+                "No account deletion is pending.",
+            )
+
+        # Restore account
+        user.is_suspended = False
+        user.deletion_requested_at = None
+        user.save(update_fields=["is_suspended", "deletion_requested_at"])
+
+        return success_response({
+            "detail": "Account deletion cancelled. Your account has been restored.",
+        })
+
+
+class ExportDataView(APIView):
+    """GET /api/v1/me/export — queue data export and return task ID."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        # Rate limit: one export per hour
+        export_key = f"data_export:{request.user.pk}"
+        if cache.get(export_key):
+            return error_response(
+                "export_in_progress",
+                "A data export is already in progress. Please wait.",
+                status=429,
+            )
+
+        from .tasks import generate_data_export
+        task = generate_data_export.delay(str(request.user.pk))
+
+        # Mark export as in-progress for 1 hour
+        cache.set(export_key, task.id, 3600)
+
+        return success_response(
+            {"task_id": task.id, "detail": "Data export started. This may take a few minutes."},
+            status=202,
+        )
+
+
+class ExportStatusView(APIView):
+    """GET /api/v1/me/export/<task_id> — check export status."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, task_id: str) -> Response:
+        from celery.result import AsyncResult
+
+        result = AsyncResult(task_id)
+
+        if result.state == "PENDING":
+            return success_response({"status": "pending"})
+        elif result.state == "SUCCESS":
+            download_url = result.result
+            return success_response({
+                "status": "completed",
+                "download_url": download_url,
+            })
+        elif result.state == "FAILURE":
+            return error_response(
+                "export_failed",
+                "Data export failed. Please try again.",
+                status=500,
+            )
+        else:
+            return success_response({"status": result.state.lower()})

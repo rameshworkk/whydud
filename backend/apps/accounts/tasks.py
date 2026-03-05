@@ -1,5 +1,8 @@
 """Celery tasks for accounts app."""
+import json
 import logging
+import os
+import uuid
 
 from celery import shared_task
 from django.conf import settings
@@ -10,6 +13,8 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
 logger = logging.getLogger(__name__)
+
+DELETION_GRACE_PERIOD_DAYS = 30
 
 # Maps Notification.Type values to NotificationPreference field names.
 # subscription_renewal has no user-facing preference — always delivered.
@@ -99,10 +104,340 @@ def send_password_reset_email(user_id: str, uid: str, token: str) -> None:
 
 
 @shared_task(queue="default")
-def delete_user_data(user_id: str) -> None:
-    """Hard-delete all user data (DPDP compliance). Called 30 days after soft-delete."""
-    # TODO Sprint 4
-    pass
+def hard_delete_user(user_id: str) -> None:
+    """Hard-delete all user data (DPDP compliance).
+
+    Called 30 days after soft-delete request. Checks that the user hasn't
+    cancelled the deletion (deletion_requested_at is still set).
+    """
+    from .models import User
+
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        logger.info("hard_delete_user: user %s already deleted", user_id)
+        return
+
+    # User may have cancelled — check deletion_requested_at is still set
+    if user.deletion_requested_at is None:
+        logger.info("hard_delete_user: user %s cancelled deletion, skipping", user_id)
+        return
+
+    user_email = user.email
+    logger.info("hard_delete_user: starting hard delete for %s", user_email)
+
+    # 1. Delete @whyd.* emails + parsed orders + inbox emails
+    try:
+        from apps.email_intel.models import (
+            InboxEmail, ParsedOrder, RefundTracking, ReturnWindow,
+            DetectedSubscription, EmailSource,
+        )
+        inbox_count = InboxEmail.objects.filter(user=user).count()
+        InboxEmail.objects.filter(user=user).delete()
+        ParsedOrder.objects.filter(user=user).delete()
+        RefundTracking.objects.filter(user=user).delete()
+        ReturnWindow.objects.filter(user=user).delete()
+        DetectedSubscription.objects.filter(user=user).delete()
+        EmailSource.objects.filter(user=user).delete()
+        logger.info("hard_delete_user: deleted %d inbox emails for %s", inbox_count, user_email)
+    except Exception as exc:
+        logger.warning("hard_delete_user: email_intel cleanup error: %s", exc)
+
+    # 2. Anonymize reviews (keep content, remove user association)
+    try:
+        from apps.reviews.models import Review, ReviewVote, ReviewerProfile
+        reviews_count = Review.objects.filter(user=user).count()
+        Review.objects.filter(user=user).update(
+            user=None, reviewer_name="Deleted User"
+        )
+        ReviewVote.objects.filter(user=user).delete()
+        ReviewerProfile.objects.filter(user=user).delete()
+        logger.info("hard_delete_user: anonymized %d reviews for %s", reviews_count, user_email)
+    except Exception as exc:
+        logger.warning("hard_delete_user: reviews cleanup error: %s", exc)
+
+    # 3. Delete wishlists + items
+    try:
+        from apps.wishlists.models import Wishlist
+        Wishlist.objects.filter(user=user).delete()
+    except Exception as exc:
+        logger.warning("hard_delete_user: wishlists cleanup error: %s", exc)
+
+    # 4. Delete price alerts
+    try:
+        from apps.pricing.models import PriceAlert
+        PriceAlert.objects.filter(user=user).delete()
+    except Exception as exc:
+        logger.warning("hard_delete_user: price alerts cleanup error: %s", exc)
+
+    # 5. Delete rewards data
+    try:
+        from apps.rewards.models import PointsLedger, RewardBalance, GiftCardRedemption
+        PointsLedger.objects.filter(user=user).delete()
+        GiftCardRedemption.objects.filter(user=user).delete()
+        RewardBalance.objects.filter(user=user).delete()
+    except Exception as exc:
+        logger.warning("hard_delete_user: rewards cleanup error: %s", exc)
+
+    # 6. Delete discussions (threads, replies, votes)
+    try:
+        from apps.discussions.models import DiscussionThread, DiscussionReply, DiscussionVote
+        DiscussionVote.objects.filter(user=user).delete()
+        DiscussionReply.objects.filter(user=user).delete()
+        DiscussionThread.objects.filter(user=user).delete()
+    except Exception as exc:
+        logger.warning("hard_delete_user: discussions cleanup error: %s", exc)
+
+    # 7. Delete TCO profile
+    try:
+        from apps.tco.models import UserTCOProfile
+        UserTCOProfile.objects.filter(user=user).delete()
+    except Exception as exc:
+        logger.warning("hard_delete_user: TCO cleanup error: %s", exc)
+
+    # 8. Delete stock alerts, compare sessions, recently viewed
+    try:
+        from apps.products.models import StockAlert, CompareSession, RecentlyViewed
+        StockAlert.objects.filter(user=user).delete()
+        CompareSession.objects.filter(user=user).delete()
+        RecentlyViewed.objects.filter(user=user).delete()
+    except Exception as exc:
+        logger.warning("hard_delete_user: products cleanup error: %s", exc)
+
+    # 9. Delete notifications + preferences (CASCADE should handle, but be explicit)
+    from .models import Notification, NotificationPreference
+    Notification.objects.filter(user=user).delete()
+    try:
+        user.notification_preferences.delete()
+    except NotificationPreference.DoesNotExist:
+        pass
+
+    # 10. Delete remaining account-level data (OAuth already deleted at soft-delete)
+    from .models import PaymentMethod, WhydudEmail, PurchasePreference, MarketplacePreference
+    PaymentMethod.objects.filter(user=user).delete()
+    PurchasePreference.objects.filter(user=user).delete()
+    try:
+        user.marketplace_preferences.delete()
+    except MarketplacePreference.DoesNotExist:
+        pass
+    try:
+        user.whydud_email.delete()
+    except WhydudEmail.DoesNotExist:
+        pass
+
+    # 11. Delete auth tokens
+    from rest_framework.authtoken.models import Token
+    Token.objects.filter(user=user).delete()
+
+    # 12. Finally delete the User record
+    user.delete()
+    logger.info("hard_delete_user: completed hard delete for %s", user_email)
+
+
+# Keep old name as alias for backwards compatibility with any queued tasks
+delete_user_data = hard_delete_user
+
+
+@shared_task(queue="email")
+def send_deletion_confirmation_email(user_id: str) -> None:
+    """Send email confirming account deletion has been requested."""
+    from .models import User
+
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return
+
+    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+
+    send_mail(
+        subject="Your Whydud account deletion request",
+        message=(
+            f"Hi {user.name or 'there'},\n\n"
+            f"We've received your request to delete your Whydud account.\n\n"
+            f"Your account will be permanently deleted in {DELETION_GRACE_PERIOD_DAYS} days.\n\n"
+            f"If you change your mind, simply log in to your account and "
+            f"visit {frontend_url}/settings to cancel the deletion.\n\n"
+            f"— Whydud"
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=True,
+    )
+
+
+@shared_task(queue="default")
+def generate_data_export(user_id: str) -> str:
+    """Generate a JSON data export for DPDP right to portability.
+
+    Returns the download URL path. The file is stored in MEDIA_ROOT/exports/
+    and expires after 24 hours (cleaned up by a separate periodic task or on access).
+    """
+    from .models import User
+    from .serializers import UserSerializer
+
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        raise ValueError(f"User {user_id} not found")
+
+    export_data: dict = {
+        "exported_at": timezone.now().isoformat(),
+        "user_id": str(user.pk),
+    }
+
+    # --- Profile ---
+    export_data["profile"] = UserSerializer(user).data
+    export_data["profile"]["created_at"] = user.created_at.isoformat()
+
+    # --- @whyd.xyz email ---
+    try:
+        whydud_email = user.whydud_email
+        export_data["whydud_email"] = {
+            "username": whydud_email.username,
+            "domain": whydud_email.domain,
+            "email_address": whydud_email.email_address,
+            "is_active": whydud_email.is_active,
+            "total_emails_received": whydud_email.total_emails_received,
+            "total_orders_detected": whydud_email.total_orders_detected,
+            "created_at": whydud_email.created_at.isoformat(),
+        }
+    except Exception:
+        export_data["whydud_email"] = None
+
+    # --- Reviews ---
+    try:
+        from apps.reviews.models import Review
+        reviews = Review.objects.filter(user=user).select_related("product")
+        export_data["reviews"] = [
+            {
+                "product": str(r.product.title) if r.product else None,
+                "rating": r.rating,
+                "title": r.title,
+                "body": r.body,
+                "created_at": r.created_at.isoformat() if hasattr(r, "created_at") else None,
+            }
+            for r in reviews
+        ]
+    except Exception:
+        export_data["reviews"] = []
+
+    # --- Wishlists ---
+    try:
+        from apps.wishlists.models import Wishlist
+        wishlists = Wishlist.objects.filter(user=user).prefetch_related("items")
+        export_data["wishlists"] = [
+            {
+                "name": w.name,
+                "is_default": w.is_default,
+                "items": [
+                    {
+                        "product_id": str(item.product_id),
+                        "price_when_added": str(item.price_when_added) if item.price_when_added else None,
+                        "target_price": str(item.target_price) if item.target_price else None,
+                        "notes": item.notes,
+                        "added_at": item.added_at.isoformat() if hasattr(item, "added_at") else None,
+                    }
+                    for item in w.items.all()
+                ],
+                "created_at": w.created_at.isoformat(),
+            }
+            for w in wishlists
+        ]
+    except Exception:
+        export_data["wishlists"] = []
+
+    # --- Parsed orders (purchases) ---
+    try:
+        from apps.email_intel.models import ParsedOrder
+        orders = ParsedOrder.objects.filter(user=user)
+        export_data["purchases"] = [
+            {
+                "order_id": o.order_id,
+                "marketplace": o.marketplace,
+                "product_name": o.product_name,
+                "quantity": o.quantity,
+                "price_paid": str(o.price_paid) if o.price_paid else None,
+                "total_amount": str(o.total_amount) if o.total_amount else None,
+                "order_date": o.order_date.isoformat() if o.order_date else None,
+                "seller_name": o.seller_name,
+                "created_at": o.created_at.isoformat(),
+            }
+            for o in orders
+        ]
+    except Exception:
+        export_data["purchases"] = []
+
+    # --- Preferences ---
+    try:
+        from .models import NotificationPreference
+        prefs = user.notification_preferences
+        export_data["notification_preferences"] = {
+            "price_drops": prefs.price_drops,
+            "return_windows": prefs.return_windows,
+            "back_in_stock": prefs.back_in_stock,
+            "review_upvotes": prefs.review_upvotes,
+            "price_alerts": prefs.price_alerts,
+            "discussion_replies": prefs.discussion_replies,
+        }
+    except Exception:
+        export_data["notification_preferences"] = None
+
+    # --- Rewards ---
+    try:
+        from apps.rewards.models import PointsLedger, RewardBalance
+        balance = RewardBalance.objects.filter(user=user).first()
+        if balance:
+            export_data["rewards"] = {
+                "current_balance": balance.current_balance,
+                "total_earned": balance.total_earned,
+                "total_spent": balance.total_spent,
+            }
+        ledger = PointsLedger.objects.filter(user=user).order_by("-created_at")
+        export_data["rewards_history"] = [
+            {
+                "action": entry.action,
+                "points": entry.points,
+                "description": entry.description,
+                "created_at": entry.created_at.isoformat(),
+            }
+            for entry in ledger
+        ]
+    except Exception:
+        export_data["rewards"] = None
+        export_data["rewards_history"] = []
+
+    # --- Notifications (last 100) ---
+    try:
+        from .models import Notification
+        notifs = Notification.objects.filter(user=user).order_by("-created_at")[:100]
+        export_data["notifications"] = [
+            {
+                "type": n.type,
+                "title": n.title,
+                "body": n.body,
+                "is_read": n.is_read,
+                "created_at": n.created_at.isoformat(),
+            }
+            for n in notifs
+        ]
+    except Exception:
+        export_data["notifications"] = []
+
+    # --- Write to file ---
+    export_dir = os.path.join(settings.MEDIA_ROOT, "exports")
+    os.makedirs(export_dir, exist_ok=True)
+
+    filename = f"whydud-export-{user_id}-{uuid.uuid4().hex[:8]}.json"
+    filepath = os.path.join(export_dir, filename)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(export_data, f, indent=2, ensure_ascii=False, default=str)
+
+    logger.info("generate_data_export: wrote %s for user %s", filename, user_id)
+
+    # Return the download URL path
+    return f"{settings.MEDIA_URL}exports/{filename}"
 
 
 @shared_task(queue="email")

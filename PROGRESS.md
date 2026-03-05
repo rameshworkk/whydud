@@ -3200,3 +3200,28 @@ Configured structlog + django-structlog for structured JSON logging per architec
 - Created `frontend/src/components/settings/NotificationPreferences.tsx` — toggle grid table with 9 notification types × 2 channels (In-App / Email), using shadcn Switch component, optimistic updates, debounced auto-save (800ms), skeleton loading state, error/success feedback
 - Updated `frontend/src/app/(dashboard)/settings/page.tsx` — added "Notifications" tab between "Card Vault" and "TCO Preferences"
 - Fixed `frontend/src/lib/api/types.ts` — added missing `pointsEarned` field to `NotificationPreferences` interface
+
+### 2026-03-05 — DPDP Compliance: Account Deletion + Data Export (US-11.4, US-11.5)
+
+**Backend:**
+- Added `deletion_requested_at` field to User model + migration (`0011_user_deletion_requested_at`)
+- Added `DeleteAccountSerializer` for password confirmation
+- Added `DeleteAccountView` (DELETE `/api/v1/me/account`) — soft-delete with 30-day grace period, immediately revokes OAuth tokens, schedules `hard_delete_user` Celery task
+- Added `RestoreAccountView` (POST `/api/v1/me/account/restore`) — cancels pending deletion within grace period
+- Added `ExportDataView` (GET `/api/v1/me/export`) — queues `generate_data_export` Celery task, rate-limited to 1/hour
+- Added `ExportStatusView` (GET `/api/v1/me/export/<task_id>`) — polls export task status
+- Implemented `hard_delete_user` Celery task — comprehensive deletion across all 13 apps: email_intel (InboxEmail, ParsedOrder, RefundTracking, ReturnWindow, DetectedSubscription, EmailSource), reviews (anonymize to "Deleted User"), wishlists, pricing (PriceAlert), rewards (PointsLedger, RewardBalance, GiftCardRedemption), discussions (votes, replies, threads), TCO profile, products (StockAlert, CompareSession, RecentlyViewed), notifications, payment methods, purchase preferences, marketplace preferences, whydud email, auth tokens, then user record
+- Implemented `generate_data_export` Celery task — exports profile, @whyd.xyz email, reviews, wishlists, purchases, preferences, rewards, notifications as JSON to media/exports/ with 24h expiry
+- Added `send_deletion_confirmation_email` task
+- Updated `LoginView` to allow login for users with pending deletion (so they can restore), while still blocking truly suspended users
+- Updated `UserSerializer` to include `deletion_requested_at`
+- Added URL routes in `urls/account.py`
+
+**Frontend:**
+- Updated `DataPrivacyTab` in settings page with full functionality:
+  - Data export: request button → spinner → download link with 24h expiry
+  - Delete account: confirmation modal with password input → API call → redirect to login
+  - Pending deletion banner with "Cancel deletion & restore account" button
+- Added `dataExportApi` to `lib/api/auth.ts` (request + checkStatus)
+- Updated `authApi.deleteAccount` to accept password, added `restoreAccount`
+- Added `deletionRequestedAt` to User type (`types/user.ts`)

@@ -16,7 +16,15 @@ export const authApi = {
 
   me: () => apiClient.get<User>("/api/v1/me"),
 
-  deleteAccount: () => apiClient.delete("/api/v1/me"),
+  deleteAccount: (password: string) =>
+    apiClient.delete<{
+      detail: string;
+      deletionRequestedAt: string;
+      permanentDeletionAt: string;
+    }>("/api/v1/me/account", { body: { password } }),
+
+  restoreAccount: () =>
+    apiClient.post<{ detail: string }>("/api/v1/me/account/restore"),
 
   changePassword: (payload: { currentPassword: string; newPassword: string }) =>
     apiClient.post<{ detail: string; token: string }>("/api/v1/auth/change-password", payload),
@@ -57,6 +65,14 @@ export const marketplacePreferencesApi = {
     apiClient.put<MarketplacePreference>("/api/v1/me/marketplace-preferences", {
       preferredMarketplaces,
     }),
+};
+
+export const dataExportApi = {
+  request: () =>
+    apiClient.get<{ taskId: string; detail: string }>("/api/v1/me/export"),
+
+  checkStatus: (taskId: string) =>
+    apiClient.get<{ status: string; downloadUrl?: string }>(`/api/v1/me/export/${taskId}`),
 };
 
 export const cardVaultApi = {

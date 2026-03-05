@@ -20,6 +20,7 @@ export interface User {
   role: UserRole;
   subscriptionTier: SubscriptionTier;
   hasWhydudEmail: boolean;
+  deletionRequestedAt: string | null;
   createdAt: string;
 }
 

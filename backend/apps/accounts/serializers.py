@@ -15,9 +15,13 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "email", "email_verified", "name", "avatar_url", "role",
-            "subscription_tier", "has_whydud_email", "created_at",
+            "subscription_tier", "has_whydud_email", "deletion_requested_at",
+            "created_at",
         ]
-        read_only_fields = ["id", "email_verified", "role", "has_whydud_email", "created_at"]
+        read_only_fields = [
+            "id", "email_verified", "role", "has_whydud_email",
+            "deletion_requested_at", "created_at",
+        ]
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -150,6 +154,11 @@ class MarketplacePreferenceSerializer(serializers.ModelSerializer):
                 f"Invalid marketplace IDs: {invalid}"
             )
         return sorted(set(value))
+
+
+class DeleteAccountSerializer(serializers.Serializer):
+    """Requires current password to confirm account deletion."""
+    password = serializers.CharField(write_only=True)
 
 
 class TCOProfileSerializer(serializers.ModelSerializer):

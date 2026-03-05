@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { authApi, whydudEmailApi, cardVaultApi, marketplacePreferencesApi } from "@/lib/api/auth";
+import { authApi, whydudEmailApi, cardVaultApi, marketplacePreferencesApi, dataExportApi } from "@/lib/api/auth";
 import type { User, WhydudEmail, PaymentMethod, MarketplacePreference, MarketplaceInfo } from "@/types";
 import { NotificationPreferencesTab } from "@/components/settings/NotificationPreferences";
 
@@ -640,9 +640,135 @@ function MarketplacesTab({
   );
 }
 
-function DataPrivacyTab() {
+function DataPrivacyTab({ user }: { user: User | null }) {
+  // --- Export state ---
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportTaskId, setExportTaskId] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
+  const [exportDownloadUrl, setExportDownloadUrl] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  // --- Delete state ---
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+
+  // --- Restore state ---
+  const [restoreLoading, setRestoreLoading] = useState(false);
+
+  const isDeletionPending = user?.deletionRequestedAt != null;
+
+  async function handleExport() {
+    setExportLoading(true);
+    setExportError(null);
+    setExportStatus("pending");
+
+    const res = await dataExportApi.request();
+    if (res.success && "data" in res) {
+      const taskId = res.data.taskId;
+      setExportTaskId(taskId);
+      // Poll for completion
+      pollExportStatus(taskId);
+    } else if (!res.success && "error" in res) {
+      setExportError(res.error.message);
+      setExportStatus("failed");
+    }
+    setExportLoading(false);
+  }
+
+  async function pollExportStatus(taskId: string) {
+    const maxAttempts = 60; // 5 minutes max
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const res = await dataExportApi.checkStatus(taskId);
+      if (res.success && "data" in res) {
+        if (res.data.status === "completed" && res.data.downloadUrl) {
+          setExportStatus("completed");
+          setExportDownloadUrl(res.data.downloadUrl);
+          return;
+        }
+        if (res.data.status === "failed") {
+          setExportStatus("failed");
+          setExportError("Export failed. Please try again.");
+          return;
+        }
+      }
+    }
+    setExportStatus("failed");
+    setExportError("Export timed out. Please try again.");
+  }
+
+  async function handleDeleteAccount(e: React.FormEvent) {
+    e.preventDefault();
+    setDeleteError(null);
+    setDeleteLoading(true);
+
+    const res = await authApi.deleteAccount(deletePassword);
+    if (res.success) {
+      setDeleteSuccess(true);
+      setShowDeleteModal(false);
+      // Clear auth and redirect after short delay
+      const { clearToken } = await import("@/lib/api/client");
+      clearToken();
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 3000);
+    } else if (!res.success && "error" in res) {
+      setDeleteError(res.error.message);
+    }
+    setDeleteLoading(false);
+  }
+
+  async function handleRestore() {
+    setRestoreLoading(true);
+    const res = await authApi.restoreAccount();
+    if (res.success) {
+      window.location.reload();
+    }
+    setRestoreLoading(false);
+  }
+
+  if (deleteSuccess) {
+    return (
+      <div className="max-w-lg flex flex-col gap-5">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+          <p className="text-sm font-semibold text-red-700 mb-2">
+            Account deletion requested
+          </p>
+          <p className="text-xs text-red-600">
+            Your account will be permanently deleted in 30 days.
+            You will be redirected to the login page shortly.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-lg flex flex-col gap-5">
+      {/* Pending deletion banner */}
+      {isDeletionPending && (
+        <div className="rounded-xl border-2 border-red-300 bg-red-50 p-5">
+          <p className="text-sm font-semibold text-red-700 mb-1">
+            Account deletion pending
+          </p>
+          <p className="text-xs text-red-600 mb-3">
+            Your account is scheduled for permanent deletion.
+            Cancel now to keep your account.
+          </p>
+          <button
+            onClick={handleRestore}
+            disabled={restoreLoading}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {restoreLoading ? "Restoring..." : "Cancel deletion & restore account"}
+          </button>
+        </div>
+      )}
+
+      {/* Connected services */}
       <div>
         <h3 className="text-sm font-semibold text-slate-800 mb-3">
           Connected Services
@@ -672,32 +798,124 @@ function DataPrivacyTab() {
 
       <hr className="border-[#E2E8F0]" />
 
+      {/* Data export */}
       <div>
         <h3 className="text-sm font-semibold text-slate-800 mb-2">
           Export my data
         </h3>
         <p className="text-xs text-slate-500 mb-3">
-          Download all your data as a JSON file.
+          Download all your data as a JSON file. Includes profile, reviews,
+          wishlists, purchases, preferences, and notifications.
         </p>
-        <button className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]">
-          Request data export
-        </button>
+
+        {exportError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-3">
+            {exportError}
+          </div>
+        )}
+
+        {exportStatus === "completed" && exportDownloadUrl ? (
+          <div className="flex items-center gap-3">
+            <a
+              href={exportDownloadUrl}
+              download
+              className="rounded-lg bg-[#16A34A] px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            >
+              Download export
+            </a>
+            <span className="text-xs text-slate-400">Expires in 24 hours</span>
+          </div>
+        ) : exportStatus === "pending" ? (
+          <div className="flex items-center gap-3">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#F97316] border-t-transparent" />
+            <span className="text-sm text-slate-600">Generating export...</span>
+          </div>
+        ) : (
+          <button
+            onClick={handleExport}
+            disabled={exportLoading}
+            className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {exportLoading ? "Starting..." : "Request data export"}
+          </button>
+        )}
       </div>
 
       <hr className="border-[#E2E8F0]" />
 
+      {/* Danger zone: delete account */}
       <div>
         <h3 className="text-sm font-semibold text-red-600 mb-2">
           Delete account
         </h3>
         <p className="text-xs text-slate-500 mb-3">
-          Permanently delete your account and all associated data. This action
-          cannot be undone.
+          Permanently delete your account and all associated data. You have 30
+          days to change your mind after requesting deletion.
         </p>
-        <button className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-          Delete my account
+        <button
+          onClick={() => setShowDeleteModal(true)}
+          disabled={isDeletionPending}
+          className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isDeletionPending ? "Deletion already requested" : "Delete my account"}
         </button>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              Delete your account?
+            </h3>
+            <p className="text-sm text-slate-500 mb-4">
+              This will schedule your account for permanent deletion in 30 days.
+              All your data including reviews, wishlists, purchase history, and
+              preferences will be permanently removed. Enter your password to
+              confirm.
+            </p>
+
+            {deleteError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-3">
+                {deleteError}
+              </div>
+            )}
+
+            <form onSubmit={handleDeleteAccount}>
+              <input
+                type="password"
+                placeholder="Enter your password"
+                required
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-shadow mb-4"
+                autoFocus
+              />
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setDeletePassword("");
+                    setDeleteError(null);
+                  }}
+                  className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={deleteLoading || !deletePassword}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {deleteLoading ? "Deleting..." : "Delete my account"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -778,7 +996,7 @@ export default function SettingsPage() {
       {activeTab === "Notifications" && <NotificationPreferencesTab />}
       {activeTab === "TCO Preferences" && <TCOPreferencesTab />}
       {activeTab === "Subscription" && <SubscriptionTab user={user} />}
-      {activeTab === "Data & Privacy" && <DataPrivacyTab />}
+      {activeTab === "Data & Privacy" && <DataPrivacyTab user={user} />}
     </div>
   );
 }
