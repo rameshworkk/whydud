@@ -13,6 +13,7 @@ import {
   Star,
   Bell,
   BellDot,
+  SlidersHorizontal,
   Settings,
   LogOut,
   LucideIcon,
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/rewards", label: "Rewards", Icon: Gift },
   { href: "/my-reviews", label: "My Reviews", Icon: Star },
   { href: "/alerts", label: "Alerts", Icon: Bell },
+  { href: "/preferences", label: "Preferences", Icon: SlidersHorizontal },
   { href: "/settings", label: "Settings", Icon: Settings },
 ];
 

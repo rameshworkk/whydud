@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import { authApi, whydudEmailApi, cardVaultApi, marketplacePreferencesApi } from "@/lib/api/auth";
 import type { User, WhydudEmail, PaymentMethod, MarketplacePreference, MarketplaceInfo } from "@/types";
+import { NotificationPreferencesTab } from "@/components/settings/NotificationPreferences";
 
 const TABS = [
   "Profile",
   "@whyd.xyz",
   "Marketplaces",
   "Card Vault",
+  "Notifications",
   "TCO Preferences",
   "Subscription",
   "Data & Privacy",
@@ -773,6 +775,7 @@ export default function SettingsPage() {
       {activeTab === "@whyd.xyz" && <WhydEmailTab whydEmail={whydEmail} loading={loading} />}
       {activeTab === "Marketplaces" && <MarketplacesTab marketplacePref={marketplacePref} loading={loading} />}
       {activeTab === "Card Vault" && <CardVaultTab cards={cards} loading={loading} />}
+      {activeTab === "Notifications" && <NotificationPreferencesTab />}
       {activeTab === "TCO Preferences" && <TCOPreferencesTab />}
       {activeTab === "Subscription" && <SubscriptionTab user={user} />}
       {activeTab === "Data & Privacy" && <DataPrivacyTab />}

@@ -89,6 +89,22 @@ class PreferenceDetailView(APIView):
         return success_response({"detail": "Preferences removed."})
 
 
+class PreferenceSchemaListView(APIView):
+    """GET /api/v1/preferences/schemas — list all active category schemas."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        schemas = (
+            CategoryPreferenceSchema.objects.filter(is_active=True)
+            .select_related("category")
+            .order_by("category__name")
+        )
+        return success_response(
+            CategoryPreferenceSchemaSerializer(schemas, many=True).data
+        )
+
+
 class PreferenceSchemaView(APIView):
     """GET /api/v1/preferences/:category_slug/schema — questionnaire schema."""
 

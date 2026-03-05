@@ -17,6 +17,9 @@ export const preferencesApi = {
   delete: (categorySlug: string) =>
     apiClient.delete(`/api/v1/preferences/${categorySlug}`),
 
+  listSchemas: () =>
+    apiClient.get<PreferenceSchema[]>("/api/v1/preferences/schemas"),
+
   getSchema: (categorySlug: string) =>
     apiClient.get<PreferenceSchema>(`/api/v1/preferences/${categorySlug}/schema`),
 };

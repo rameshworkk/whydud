@@ -72,6 +72,7 @@ export interface NotificationPreferences {
   priceAlerts: NotificationChannel;
   discussionReplies: NotificationChannel;
   levelUp: NotificationChannel;
+  pointsEarned: NotificationChannel;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +106,7 @@ export interface PreferenceSection {
 
 export interface PreferenceSchema {
   categorySlug: string;
+  categoryName: string;
   schema: { sections: PreferenceSection[] };
   version: number;
 }

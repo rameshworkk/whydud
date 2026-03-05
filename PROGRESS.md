@@ -209,7 +209,7 @@ GET  /api/v1/email/whydud/status/    → Email status
 | NPS score | ❌ NOT BUILT |
 | Notifications system | ✅ BUILT (bell icon, dropdown, full page, 11 types, Celery tasks, create_notification service) |
 | Notification preferences | ✅ BUILT (backend GET/PATCH API, model, serializer) |
-| Purchase Preferences | ❌ NOT BUILT (model exists, no UI) |
+| Purchase Preferences | ✅ BUILT (backend API + seed schemas + frontend page with dynamic form renderer) |
 | Reviewer levels & leaderboard | ❌ NOT BUILT (model exists, no calculation) |
 | Trending products | ❌ NOT BUILT |
 | Dynamic TCO per category | ⚠️ PARTIAL (backend + full calculator component exist, no seed data for TCO models) |
@@ -3167,3 +3167,36 @@ Configured structlog + django-structlog for structured JSON logging per architec
 {"level": "info", "timestamp": "...", "service": "backend", "request_id": "...",
  "action": "product_search", "query": "earbuds", "results": 42, "latency_ms": 87}
 ```
+
+### 2026-03-05 — Purchase Preferences UI (Epic 8)
+
+**Backend:**
+- Added `PreferenceSchemaListView` to `backend/apps/accounts/preference_views.py` — `GET /api/v1/preferences/schemas` lists all active category schemas (public endpoint)
+- Added `category_name` field to `CategoryPreferenceSchemaSerializer` for frontend display
+- Updated `backend/apps/accounts/urls/preferences.py` — registered `/preferences/schemas` route
+
+**Frontend:**
+- Created `frontend/src/components/preferences/category-selector.tsx` — grid of category cards with Lucide icons (Wind, Snowflake, Droplets, Refrigerator, WashingMachine, Car, Laptop), "Saved" badge for categories with existing preferences, selected state highlighting
+- Created `frontend/src/app/(dashboard)/preferences/page.tsx` — full preferences page:
+  - Fetches all schemas + user's saved preferences on mount
+  - CategorySelector grid at top
+  - Click category → loads schema → renders dynamic PreferenceForm
+  - Save/update preferences with success/error messages
+  - Skeleton loading states, empty state
+- Updated `frontend/src/lib/api/preferences.ts` — added `listSchemas()` method
+- Updated `frontend/src/lib/api/types.ts` — added `categoryName` to `PreferenceSchema` interface
+- Updated `frontend/src/components/layout/Sidebar.tsx` — added "Preferences" nav link (SlidersHorizontal icon) between Alerts and Settings
+
+**Pre-existing (no changes needed):**
+- `PreferenceForm` component (`frontend/src/components/preferences/preference-form.tsx`) — fully functional dynamic form renderer with all 8 field types (number, currency, dropdown, radio, tags, toggle, slider, range_slider)
+- `seed_preference_schemas` management command — 7 category schemas (Air Purifiers, ACs, Water Purifiers, Refrigerators, Washing Machines, Vehicles, Laptops)
+- Backend models (`PurchasePreference`, `CategoryPreferenceSchema`) and CRUD views (`PreferenceListView`, `PreferenceDetailView`, `PreferenceSchemaView`)
+
+### 2026-03-05 — Notification Preferences UI (US-9.5)
+
+**Backend:** Already complete — `NotificationPreference` model (9 JSONB columns: `price_drops`, `return_windows`, `refund_delays`, `back_in_stock`, `review_upvotes`, `price_alerts`, `discussion_replies`, `level_up`, `points_earned`), `PreferencesView` (GET + PATCH), serializer with validation, URL route at `/api/v1/notifications/preferences`.
+
+**Frontend:**
+- Created `frontend/src/components/settings/NotificationPreferences.tsx` — toggle grid table with 9 notification types × 2 channels (In-App / Email), using shadcn Switch component, optimistic updates, debounced auto-save (800ms), skeleton loading state, error/success feedback
+- Updated `frontend/src/app/(dashboard)/settings/page.tsx` — added "Notifications" tab between "Card Vault" and "TCO Preferences"
+- Fixed `frontend/src/lib/api/types.ts` — added missing `pointsEarned` field to `NotificationPreferences` interface

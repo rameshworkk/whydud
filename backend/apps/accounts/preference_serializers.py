@@ -17,8 +17,9 @@ class PurchasePreferenceSerializer(serializers.ModelSerializer):
 
 class CategoryPreferenceSchemaSerializer(serializers.ModelSerializer):
     category_slug = serializers.CharField(source="category.slug", read_only=True)
+    category_name = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
         model = CategoryPreferenceSchema
-        fields = ["category_slug", "schema", "version"]
+        fields = ["category_slug", "category_name", "schema", "version"]
         read_only_fields = fields
