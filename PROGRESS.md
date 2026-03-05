@@ -3398,3 +3398,12 @@ Added `tests/api/test_celery_tasks.py` — 50 tests covering Celery task logic s
 - `TestAccountsTasks` (4 tests): create_notification, send_verification_email, hard_delete_user, generate_data_export imports
 - `TestRegisteredBeatTasks` (13 tests): all 12 expected tasks importable via parametrize, beat_schedule entries all resolve to real task functions
 - Run: `POSTGRES_PASSWORD=whydud_dev pytest tests/api/test_celery_tasks.py -v`
+
+### Frontend Route Health Checks — 2026-03-05
+
+Added `tests/frontend/test_pages.py` — 13 tests verifying Next.js pages return 200 (skipped when frontend not running).
+
+**Test classes (13 tests, all skipping correctly when frontend offline):**
+- `TestPublicPages` (8 tests): parametrized public page checks (Homepage, Search, Deals, Categories, Login, Register), product detail page with dynamic slug from API, 404 page returns non-500
+- `TestPagePerformance` (5 tests): page load time assertions (Homepage ≤5s, Search ≤5s, Deals ≤5s, Login ≤3s), HTML error indicator scan (no server-side traces in homepage)
+- Run: `pytest tests/frontend/test_pages.py -v` (requires Next.js dev server on localhost:3000)
