@@ -3369,3 +3369,17 @@ Configured structlog + django-structlog for structured JSON logging per architec
   - `TestOffers` (1 test): public active offers (no auth)
 - All paths verified against actual URL patterns (no trailing slashes): wishlists, alerts/price, notifications, inbox, purchases/dashboard, rewards/balance, me, cards, clicks/history, offers/active
 - Run: `pytest tests/api/test_dashboard.py -v`
+
+### Scraping Pipeline Tests — 2026-03-05
+
+Added `tests/api/test_scraping.py` — 36 tests covering scraping internals with mock data (no external scraping).
+
+**Test classes (36 tests, all passing):**
+- `TestSpiderRegistry` (5 tests): spider_map has entries, amazon-in registered, flipkart registered, review_spider_map has entries, values are strings
+- `TestProductItem` (3 tests): ProductItem creation, optional fields, ReviewItem creation
+- `TestValidationPipeline` (7 tests): drops items missing title/external_id/url/marketplace_slug, passes valid items, skips ReviewItems, increments items_failed counter
+- `TestReviewValidationPipeline` (6 tests): passes valid reviews, drops missing marketplace/product_id/body, drops short body (<5 chars), passes ProductItems through
+- `TestNormalizationPipeline` (7 tests): collapses whitespace in title, normalizes brand casing (short→UPPER, multi-word→Title), strips "Visit the" prefix, strips spec whitespace, removes empty about_bullets, deduplicates images
+- `TestScraperJobModel` (5 tests): create job, __str__, status transitions (queued→running→completed), failed status with error_message, ordering by -created_at
+- `TestProductPipeline` (3 tests): creates Product+ProductListing via ORM, unique constraint on (marketplace, external_id), listing field updates
+- Run: `pytest tests/api/test_scraping.py -v`
