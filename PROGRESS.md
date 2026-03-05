@@ -3383,3 +3383,18 @@ Added `tests/api/test_scraping.py` — 36 tests covering scraping internals with
 - `TestScraperJobModel` (5 tests): create job, __str__, status transitions (queued→running→completed), failed status with error_message, ordering by -created_at
 - `TestProductPipeline` (3 tests): creates Product+ProductListing via ORM, unique constraint on (marketplace, external_id), listing field updates
 - Run: `pytest tests/api/test_scraping.py -v`
+
+### Celery Task Tests — 2026-03-05
+
+Added `tests/api/test_celery_tasks.py` — 50 tests covering Celery task logic synchronously (no worker required).
+
+**Test classes (50 tests, all passing):**
+- `TestDudScoreCalculation` (7 tests): compute_dudscore import, missing config returns None, missing product returns None, with config computes score, full_dudscore_recalculation dispatches, brand trust scores import
+- `TestPriceAlertCheck` (5 tests): import, no alerts returns zeros, alert triggers on price drop (mocked notification), alert skips when price above target, snapshot task import
+- `TestMeilisearchSync` (4 tests): sync/reindex imports, mocked batch sync, graceful error when unavailable
+- `TestReviewTasks` (8 tests): publish_pending_reviews runs and publishes past-hold reviews, respects hold period, update_reviewer_profiles creates profiles with correct stats/level/rank
+- `TestFakeReviewDetection` (4 tests): no reviews returns zeros, suspicious review gets fraud_flags, credible verified review gets high credibility score
+- `TestScrapingTasks` (5 tests): all 5 scraping task imports verified
+- `TestAccountsTasks` (4 tests): create_notification, send_verification_email, hard_delete_user, generate_data_export imports
+- `TestRegisteredBeatTasks` (13 tests): all 12 expected tasks importable via parametrize, beat_schedule entries all resolve to real task functions
+- Run: `POSTGRES_PASSWORD=whydud_dev pytest tests/api/test_celery_tasks.py -v`
