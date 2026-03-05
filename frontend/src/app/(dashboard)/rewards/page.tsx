@@ -8,7 +8,7 @@ import type { RewardBalance, GiftCard, RewardPointsLedger } from "@/types";
 /** Static earn cards — these describe how to earn points, not fetched from API */
 const EARN_CARDS = [
   { icon: "\u270D\uFE0F", title: "Write a Review", points: 20, description: "Write a review for a product you've purchased" },
-  { icon: "\uD83D\uDCE7", title: "Connect Email", points: 50, description: "Connect your @whyd.xyz email to start tracking" },
+  { icon: "\uD83D\uDCE7", title: "Connect Email", points: 50, description: "Connect your shopping email to start tracking" },
   { icon: "\uD83D\uDC65", title: "Refer a Friend", points: 30, description: "Invite a friend to join Whydud" },
   { icon: "\uD83D\uDD25", title: "Login Streak", points: 10, description: "Log in for 7 consecutive days" },
 ];

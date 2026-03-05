@@ -1,4 +1,4 @@
-"""Account views — auth, profile, card vault, @whyd.xyz email."""
+"""Account views — auth, profile, card vault, shopping email."""
 import secrets
 
 from django.conf import settings
@@ -393,13 +393,13 @@ class WhydudEmailView(APIView):
             email = request.user.whydud_email
             return success_response(WhydudEmailSerializer(email).data)
         except WhydudEmail.DoesNotExist:
-            return error_response("not_found", "No @whyd.xyz email found.", status=404)
+            return error_response("not_found", "No shopping email found.", status=404)
 
     def post(self, request: Request) -> Response:
         if hasattr(request.user, "whydud_email"):
             try:
                 _ = request.user.whydud_email
-                return error_response("already_exists", "You already have a @whyd.xyz email.")
+                return error_response("already_exists", "You already have a shopping email.")
             except WhydudEmail.DoesNotExist:
                 pass
 
@@ -425,8 +425,12 @@ class WhydudEmailAvailabilityView(APIView):
 
     def get(self, request: Request) -> Response:
         username = request.query_params.get("username", "").lower().strip()
+        domain = request.query_params.get("domain", WhydudEmail.Domain.WHYD_IN).lower().strip()
         if not username:
             return error_response("validation_error", "?username= is required.")
+
+        if domain not in WhydudEmail.Domain.values:
+            return error_response("validation_error", f"Invalid domain. Must be one of: {', '.join(WhydudEmail.Domain.values)}")
 
         if validate_whydud_username_format(username):
             return success_response({"available": False, "reason": "invalid_format"})
@@ -434,7 +438,7 @@ class WhydudEmailAvailabilityView(APIView):
         if ReservedUsername.objects.filter(username=username).exists():
             return success_response({"available": False, "reason": "reserved"})
 
-        available = not WhydudEmail.objects.filter(username=username).exists()
+        available = not WhydudEmail.objects.filter(username=username, domain=domain).exists()
         return success_response({"available": available})
 
 

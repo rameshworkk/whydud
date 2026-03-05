@@ -1,6 +1,6 @@
 /**
  * Mock data for the Inbox page.
- * Simulates @whyd.xyz email inbox with categorized emails.
+ * Simulates shopping email inbox with categorized emails.
  */
 
 export interface MockEmail {

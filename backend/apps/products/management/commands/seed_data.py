@@ -1571,7 +1571,7 @@ class Command(BaseCommand):
             user.set_password("testpass123")
             user.save()
 
-        # @whyd.xyz email
+        # Shopping email
         WhydudEmail.objects.update_or_create(
             user=user,
             defaults=dict(
@@ -1651,7 +1651,7 @@ class Command(BaseCommand):
         )
 
         LEDGER = [
-            (50, "email_connect", "Connected @whyd.xyz email", 14),
+            (50, "email_connect", "Connected shopping email", 14),
             (20, "review", "Wrote a review for Samsung Galaxy S24 FE", 10),
             (20, "review", "Wrote a review for boAt Airdopes 141", 8),
             (30, "referral", "Referred a friend (Priya)", 5),

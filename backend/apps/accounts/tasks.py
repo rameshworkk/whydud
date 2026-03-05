@@ -290,7 +290,7 @@ def generate_data_export(user_id: str) -> str:
     export_data["profile"] = UserSerializer(user).data
     export_data["profile"]["created_at"] = user.created_at.isoformat()
 
-    # --- @whyd.xyz email ---
+    # --- Shopping email ---
     try:
         whydud_email = user.whydud_email
         export_data["whydud_email"] = {

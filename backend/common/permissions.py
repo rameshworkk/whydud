@@ -3,7 +3,7 @@ from rest_framework.permissions import BasePermission
 
 
 class IsConnectedUser(BasePermission):
-    """Allows access only to users with an active @whyd.xyz email or Gmail link."""
+    """Allows access only to users with an active shopping email or Gmail link."""
 
     def has_permission(self, request, view) -> bool:  # type: ignore[override]
         return bool(

@@ -44,7 +44,7 @@ class ReviewRateThrottle(UserRateThrottle):
 
 
 class EmailSendThrottle(UserRateThrottle):
-    """Throttle for sending emails from @whyd.xyz addresses.
+    """Throttle for sending emails from shopping email addresses.
 
     Scope: ``email_send`` — default 10/day.
     """

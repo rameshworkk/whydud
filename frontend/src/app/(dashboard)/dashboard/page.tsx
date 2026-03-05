@@ -123,7 +123,7 @@ export default function DashboardPage() {
           <p className="text-2xl mb-2">{"\uD83D\uDCE6"}</p>
           <p className="text-sm font-semibold text-slate-700">No spending data yet</p>
           <p className="text-xs text-slate-500 mt-1">
-            Connect your @whyd.xyz email or make purchases to see your expense tracker.
+            Connect your shopping email or make purchases to see your expense tracker.
           </p>
         </div>
       ) : null}

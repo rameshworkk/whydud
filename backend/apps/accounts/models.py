@@ -213,7 +213,7 @@ class PaymentMethod(models.Model):
 
 
 class ReservedUsername(models.Model):
-    """Usernames that cannot be registered as @whyd.xyz addresses.
+    """Usernames that cannot be registered as shopping email addresses.
 
     Seeded via data migration with admin terms, brand names, and system words.
     """

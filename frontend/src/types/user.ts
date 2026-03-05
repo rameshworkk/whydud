@@ -24,9 +24,12 @@ export interface User {
   createdAt: string;
 }
 
+export type WhydudEmailDomain = "whyd.in" | "whyd.click" | "whyd.shop";
+
 export interface WhydudEmail {
   id: string;
   username: string;
+  domain: WhydudEmailDomain;
   emailAddress: string;
   isActive: boolean;
   totalEmailsReceived: number;

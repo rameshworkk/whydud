@@ -1,4 +1,4 @@
-"""Seed additional reserved usernames for @whyd.xyz addresses.
+"""Seed additional reserved usernames for shopping email addresses.
 
 Adds: postmaster, webmaster, hello, test, pop, imap
 """

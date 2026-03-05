@@ -9,11 +9,11 @@ import { useAuth } from "@/hooks/useAuth";
 const STEPS = ["Create Account", "Choose Email", "Get Started"];
 
 const MARKETPLACES = [
-  { name: "Amazon.in", logo: "\uD83D\uDED2", instructions: "Go to Account \u2192 Manage email addresses \u2192 Add your @whyd.xyz email" },
+  { name: "Amazon.in", logo: "\uD83D\uDED2", instructions: "Go to Account \u2192 Manage email addresses \u2192 Add your shopping email" },
   { name: "Flipkart", logo: "\uD83D\uDECD\uFE0F", instructions: "Go to My Account \u2192 Edit Profile \u2192 Add email address" },
-  { name: "Myntra", logo: "\uD83D\uDC57", instructions: "Go to Profile \u2192 Edit \u2192 Update email to your @whyd.xyz" },
+  { name: "Myntra", logo: "\uD83D\uDC57", instructions: "Go to Profile \u2192 Edit \u2192 Update email to your shopping email" },
   { name: "Ajio", logo: "\uD83E\uDDE5", instructions: "Go to My Account \u2192 Personal Information \u2192 Update email" },
-  { name: "Nykaa", logo: "\uD83D\uDC84", instructions: "Go to My Profile \u2192 Edit \u2192 Add your @whyd.xyz email" },
+  { name: "Nykaa", logo: "\uD83D\uDC84", instructions: "Go to My Profile \u2192 Edit \u2192 Add your shopping email" },
   { name: "Croma", logo: "\uD83D\uDCF1", instructions: "Go to My Account \u2192 Profile \u2192 Update email address" },
   { name: "Tata CLiQ", logo: "\uD83C\uDFEC", instructions: "Go to My Account \u2192 Profile Settings \u2192 Update email" },
   { name: "Meesho", logo: "\uD83D\uDED2", instructions: "Go to My Account \u2192 Settings \u2192 Update email" },
@@ -101,7 +101,7 @@ function Step1CreateAccount({
           Create your account
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Get your free @whyd.xyz shopping email and start tracking.
+          Get your free shopping email and start tracking.
         </p>
       </div>
 
@@ -266,21 +266,28 @@ function Step1CreateAccount({
   );
 }
 
+const EMAIL_DOMAINS = [
+  { value: "whyd.in" as const, label: "whyd.in", desc: "Short, professional, India-first" },
+  { value: "whyd.click" as const, label: "whyd.click", desc: "Modern, action-oriented" },
+  { value: "whyd.shop" as const, label: "whyd.shop", desc: "Shopping-focused, descriptive" },
+];
+
 function Step2ChooseEmail({ onNext, onSkip }: { onNext: (username: string) => void; onSkip: () => void }) {
   const [username, setUsername] = useState("");
+  const [domain, setDomain] = useState<"whyd.in" | "whyd.click" | "whyd.shop">("whyd.in");
   const [checking, setChecking] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  async function checkAvailability(value: string) {
+  async function checkAvailability(value: string, selectedDomain: string) {
     if (value.length < 3) {
       setAvailable(null);
       return;
     }
     setChecking(true);
     const { whydudEmailApi } = await import("@/lib/api/auth");
-    const res = await whydudEmailApi.checkAvailability(value);
+    const res = await whydudEmailApi.checkAvailability(value, selectedDomain as "whyd.in" | "whyd.click" | "whyd.shop");
     if (res.success) {
       setAvailable(res.data.available);
     }
@@ -292,7 +299,7 @@ function Step2ChooseEmail({ onNext, onSkip }: { onNext: (username: string) => vo
     setError("");
     setIsLoading(true);
     const { whydudEmailApi } = await import("@/lib/api/auth");
-    const res = await whydudEmailApi.create(username);
+    const res = await whydudEmailApi.create(username, domain);
     if (res.success) {
       onNext(username);
     } else {
@@ -306,10 +313,10 @@ function Step2ChooseEmail({ onNext, onSkip }: { onNext: (username: string) => vo
       <div className="mb-6 text-center">
         <span className="text-3xl mb-3 block">{"\uD83D\uDCE7"}</span>
         <h1 className="text-2xl font-semibold text-slate-900">
-          Get your free @whyd.xyz email
+          Choose your free shopping email
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Use this on shopping sites for automatic purchase tracking
+          Register this on Amazon, Flipkart, Myntra &mdash; we&apos;ll automatically track all your orders
         </p>
       </div>
 
@@ -338,12 +345,12 @@ function Step2ChooseEmail({ onNext, onSkip }: { onNext: (username: string) => vo
                 const v = e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "");
                 setUsername(v);
                 setAvailable(null);
-                checkAvailability(v);
+                checkAvailability(v, domain);
               }}
               className="flex-1 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400"
             />
             <span className="flex items-center px-3 text-sm text-slate-500 bg-slate-50 border-l border-[#E2E8F0] font-medium">
-              @whyd.xyz
+              @{domain}
             </span>
           </div>
           {username.length > 0 && (
@@ -363,7 +370,7 @@ function Step2ChooseEmail({ onNext, onSkip }: { onNext: (username: string) => vo
               {checking
                 ? "Checking\u2026"
                 : available === true
-                ? "\u2705 Available!"
+                ? `\u2705 ${username}@${domain} is available!`
                 : available === false
                 ? "Username is taken or reserved"
                 : username.length < 3
@@ -373,13 +380,56 @@ function Step2ChooseEmail({ onNext, onSkip }: { onNext: (username: string) => vo
           )}
         </div>
 
+        {/* Domain selector */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">
+            Pick your domain
+          </label>
+          <div className="flex flex-col gap-2">
+            {EMAIL_DOMAINS.map((d) => (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => {
+                  setDomain(d.value);
+                  setAvailable(null);
+                  checkAvailability(username, d.value);
+                }}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] ${
+                  domain === d.value
+                    ? "border-[#F97316] bg-orange-50"
+                    : "border-[#E2E8F0] bg-white hover:border-slate-300"
+                }`}
+              >
+                <span
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                    domain === d.value
+                      ? "border-[#F97316]"
+                      : "border-slate-300"
+                  }`}
+                >
+                  {domain === d.value && (
+                    <span className="h-2 w-2 rounded-full bg-[#F97316]" />
+                  )}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-slate-900">
+                    {username.length >= 3 ? username : "you"}@{d.label}
+                  </span>
+                  <span className="ml-2 text-xs text-[#64748B]">{d.desc}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Create email button */}
         <button
           onClick={handleCreate}
           disabled={!available || isLoading}
           className="w-full rounded-lg bg-[#F97316] py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C] active:bg-[#C2410C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? "Creating email\u2026" : "Create email"}
+          {isLoading ? "Creating email\u2026" : "Create my shopping email"}
         </button>
 
         {/* Skip */}
@@ -389,6 +439,10 @@ function Step2ChooseEmail({ onNext, onSkip }: { onNext: (username: string) => vo
         >
           Skip for now \u2192
         </button>
+
+        <p className="text-xs text-center text-[#64748B]">
+          You can change your domain later from Settings. Your username stays the same.
+        </p>
       </div>
     </>
   );
@@ -416,7 +470,7 @@ function Step3Onboarding() {
           Register on shopping sites
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Add your @whyd.xyz email to these marketplaces for automatic tracking
+          Add your shopping email to these marketplaces for automatic tracking
         </p>
       </div>
 

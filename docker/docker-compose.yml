@@ -175,7 +175,7 @@ services:
       - whydud
 
   # ----------------------------------------------------------
-  # Email Worker — Isolated queue for @whyd.xyz + Gmail
+  # Email Worker — Isolated queue for shopping email + Gmail
   # RAM: ~512MB
   # ----------------------------------------------------------
   email-worker:

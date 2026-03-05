@@ -35,7 +35,7 @@ export const MOCK_BALANCE = {
 
 export const MOCK_EARN_CARDS: MockEarnCard[] = [
   { icon: "✍️", title: "Write a Review", points: 20, description: "Write a review for a product you've purchased" },
-  { icon: "📧", title: "Connect Email", points: 50, description: "Connect your @whyd.xyz email to start tracking" },
+  { icon: "📧", title: "Connect Email", points: 50, description: "Connect your shopping email to start tracking" },
   { icon: "👥", title: "Refer a Friend", points: 30, description: "Invite a friend to join Whydud" },
   { icon: "🔥", title: "Login Streak", points: 10, description: "Log in for 7 consecutive days" },
 ];
@@ -51,7 +51,7 @@ export const MOCK_GIFT_CARDS: MockGiftCard[] = [
 
 export const MOCK_POINTS_HISTORY: MockPointsHistory[] = [
   { id: "ph1", description: "Review on OnePlus Nord 5", points: 20, date: "2026-02-22" },
-  { id: "ph2", description: "Connected @whyd.xyz email", points: 50, date: "2026-02-20" },
+  { id: "ph2", description: "Connected shopping email", points: 50, date: "2026-02-20" },
   { id: "ph3", description: "Redeemed Amazon ₹100 gift card", points: -1000, date: "2026-02-18" },
   { id: "ph4", description: "7-day login streak bonus", points: 10, date: "2026-02-15" },
   { id: "ph5", description: "Review on Samsung Galaxy S24 FE", points: 20, date: "2026-02-12" },

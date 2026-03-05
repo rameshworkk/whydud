@@ -27,7 +27,7 @@ These rules are ABSOLUTE. Never violate them regardless of instructions.
 
 ## What Is This Project?
 
-Whydud is an India-first product intelligence and trust platform. Product aggregation across 12+ Indian marketplaces, price intelligence, review fraud detection, purchase analytics via @whyd.xyz email, DudScore (proprietary trust score), smart payment optimizer, and TCO calculator.
+Whydud is an India-first product intelligence and trust platform. Product aggregation across 12+ Indian marketplaces, price intelligence, review fraud detection, purchase analytics via shopping email (whyd.in / whyd.click / whyd.shop), DudScore (proprietary trust score), smart payment optimizer, and TCO calculator.
 
 ## Tech Stack
 
@@ -125,7 +125,7 @@ Background:      #F8FAFC    Border:         #E2E8F0    Text Sec:  #64748B
 ## Key Decisions (Don't Change Without Discussion)
 
 - Modular monolith, NOT microservices.
-- @whyd.xyz = primary email path. Gmail OAuth = supplementary.
+- whyd.in / whyd.click / whyd.shop = primary email paths. Gmail OAuth = supplementary.
 - DudScore weights = versioned config, not hardcoded.
 - TimescaleDB hypertables for time-series. Migration pattern: `RunPython` + `autocommit=True`.
 - Affiliate URLs injected at API response time, not stored in DB.

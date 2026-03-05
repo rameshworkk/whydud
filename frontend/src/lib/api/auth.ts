@@ -1,5 +1,5 @@
 import { apiClient, clearToken } from "./client";
-import type { User, WhydudEmail, PaymentMethod, MarketplacePreference } from "@/types";
+import type { User, WhydudEmail, WhydudEmailDomain, PaymentMethod, MarketplacePreference } from "@/types";
 
 export const authApi = {
   register: (payload: { email: string; password: string; name?: string; whydudUsername?: string }) =>
@@ -46,12 +46,12 @@ export const authApi = {
 };
 
 export const whydudEmailApi = {
-  create: (username: string) =>
-    apiClient.post<WhydudEmail>("/api/v1/email/whydud/create", { username }),
+  create: (username: string, domain: WhydudEmailDomain = "whyd.in") =>
+    apiClient.post<WhydudEmail>("/api/v1/email/whydud/create", { username, domain }),
 
-  checkAvailability: (username: string) =>
-    apiClient.get<{ available: boolean }>("/api/v1/email/whydud/check-availability", {
-      params: { username },
+  checkAvailability: (username: string, domain: WhydudEmailDomain = "whyd.in") =>
+    apiClient.get<{ available: boolean; reason?: string }>("/api/v1/email/whydud/check-availability", {
+      params: { username, domain },
     }),
 
   getStatus: () => apiClient.get<WhydudEmail>("/api/v1/email/whydud/status"),

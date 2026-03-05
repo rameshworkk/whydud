@@ -1,4 +1,4 @@
-"""Seed the users.reserved_usernames table with blocked @whyd.xyz usernames.
+"""Seed the users.reserved_usernames table with blocked shopping email usernames.
 
 These usernames cannot be registered by end users.
 """

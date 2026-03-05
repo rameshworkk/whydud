@@ -7,7 +7,7 @@ import { NotificationPreferencesTab } from "@/components/settings/NotificationPr
 
 const TABS = [
   "Profile",
-  "@whyd.xyz",
+  "Shopping Email",
   "Marketplaces",
   "Card Vault",
   "Notifications",
@@ -180,9 +180,9 @@ function WhydEmailTab({ whydEmail, loading }: { whydEmail: WhydudEmail | null; l
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-[#E2E8F0] bg-white p-8 text-center">
-          <p className="text-sm text-slate-500">No @whyd.xyz email set up yet.</p>
+          <p className="text-sm text-slate-500">No Shopping Email email set up yet.</p>
           <button className="mt-3 rounded-lg bg-[#F97316] px-4 py-2 text-sm font-semibold text-white hover:bg-[#EA580C] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2">
-            Create @whyd.xyz email
+            Create Shopping Email email
           </button>
         </div>
       )}
@@ -223,7 +223,7 @@ function WhydEmailTab({ whydEmail, loading }: { whydEmail: WhydudEmail | null; l
               Danger zone
             </h3>
             <button className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-              Deactivate @whyd.xyz email
+              Deactivate Shopping Email email
             </button>
           </div>
         </>
@@ -776,7 +776,7 @@ function DataPrivacyTab({ user }: { user: User | null }) {
         <div className="flex flex-col gap-2">
           {[
             { name: "Gmail (Google OAuth)", status: "Connected" },
-            { name: "@whyd.xyz Email", status: "Active" },
+            { name: "Shopping Email Email", status: "Active" },
           ].map((svc) => (
             <div
               key={svc.name}
@@ -990,7 +990,7 @@ export default function SettingsPage() {
 
       {/* Tab content */}
       {activeTab === "Profile" && <ProfileTab user={user} loading={loading} />}
-      {activeTab === "@whyd.xyz" && <WhydEmailTab whydEmail={whydEmail} loading={loading} />}
+      {activeTab === "Shopping Email" && <WhydEmailTab whydEmail={whydEmail} loading={loading} />}
       {activeTab === "Marketplaces" && <MarketplacesTab marketplacePref={marketplacePref} loading={loading} />}
       {activeTab === "Card Vault" && <CardVaultTab cards={cards} loading={loading} />}
       {activeTab === "Notifications" && <NotificationPreferencesTab />}

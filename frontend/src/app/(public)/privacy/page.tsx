@@ -26,9 +26,9 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-[#1E293B] mb-2">2. @whyd.xyz Email</h2>
+            <h2 className="text-lg font-semibold text-[#1E293B] mb-2">2. Shopping Email</h2>
             <p>
-              When you create a @whyd.xyz forwarding address, purchase confirmation
+              When you create a shopping email forwarding address, purchase confirmation
               emails are processed to extract order data. Email bodies are encrypted
               at rest using AES-256-GCM and are never shared with third parties.
             </p>

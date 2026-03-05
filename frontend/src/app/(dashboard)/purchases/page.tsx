@@ -67,7 +67,7 @@ export default function PurchasesPage() {
           <p className="text-2xl mb-2">{"\uD83D\uDED2"}</p>
           <p className="text-sm font-semibold text-slate-700">No purchases detected yet</p>
           <p className="text-xs text-slate-500 mt-1">
-            Connect your @whyd.xyz email to auto-track orders.
+            Connect your shopping email to auto-track orders.
           </p>
         </div>
       ) : !error ? (

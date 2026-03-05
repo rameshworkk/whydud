@@ -3225,3 +3225,22 @@ Configured structlog + django-structlog for structured JSON logging per architec
 - Added `dataExportApi` to `lib/api/auth.ts` (request + checkStatus)
 - Updated `authApi.deleteAccount` to accept password, added `restoreAccount`
 - Added `deletionRequestedAt` to User type (`types/user.ts`)
+
+### 2026-03-05 — Multi-Domain Email Configuration (whyd.in / whyd.click / whyd.shop)
+
+**Email Verification:**
+- Sent test emails via Resend API from no-reply@whydud.com to test@whyd.click, test@whyd.shop, test@whyd.in to verify domain routing
+
+**Backend:**
+- Fixed `WhydudEmailAvailabilityView` — now accepts `?domain=` query param and filters by (username, domain) pair instead of checking across all domains
+- Updated error messages from hardcoded "@whyd.xyz" to generic "shopping email"
+- Validates domain param against `WhydudEmail.Domain.values`
+
+**Frontend:**
+- Added `WhydudEmailDomain` type to `types/user.ts` ("whyd.in" | "whyd.click" | "whyd.shop")
+- Added `domain` field to `WhydudEmail` interface
+- Updated `whydudEmailApi.create()` and `checkAvailability()` to accept `domain` parameter (defaults to "whyd.in")
+- Added domain selector radio buttons to registration Step 2 with descriptions (India-first / action-oriented / shopping-focused)
+- Input suffix now shows `@{selectedDomain}` dynamically instead of hardcoded `@whyd.xyz`
+- Availability check re-triggers when domain selection changes
+- Updated marketplace instruction copy from "@whyd.xyz" to "shopping email"
