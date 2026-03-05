@@ -3269,3 +3269,39 @@ Configured structlog + django-structlog for structured JSON logging per architec
 - Components: `brand-trust-gauge.tsx`, `brand-trust-badge.tsx`, `brand-leaderboard.tsx`
 - Product detail page: brand trust badge (compact shield icon + score) next to brand name, links to brand page
 - Leaderboard page: added "Brand Trust" tab alongside "Top Reviewers" with top/bottom brand toggle
+
+---
+
+### 2026-03-05 — Test Infrastructure: Shared Fixtures + Service Health Tests
+
+**Testing foundation:**
+- Updated `requirements/dev.txt`: added pytest-asyncio, pytest-xdist, httpx; loosened version pins
+- Created `backend/pytest.ini` with custom markers: infra, smoke, api, auth, celery_task, scraping, frontend
+- Created `backend/tests/conftest.py` with 10+ shared fixtures:
+  - Core: `api_client`, `test_user`, `test_user_2`, `auth_token`, `auth_headers`, `authenticated_client`
+  - Data: `test_marketplace`, `test_marketplace_flipkart`, `test_category`, `test_brand`, `test_product`, `test_product_with_history`
+- Created `backend/tests/infrastructure/test_services.py` — 19 tests across 5 classes:
+  - `TestPostgreSQL`: connection, 7 schemas, critical tables, table count, pending migrations
+  - `TestTimescaleDB`: extension loaded, hypertable, compression policy, continuous aggregate, insert/query
+  - `TestRedis`: connection, cache backend configured
+  - `TestMeilisearch`: health, products index, document count
+  - `TestCeleryBroker`: app configured, broker URL, registered tasks, worker ping (slow)
+- All 19 tests discovered via `pytest --collect-only`
+- Commit: `9c21bac`
+
+### 2026-03-05 — smoke_test + platform_test management commands
+- Created `backend/apps/admin_tools/management/commands/smoke_test.py`:
+  - Ultra-fast HTTP smoke test (~30s) — hits every registered API endpoint
+  - 19 public endpoints tested by default (products, search, deals, scoring, TCO, etc.)
+  - `--include-auth`: tests 28 authenticated endpoints (profile, wishlists, alerts, inbox, rewards, etc.)
+  - `--include-frontend`: tests 6 frontend routes
+  - Auto-creates test user via Django ORM for auth testing
+  - Uses DRF TokenAuthentication (`Token xxx`), matching project auth setup
+  - Dynamic product detail testing (fetches slug from product list)
+  - Exit code 1 on any failure (CI-friendly)
+- Created `backend/apps/admin_tools/management/commands/platform_test.py`:
+  - Wrapper around pytest with convenient marker filters
+  - `--smoke`, `--infra`, `--api`, `--auth`, `--quick` marker filters
+  - `--coverage` for coverage report, `--parallel` for pytest-xdist
+  - Auto-detects backend directory (works in any deployment path)
+  - Uses `sys.executable` for correct Python interpreter
