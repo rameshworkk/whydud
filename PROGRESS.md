@@ -3353,3 +3353,19 @@ Configured structlog + django-structlog for structured JSON logging per architec
   - Fixed auth login URL: `/api/v1/auth/login` (no trailing slash)
   - Added `_disable_throttling` autouse fixture to prevent rate-limit flakes
 - Fixed bug in `apps/pricing/views.py:ClickHistoryView`: CursorPagination used default `created_at` ordering but ClickEvent has `clicked_at` — added `paginator.ordering = "-clicked_at"`
+
+### 2026-03-05 — Authenticated Dashboard API Tests
+- Created `backend/tests/api/test_dashboard.py` — 40+ tests covering all auth-protected dashboard endpoints
+  - `TestWishlists` (12 tests): CRUD list/create/detail/update/delete, default wishlist protection, add/remove/update items, duplicate item rejection, unauth guard
+  - `TestSharedWishlists` (1 test): public shared wishlist 404 for missing slug
+  - `TestPriceAlerts` (8 tests): list, create via product_slug, update_or_create dedup, missing slug validation, triggered alerts, patch, delete, unauth guard
+  - `TestNotifications` (6 tests): list, unread-count, mark-all-read, preferences GET/PATCH, unauth guard
+  - `TestInbox` (3 tests): list, filter params (unread/starred), unauth guard
+  - `TestPurchases` (6 tests): dashboard (verifies response shape), purchase list, refunds, return-windows, subscriptions, unauth guard
+  - `TestRewards` (6 tests): balance, history, gift-card catalog, redemption history, redeem-without-points failure, unauth guard
+  - `TestSettings` (2 tests): profile GET, unauth guard
+  - `TestCardVault` (2 tests): list cards, unauth guard
+  - `TestClickTracking` (2 tests): history, unauth guard
+  - `TestOffers` (1 test): public active offers (no auth)
+- All paths verified against actual URL patterns (no trailing slashes): wishlists, alerts/price, notifications, inbox, purchases/dashboard, rewards/balance, me, cards, clicks/history, offers/active
+- Run: `pytest tests/api/test_dashboard.py -v`
