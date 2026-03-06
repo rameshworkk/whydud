@@ -41,12 +41,11 @@ class ValidationPipeline:
         pipe._crawler = crawler
         return pipe
 
-    def process_item(self, item):
+    def process_item(self, item, spider):
         if isinstance(item, ReviewItem):
             return item  # ReviewItems validated by ReviewValidationPipeline
         missing = [f for f in REQUIRED_FIELDS if not item.get(f)]
         if missing:
-            spider = self._crawler.spider
             spider.items_failed = getattr(spider, "items_failed", 0) + 1
             raise DropItem(f"Missing required fields: {missing}")
         return item
@@ -59,7 +58,7 @@ class ValidationPipeline:
 class ReviewValidationPipeline:
     """Validates ReviewItems — drops if missing required fields."""
 
-    def process_item(self, item):
+    def process_item(self, item, spider):
         if not isinstance(item, ReviewItem):
             return item  # Pass through ProductItems
         if not item.get("marketplace_slug") or not item.get("product_external_id"):
@@ -83,7 +82,7 @@ class NormalizationPipeline:
         r"^(visit the\s+|brand:\s*)", flags=re.IGNORECASE
     )
 
-    def process_item(self, item):
+    def process_item(self, item, spider):
         # Title: collapse whitespace, strip
         if item.get("title"):
             item["title"] = self._WHITESPACE_RE.sub(" ", item["title"]).strip()
@@ -150,7 +149,7 @@ class ProductPipeline:
         pipe._crawler = crawler
         return pipe
 
-    def open_spider(self):
+    def open_spider(self, spider):
         """Ensure Django is initialised (needed when Scrapy runs standalone)."""
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
         import django
@@ -158,7 +157,7 @@ class ProductPipeline:
         django.setup()
         logger.info("ProductPipeline: Django initialised")
 
-    def process_item(self, item):
+    def process_item(self, item, spider):
         if isinstance(item, ReviewItem):
             return item  # ReviewItems handled by ReviewPersistencePipeline
 
@@ -252,8 +251,9 @@ class ProductPipeline:
                     cursor.execute(
                         """
                         INSERT INTO price_snapshots
-                            (time, listing_id, product_id, marketplace_id, price, mrp, in_stock, seller_name)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            (time, listing_id, product_id, marketplace_id,
+                             price, mrp, in_stock, seller_name, source)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         [
                             now,
@@ -264,6 +264,7 @@ class ProductPipeline:
                             listing.mrp,
                             listing.in_stock,
                             item.get("seller_name") or "",
+                            "scraper",
                         ],
                     )
             except Exception:
@@ -465,7 +466,7 @@ class ReviewPersistencePipeline:
         pipe._crawler = crawler
         return pipe
 
-    def process_item(self, item):
+    def process_item(self, item, spider):
         if not isinstance(item, ReviewItem):
             return item
 
@@ -562,10 +563,10 @@ class MeilisearchIndexPipeline:
         pipe._crawler = crawler
         return pipe
 
-    def process_item(self, item):
+    def process_item(self, item, spider):
         return item
 
-    def close_spider(self):
+    def close_spider(self, spider):
         """Sync all products from this spider run to Meilisearch."""
         spider = self._crawler.spider
         _attr = getattr(ProductPipeline, "_product_ids_attr", "_synced_product_ids")
@@ -608,14 +609,14 @@ class SpiderStatsUpdatePipeline:
         self._count = 0
         self._last_update = 0
 
-    def process_item(self, item):
+    def process_item(self, item, spider):
         self._count += 1
         if self._count - self._last_update >= 50:
             self._update_job()
             self._last_update = self._count
         return item
 
-    def close_spider(self):
+    def close_spider(self, spider):
         self._update_job()
 
     def _update_job(self):

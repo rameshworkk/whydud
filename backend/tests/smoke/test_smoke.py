@@ -174,3 +174,4 @@ class TestModelCounts:
 
         # At minimum, we need products and marketplaces
         assert counts['Products'] >= 0  # Always passes, just for reporting
+ 

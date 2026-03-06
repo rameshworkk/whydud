@@ -980,7 +980,7 @@ class Command(BaseCommand):
                 rows.append((
                     t, str(listing.id), str(listing.product_id),
                     listing.marketplace_id, price, mrp, disc,
-                    random.random() > 0.05, seller_name,
+                    random.random() > 0.05, seller_name, "scraper",
                 ))
 
         # Raw SQL insert — no RETURNING id
@@ -988,8 +988,8 @@ class Command(BaseCommand):
             sql = """
                 INSERT INTO price_snapshots
                     (time, listing_id, product_id, marketplace_id,
-                     price, mrp, discount_pct, in_stock, seller_name)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     price, mrp, discount_pct, in_stock, seller_name, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.executemany(sql, rows)
 

@@ -126,7 +126,7 @@ app.conf.beat_schedule = {
     },
     "scrape-nykaa-daily": {
         "task": "apps.scraping.tasks.run_marketplace_spider",
-        "schedule": crontab(minute=0, hour=8),  # 08:00 UTC (13:30 IST)
+        "schedule": crontab(minute=30, hour=8),  # 08:30 UTC (14:00 IST)
         "args": ["nykaa"],
         "options": {"queue": "scraping"},
     },
@@ -166,6 +166,26 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute=30, hour=9),  # 09:30 UTC (15:00 IST)
         "args": ["firstcry"],
         "options": {"queue": "scraping"},
+    },
+    # --- Missing periodic tasks ---
+    "expire-reward-points-monthly": {
+        "task": "apps.rewards.tasks.expire_points",
+        "schedule": crontab(minute=0, hour=2, day_of_month=1),  # 1st of month, 02:00 UTC
+    },
+    "check-return-window-alerts-daily": {
+        "task": "apps.email_intel.tasks.check_return_window_alerts",
+        "schedule": crontab(minute=0, hour=6),  # daily 06:00 UTC
+        "options": {"queue": "alerts"},
+    },
+    "detect-refund-delays-daily": {
+        "task": "apps.email_intel.tasks.detect_refund_delays",
+        "schedule": crontab(minute=30, hour=6),  # daily 06:30 UTC
+        "options": {"queue": "alerts"},
+    },
+    "recompute-brand-trust-weekly": {
+        "task": "apps.scoring.tasks.recompute_brand_trust_scores",
+        "schedule": crontab(minute=0, hour=2, day_of_week="sunday"),  # Sunday 02:00 UTC
+        "options": {"queue": "scoring"},
     },
 }
 

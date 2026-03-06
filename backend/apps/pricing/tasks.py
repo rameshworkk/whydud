@@ -152,3 +152,93 @@ def snapshot_product_prices(product_id: str) -> None:
     """Record current price to price_snapshots hypertable."""
     # TODO Sprint 2 Week 5
     pass
+
+
+# ── Backfill tasks ───────────────────────────────────────────────
+
+
+@shared_task(queue="scraping", bind=True, max_retries=2, soft_time_limit=7200)
+def backfill_existing_listings(
+    self,
+    marketplace_slug: str | None = None,
+    limit: int = 2000,
+) -> dict:
+    """Phase 0: Backfill existing ProductListings via BuyHatke."""
+    import asyncio
+
+    from apps.pricing.backfill.phase0_existing import (
+        backfill_existing_listings as _run,
+    )
+
+    return asyncio.run(_run(marketplace_slug=marketplace_slug, limit=limit))
+
+
+@shared_task(queue="scraping", bind=True, max_retries=1)
+def run_phase1_discover(
+    self,
+    sitemap_start: int = 1,
+    sitemap_end: int = 5,
+    filter_electronics: bool = True,
+    max_products: int | None = None,
+) -> dict:
+    """Phase 1: Discover products from PH sitemaps."""
+    import asyncio
+
+    from apps.pricing.backfill.phase1_discover import discover_from_sitemaps
+
+    return asyncio.run(
+        discover_from_sitemaps(
+            sitemap_start=sitemap_start,
+            sitemap_end=sitemap_end,
+            filter_electronics=filter_electronics,
+            max_products=max_products,
+        )
+    )
+
+
+@shared_task(queue="scraping", bind=True, max_retries=1)
+def run_phase2_buyhatke(
+    self,
+    batch_size: int = 5000,
+    marketplace_slug: str | None = None,
+) -> dict:
+    """Phase 2: BuyHatke bulk price history fill for discovered products."""
+    import asyncio
+
+    from apps.pricing.backfill.phase2_buyhatke import buyhatke_bulk_fill
+
+    return asyncio.run(
+        buyhatke_bulk_fill(
+            batch_size=batch_size,
+            marketplace_slug=marketplace_slug,
+        )
+    )
+
+
+@shared_task(queue="scraping", bind=True, max_retries=1)
+def run_phase3_extend(
+    self,
+    limit: int = 5000,
+    marketplace_slug: str | None = None,
+) -> dict:
+    """Phase 3: Extend top products with PH deep history."""
+    import asyncio
+
+    from apps.pricing.backfill.phase3_extend import extend_with_pricehistory
+
+    return asyncio.run(
+        extend_with_pricehistory(
+            limit=limit,
+            marketplace_slug=marketplace_slug,
+        )
+    )
+
+
+@shared_task(queue="default")
+def refresh_price_daily_aggregate() -> dict:
+    """Refresh the price_daily continuous aggregate after backfill."""
+    from django.db import connection
+
+    with connection.cursor() as cur:
+        cur.execute("CALL refresh_continuous_aggregate('price_daily', NULL, NULL);")
+    return {"success": True}

@@ -1,4 +1,4 @@
-"""Pricing models: snapshots, offers, wishlists price alerts.
+"""Pricing models: snapshots, offers, wishlists price alerts, backfill staging.
 
 PostgreSQL schema: public (price_snapshots hypertable via TimescaleDB)
 """
@@ -28,6 +28,7 @@ class PriceSnapshot(models.Model):
     discount_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     in_stock = models.BooleanField(null=True)
     seller_name = models.CharField(max_length=500, blank=True)
+    source = models.CharField(max_length=30, default="scraper")
 
     class Meta:
         db_table = "price_snapshots"
@@ -162,3 +163,77 @@ class ClickEvent(models.Model):
 
     def __str__(self) -> str:
         return f"Click {self.id}: {self.product_id} via {self.marketplace_id}"
+
+
+class BackfillProduct(models.Model):
+    """Staging table for the multi-phase price history backfill pipeline.
+
+    Lifecycle: discovered → bh_filled → ph_extended → done
+    Phase 1 creates the record, Phase 2-3 enrich it, Phase 4 links to our catalog.
+    """
+
+    class Status(models.TextChoices):
+        DISCOVERED = "discovered", "Discovered"
+        BH_FILLED = "bh_filled", "BuyHatke Filled"
+        PH_EXTENDED = "ph_extended", "PH Extended"
+        DONE = "done", "Done"
+        FAILED = "failed", "Failed"
+        SKIPPED = "skipped", "Skipped"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Discovery fields (Phase 1)
+    ph_code = models.CharField(max_length=20, unique=True, db_index=True)
+    ph_url = models.URLField(max_length=500, blank=True)
+    marketplace_slug = models.CharField(max_length=50, db_index=True)
+    external_id = models.CharField(max_length=200, db_index=True)  # ASIN or FSID
+    marketplace_url = models.URLField(max_length=2000, blank=True)
+    title = models.CharField(max_length=1000, blank=True)
+    brand_name = models.CharField(max_length=200, blank=True)
+    image_url = models.URLField(max_length=500, blank=True)
+
+    # Link to our ProductListing (populated when matched)
+    product_listing = models.ForeignKey(
+        "products.ProductListing",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="backfill_records",
+    )
+
+    # Price history metadata (Phase 2)
+    price_data_points = models.IntegerField(default=0)
+    history_from = models.DateTimeField(null=True, blank=True)
+    history_to = models.DateTimeField(null=True, blank=True)
+
+    # BuyHatke prediction & popularity (Phase 2)
+    bh_prediction_days = models.IntegerField(null=True, blank=True)
+    bh_prediction_weeks = models.IntegerField(null=True, blank=True)
+    bh_prediction_months = models.IntegerField(null=True, blank=True)
+    bh_popularity = models.IntegerField(null=True, blank=True)
+
+    # PriceHistory.app summary (Phase 3)
+    min_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    max_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    min_price_date = models.DateTimeField(null=True, blank=True)
+    max_price_date = models.DateTimeField(null=True, blank=True)
+
+    # Status tracking
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.DISCOVERED
+    )
+    error_message = models.TextField(blank=True)
+    retry_count = models.IntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "backfill_products"
+        indexes = [
+            models.Index(fields=["status", "marketplace_slug"]),
+            models.Index(fields=["external_id", "marketplace_slug"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.marketplace_slug}/{self.external_id} ({self.status})"

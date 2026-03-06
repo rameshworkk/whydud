@@ -147,7 +147,7 @@ class TestValidationPipeline:
         item["title"] = ""  # Empty title
 
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, pipeline._crawler.spider)
 
     def test_drops_item_without_external_id(self):
         from scrapy.exceptions import DropItem
@@ -157,7 +157,7 @@ class TestValidationPipeline:
         item["external_id"] = ""
 
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, pipeline._crawler.spider)
 
     def test_drops_item_without_url(self):
         from scrapy.exceptions import DropItem
@@ -167,7 +167,7 @@ class TestValidationPipeline:
         item["url"] = ""
 
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, pipeline._crawler.spider)
 
     def test_drops_item_without_marketplace_slug(self):
         from scrapy.exceptions import DropItem
@@ -177,12 +177,12 @@ class TestValidationPipeline:
         item["marketplace_slug"] = ""
 
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, pipeline._crawler.spider)
 
     def test_passes_valid_item(self):
         pipeline = self._make_pipeline()
         item = self._make_valid_item()
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, pipeline._crawler.spider)
         assert result["title"] == "Apple iPhone 16 (128 GB)"
 
     def test_skips_review_items(self):
@@ -194,7 +194,7 @@ class TestValidationPipeline:
         item["product_external_id"] = "B0CX23GFMV"
         item["rating"] = 5
         item["body"] = "Great product"
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, pipeline._crawler.spider)
         assert result["rating"] == 5
 
     def test_increments_items_failed_on_drop(self):
@@ -205,7 +205,7 @@ class TestValidationPipeline:
         item["title"] = ""
 
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, pipeline._crawler.spider)
 
         assert pipeline._crawler.spider.items_failed == 1
 
@@ -232,7 +232,7 @@ class TestReviewValidationPipeline:
     def test_passes_valid_review(self):
         pipeline = self._make_pipeline()
         item = self._make_valid_review()
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["rating"] == 4
 
     def test_drops_review_without_marketplace(self):
@@ -241,7 +241,7 @@ class TestReviewValidationPipeline:
         item = self._make_valid_review()
         item["marketplace_slug"] = ""
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, MockSpider())
 
     def test_drops_review_without_product_id(self):
         from scrapy.exceptions import DropItem
@@ -249,7 +249,7 @@ class TestReviewValidationPipeline:
         item = self._make_valid_review()
         item["product_external_id"] = ""
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, MockSpider())
 
     def test_drops_review_without_body(self):
         from scrapy.exceptions import DropItem
@@ -257,7 +257,7 @@ class TestReviewValidationPipeline:
         item = self._make_valid_review()
         item["body"] = ""
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, MockSpider())
 
     def test_drops_review_with_short_body(self):
         from scrapy.exceptions import DropItem
@@ -265,7 +265,7 @@ class TestReviewValidationPipeline:
         item = self._make_valid_review()
         item["body"] = "Ok"  # < 5 chars
         with pytest.raises(DropItem):
-            pipeline.process_item(item)
+            pipeline.process_item(item, MockSpider())
 
     def test_passes_product_items_through(self):
         """ProductItems should pass through ReviewValidationPipeline untouched."""
@@ -276,7 +276,7 @@ class TestReviewValidationPipeline:
         item["external_id"] = "B0CX23GFMV"
         item["url"] = "https://www.amazon.in/dp/B0CX23GFMV"
         item["title"] = "Test Product"
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["title"] == "Test Product"
 
 
@@ -295,7 +295,7 @@ class TestNormalizationPipeline:
         pipeline = self._make_pipeline()
         item = ProductItem()
         item["title"] = "  Apple   iPhone  16   (128  GB)  "
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["title"] == "Apple iPhone 16 (128 GB)"
 
     def test_normalizes_brand_casing_short(self):
@@ -304,7 +304,7 @@ class TestNormalizationPipeline:
         pipeline = self._make_pipeline()
         item = ProductItem()
         item["brand"] = "sony"
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["brand"] == "SONY"
 
     def test_normalizes_brand_casing_long(self):
@@ -313,7 +313,7 @@ class TestNormalizationPipeline:
         pipeline = self._make_pipeline()
         item = ProductItem()
         item["brand"] = "samsung electronics"
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["brand"] == "Samsung Electronics"
 
     def test_strips_brand_prefix(self):
@@ -322,7 +322,7 @@ class TestNormalizationPipeline:
         pipeline = self._make_pipeline()
         item = ProductItem()
         item["brand"] = "Visit the Apple Store"
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["brand"] == "Apple Store"
 
     def test_strips_specs_whitespace(self):
@@ -330,7 +330,7 @@ class TestNormalizationPipeline:
         pipeline = self._make_pipeline()
         item = ProductItem()
         item["specs"] = {"  RAM  ": " 8GB ", "Storage": " 256GB "}
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["specs"] == {"RAM": "8GB", "Storage": "256GB"}
 
     def test_removes_empty_about_bullets(self):
@@ -338,7 +338,7 @@ class TestNormalizationPipeline:
         pipeline = self._make_pipeline()
         item = ProductItem()
         item["about_bullets"] = ["Great display", "", "  ", "Fast charging"]
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["about_bullets"] == ["Great display", "Fast charging"]
 
     def test_deduplicates_images(self):
@@ -351,7 +351,7 @@ class TestNormalizationPipeline:
             "https://img1.jpg",  # Duplicate
             "https://img3.jpg",
         ]
-        result = pipeline.process_item(item)
+        result = pipeline.process_item(item, MockSpider())
         assert result["images"] == [
             "https://img1.jpg",
             "https://img2.jpg",

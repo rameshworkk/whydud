@@ -3419,3 +3419,80 @@ Added `tests/smoke/test_smoke.py` — 15 tests covering database invariants, API
 - `TestModelCounts` (1 test): prints counts for Products, Listings, Marketplaces, Categories, Reviews, PriceSnapshots — informational, always passes
 - Run: `POSTGRES_PASSWORD=whydud_dev pytest tests/smoke/ -m smoke -v`
 - **Note:** All tests verified against actual DB schema (table names, column names match models). Test runner currently blocked by Python 3.14 + Celery circular import deadlock (`whydud/__init__.py` → `celery.py` → `django.conf:settings` → `whydud` package). This affects all Django tests, not just smoke tests.
+
+### Price History Backfill Pipeline — 2026-03-06
+
+Implemented 4-phase price history backfill pipeline combining BuyHatke (zero-auth, ~17mo) and PriceHistory.app (token-auth, 3-5yr) data sources.
+
+**Foundation:**
+- Migration 0005: Added `source VARCHAR(30)` column + dedup index to `price_snapshots` hypertable
+- Migration 0006: `BackfillProduct` staging model (discovered → bh_filled → ph_extended → done)
+- Updated all existing INSERT sites (pipelines.py, seed_data.py, conftest.py) for `source='scraper'`
+
+**Modules created (10 files in `apps/pricing/backfill/`):**
+- `config.py` — BackfillConfig class (BH/PH delays, concurrency, 11-marketplace pos mapping, electronics keywords)
+- `utils.py` — `ist_to_utc()`, `inr_to_paisa()`, `validate_price()`
+- `bh_client.py` — Async BuyHatke client (price history, popularity, cross-marketplace compare; semaphore concurrency, retry on 429)
+- `ph_client.py` — Async PriceHistory.app client (sitemap parsing, JSON-LD metadata extraction, token auth, deep history API)
+- `injector.py` — Shared bulk INSERT with `ON CONFLICT DO NOTHING` for idempotent re-runs
+- `phase0_existing.py` — Instant win: backfill existing ProductListings via BuyHatke
+- `phase1_discover.py` — Sitemap discovery: parse PH sitemaps → filter electronics → extract ASIN/FSID → create BackfillProduct
+- `phase2_buyhatke.py` — BuyHatke bulk fill: fetch history for discovered products, inject matched listings
+- `phase3_extend.py` — PH deep extend: 3-5yr history for top BH-filled products, priority ordering
+
+**Management command:** `python manage.py backfill_prices <subcommand>`
+- Subcommands: `existing`, `discover`, `bh-fill`, `ph-extend`, `status`, `reset-failed`, `refresh-aggregate`
+
+**Celery tasks (5):** `backfill_existing_listings`, `run_phase1_discover`, `run_phase2_buyhatke`, `run_phase3_extend`, `refresh_price_daily_aggregate`
+
+**Key improvements over original plan:** Phase 0 instant win, concurrent async with asyncio.Semaphore, full 11-marketplace BH pos mapping, ON CONFLICT DO NOTHING dedup, shared injector module, config via app_settings pattern.
+
+**Tested end-to-end — 2026-03-06:**
+
+Migrations applied (0005 + 0006), all phases tested against live APIs:
+
+| Test | Result |
+|------|--------|
+| Phase 0: `existing --limit 5` | 5 filled, 2,249 points injected into price_snapshots |
+| Phase 0: re-run (idempotency) | Skipped 5 already-done, processed 5 new (1,997 points) |
+| Phase 1: `discover --start 1 --end 1 --limit 10` | 49,420 URLs → 9,976 filtered → 10 ASINs → 10 BackfillProducts |
+| Phase 1: re-run (dupe skip) | Skipped 10 existing, 0 HTML fetches |
+| Phase 2: `bh-fill --batch 10` | 8 filled, 2 empty, 0 failed |
+| Phase 3: `ph-extend --limit 3` | 3 extended, 0 token/API failures |
+| `status` | Dashboard shows all counts correctly |
+| `reset-failed` | Works (no failed products to reset) |
+| `refresh-aggregate` | Refreshed price_daily continuous aggregate |
+
+Bugs fixed during testing:
+- `SynchronousOnlyOperation`: Django ORM can't be called from async context — wrapped all ORM calls with `sync_to_async` in all 4 phase modules
+- JSON-LD `@graph` parsing: PH wraps JSON-LD in `@graph` array — fixed `_extract_jsonld_metadata` to unpack it
+- Image `@id` reference: PH uses `{"@id": "..."}` for images — fixed to handle dict images
+- Unicode `█` bar: Windows cp1252 can't encode block characters — changed to ASCII `#`
+
+Final DB state after testing: 7,844 price_snapshots (4,246 buyhatke + 3,598 scraper), 10 BH-covered listings out of 1,633 eligible, 10 BackfillProducts staged.
+
+### Platform Audit & Bug Fixes — 2026-03-06
+
+Full 15-phase platform audit completed. Generated `AUDIT-REPORT-2026-03-06.md` with 98 checks: 78 PASS, 10 PARTIAL, 6 STUB, 4 FAIL.
+
+**Bugs found and fixed:**
+
+| Bug | Fix | File |
+|-----|-----|------|
+| `apiClient` missing `put` method → TypeScript compile error in `auth.ts:65` | Added `put` method to apiClient | `frontend/src/lib/api/client.ts` |
+| All Scrapy pipeline methods missing required `spider` parameter → runtime TypeError | Fixed 10 method signatures (`process_item`, `open_spider`, `close_spider`) + updated 28 tests | `backend/apps/scraping/pipelines.py`, `backend/tests/api/test_scraping.py` |
+| Celery Beat collision: `scrape-croma-daily` and `scrape-nykaa-daily` both at `crontab(hour=8, minute=0)` | Moved nykaa to `minute=30, hour=8` | `backend/whydud/celery.py` |
+| 4 documented periodic tasks missing from Beat schedule | Registered: `expire_points` (monthly), `check_return_window_alerts` (daily), `detect_refund_delays` (daily), `recompute_brand_trust_scores` (weekly) | `backend/whydud/celery.py` |
+
+**Test results after fixes:**
+- TypeScript: clean compile, zero errors
+- Backend: **299 passed**, 1 failed (pre-existing Meilisearch API key issue in test config), 3 skipped
+- All 28 scraping pipeline tests pass with corrected `spider` parameter signatures
+
+**Audit highlights:**
+- 56 models across 14 tables (vs 49 documented), 41 migrations, 2 hypertables
+- 62 serializers, 118 views, ~131 endpoints
+- 37 Celery tasks (30 real, 6 stubs, 1 placeholder)
+- 16 spiders all real, DudScore fully implemented, fraud detection working
+- Test suite credibility: 6.5/10 — 284 tests but 0 frontend component tests, limited negative-path coverage
+- Docker infra solid, deploy.sh automated, backup pipeline complete

@@ -203,13 +203,13 @@ def test_product_with_history(test_product, test_marketplace):
             values.append(
                 f"('{time.isoformat()}'::timestamptz, '{listing.id}', "
                 f"'{test_product.id}', {test_marketplace.id}, "
-                f"{price}, 79999.00, true, NULL)"
+                f"{price}, 79999.00, true, NULL, 'scraper')"
             )
         if values:
             cur.execute(f"""
                 INSERT INTO price_snapshots
                     (time, listing_id, product_id, marketplace_id,
-                     price, mrp, in_stock, seller_name)
+                     price, mrp, in_stock, seller_name, source)
                 VALUES {', '.join(values)}
             """)
     return test_product
