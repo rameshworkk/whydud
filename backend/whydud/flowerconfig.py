@@ -30,7 +30,7 @@ broker_api = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 # Persistent task storage
 # ---------------------------------------------------------------------------
 persistent = True
-db = os.environ.get("FLOWER_DB", "flower.db")
+db = os.environ.get("FLOWER_DB", "/tmp/flower.db")
 
 # ---------------------------------------------------------------------------
 # Auto-refresh
