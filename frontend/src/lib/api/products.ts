@@ -1,6 +1,8 @@
 import { apiClient } from "./client";
 import type {
+  Category,
   Deal,
+  Department,
   DiscussionThread,
   MarketplaceOffer,
   ProductDetail,
@@ -52,7 +54,7 @@ export const productsApi = {
     apiClient.get<ShareData>(`/api/v1/products/${slug}/share`),
 
   compare: (slugs: string[]) =>
-    apiClient.get<ProductDetail[]>(`/api/v1/compare`, {
+    apiClient.get<{ products: ProductDetail[]; priceMatrix: Record<string, unknown>[]; specDiff: Record<string, unknown> }>(`/api/v1/compare`, {
       params: { slugs: slugs.join(",") },
     }),
 
@@ -83,6 +85,20 @@ export const recentlyViewedApi = {
     apiClient.get<ProductSummary[]>("/api/v1/me/recently-viewed", {
       params: { limit },
     }),
+};
+
+export const categoriesApi = {
+  /** GET /api/v1/categories/tree/ — full 3-level department > category > subcategory tree */
+  getTree: () =>
+    apiClient.get<Department[]>("/api/v1/categories/tree/"),
+
+  /** GET /api/v1/categories/ — flat list with optional level/parent filters */
+  list: (params?: { level?: number; parent?: string }) =>
+    apiClient.get<Category[]>("/api/v1/categories/", { params }),
+
+  /** GET /api/v1/categories/:slug/ — single category detail */
+  getDetail: (slug: string) =>
+    apiClient.get<Category>(`/api/v1/categories/${slug}/`),
 };
 
 export const dealsApi = {

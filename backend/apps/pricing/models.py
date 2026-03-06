@@ -180,6 +180,11 @@ class BackfillProduct(models.Model):
         FAILED = "failed", "Failed"
         SKIPPED = "skipped", "Skipped"
 
+    class ScrapeStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SCRAPED = "scraped", "Scraped"
+        FAILED = "failed", "Failed"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Discovery fields (Phase 1)
@@ -206,6 +211,12 @@ class BackfillProduct(models.Model):
     history_from = models.DateTimeField(null=True, blank=True)
     history_to = models.DateTimeField(null=True, blank=True)
 
+    # Cached raw price points for later injection (Phase 2/3)
+    raw_price_data = models.JSONField(
+        default=list, blank=True,
+        help_text="Cached raw price points: [{t, p, s}, ...]",
+    )
+
     # BuyHatke prediction & popularity (Phase 2)
     bh_prediction_days = models.IntegerField(null=True, blank=True)
     bh_prediction_weeks = models.IntegerField(null=True, blank=True)
@@ -222,6 +233,9 @@ class BackfillProduct(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.DISCOVERED
     )
+    scrape_status = models.CharField(
+        max_length=20, choices=ScrapeStatus.choices, default=ScrapeStatus.PENDING
+    )
     error_message = models.TextField(blank=True)
     retry_count = models.IntegerField(default=0)
 
@@ -234,6 +248,29 @@ class BackfillProduct(models.Model):
             models.Index(fields=["status", "marketplace_slug"]),
             models.Index(fields=["external_id", "marketplace_slug"]),
         ]
+
+    def append_price_data(self, price_points, source: str) -> int:
+        """Append price points to raw_price_data cache (dedup-safe).
+
+        Args:
+            price_points: List of objects with .time and .price attributes.
+            source: Source tag (e.g. "buyhatke", "pricehistory_app").
+
+        Returns:
+            Number of new entries added.
+        """
+        existing = {(e["t"], e["s"]) for e in self.raw_price_data}
+        new_entries = []
+        for pp in price_points:
+            t = pp.time.isoformat() if hasattr(pp.time, "isoformat") else str(pp.time)
+            p = str(pp.price)
+            key = (t, source)
+            if key not in existing:
+                new_entries.append({"t": t, "p": p, "s": source})
+                existing.add(key)
+        # Create new list for Django JSONField change detection
+        self.raw_price_data = self.raw_price_data + new_entries
+        return len(new_entries)
 
     def __str__(self) -> str:
         return f"{self.marketplace_slug}/{self.external_id} ({self.status})"

@@ -35,158 +35,8 @@ REVIEW_COUNT_RE = re.compile(r"([\d,]+)\s*(?:rating|review|customer)")
 
 MARKETPLACE_SLUG = "amazon-in"
 
-# ---------------------------------------------------------------------------
-# Amazon search keyword → Whydud category slug mapping
-#
-# Used to auto-assign a Whydud category to products based on which seed URL
-# (search keyword) they were scraped from. Keys are the `k=` param value
-# from the seed URL, normalised to lowercase with '+' replaced by ' '.
-# ---------------------------------------------------------------------------
-
-KEYWORD_CATEGORY_MAP: dict[str, str] = {
-    # Smartphones & Accessories
-    "smartphones": "smartphones",
-    "phone cases covers": "smartphones",
-    "screen protectors": "smartphones",
-    "power banks": "smartphones",
-    "mobile chargers": "smartphones",
-    "mobile holders stands": "smartphones",
-    # Computers & Peripherals
-    "laptops": "laptops",
-    "tablets": "tablets",
-    "monitors": "laptops",
-    "computer keyboards": "laptops",
-    "computer mouse": "laptops",
-    "printers": "laptops",
-    "routers": "laptops",
-    "external hard drives": "laptops",
-    "pen drives": "laptops",
-    "graphics cards": "laptops",
-    "webcams": "cameras",
-    # Audio
-    "headphones": "audio",
-    "earbuds tws": "audio",
-    "bluetooth speakers": "audio",
-    "soundbars": "audio",
-    "microphones": "audio",
-    "home theatre systems": "audio",
-    # Wearables
-    "smartwatches": "smartwatches",
-    "fitness bands": "smartwatches",
-    # Cameras
-    "cameras": "cameras",
-    "camera lenses": "cameras",
-    "camera tripods": "cameras",
-    "action cameras": "cameras",
-    "drones cameras": "cameras",
-    # TVs & Entertainment
-    "televisions": "televisions",
-    "projectors": "televisions",
-    "streaming devices": "televisions",
-    "tv wall mounts": "televisions",
-    # Large Appliances
-    "refrigerators": "refrigerators",
-    "washing machines": "washing-machines",
-    "air conditioners": "air-conditioners",
-    "microwave ovens": "appliances",
-    "dishwashers": "appliances",
-    "water heaters geysers": "appliances",
-    "chimneys": "appliances",
-    # Small Appliances
-    "air purifiers": "appliances",
-    "water purifiers": "appliances",
-    "vacuum cleaners": "appliances",
-    "robot vacuum cleaners": "appliances",
-    "mixer grinders": "kitchen-tools",
-    "induction cooktops": "kitchen-tools",
-    "electric kettles": "kitchen-tools",
-    "air fryers": "kitchen-tools",
-    "coffee machines": "kitchen-tools",
-    "irons steamers": "kitchen-tools",
-    "fans": "appliances",
-    "room heaters": "appliances",
-    "juicer mixer grinder": "kitchen-tools",
-    "hand blenders": "kitchen-tools",
-    "sandwich makers": "kitchen-tools",
-    "toasters": "kitchen-tools",
-    "rice cookers": "kitchen-tools",
-    "pressure cookers": "kitchen-tools",
-    # Personal Care & Grooming
-    "trimmers": "grooming",
-    "electric shavers": "grooming",
-    "hair dryers": "grooming",
-    "hair straighteners": "grooming",
-    "electric toothbrushes": "grooming",
-    "epilators": "grooming",
-    # Fitness & Sports
-    "treadmills": "fitness",
-    "exercise bikes": "fitness",
-    "dumbbells weights": "fitness",
-    "yoga mats": "fitness",
-    "gym equipment": "fitness",
-    # Home & Furniture
-    "mattresses": "home-kitchen",
-    "office chairs": "home-kitchen",
-    "study tables": "home-kitchen",
-    "beds": "home-kitchen",
-    "sofas": "home-kitchen",
-    "shoe racks": "home-kitchen",
-    "dining tables": "home-kitchen",
-    "wardrobes": "home-kitchen",
-    "bean bags": "home-kitchen",
-    "curtains": "home-kitchen",
-    "bedsheets": "home-kitchen",
-    # Smart Home & Security
-    "smart plugs": "electronics",
-    "smart bulbs": "electronics",
-    "security cameras": "cameras",
-    "smart door locks": "electronics",
-    "video doorbells": "electronics",
-    "smart speakers": "electronics",
-    # Gaming
-    "gaming laptops": "laptops",
-    "gaming monitors": "laptops",
-    "gaming headsets": "audio",
-    "gaming controllers": "electronics",
-    "gaming chairs": "home-kitchen",
-    "gaming consoles": "electronics",
-    # Storage & Networking
-    "ssd internal": "laptops",
-    "memory cards": "laptops",
-    "wifi mesh systems": "laptops",
-    "nas storage": "laptops",
-    # Baby & Kids
-    "baby strollers": "baby-kids",
-    "car seats baby": "baby-kids",
-    "baby monitors": "cameras",
-    "baby toys": "baby-kids",
-    # Car & Bike
-    "dash cameras": "cameras",
-    "car chargers": "electronics",
-    "car air purifiers": "appliances",
-    "tyre inflators": "electronics",
-    "car accessories": "electronics",
-    "helmet": "automotive",
-    # Musical Instruments
-    "guitars": "electronics",
-    "keyboards pianos": "electronics",
-    # Luggage & Bags
-    "laptop bags backpacks": "fashion",
-    "suitcases trolley": "fashion",
-    "handbags": "fashion",
-    # Books & Stationery
-    "books bestsellers": "books",
-    "school bags": "books",
-    # Fashion & Accessories
-    "sunglasses": "fashion",
-    "watches men": "fashion",
-    "watches women": "fashion",
-    # Kitchen & Dining
-    "cookware sets": "kitchen-tools",
-    "water bottles": "kitchen-tools",
-    "lunch boxes": "kitchen-tools",
-    "kitchen storage": "kitchen-tools",
-}
+# NOTE: KEYWORD_CATEGORY_MAP removed — category resolution now handled
+# centrally by apps.products.category_mapper.resolve_canonical_category()
 
 
 # Seed category search URLs — used when no ScraperJob provides URLs.
@@ -456,21 +306,46 @@ class AmazonIndiaSpider(BaseWhydudSpider):
             self.logger.warning(f"Stealth setup issue: {e}")
 
     def start_requests(self):
-        """Emit plain HTTP requests for all category listing pages.
+        """Emit requests for listing pages or direct product detail pages.
 
-        Listing pages don't need Playwright — product links and titles
-        are in raw HTML. This cuts download time from ~5-8s to ~0.5s per page.
+        Listing pages use plain HTTP. Product detail URLs (containing /dp/)
+        are routed directly to parse_product_page with Playwright.
         Categories are shuffled to distribute load across browse nodes.
         """
         url_pairs = self._load_urls()
         random.shuffle(url_pairs)
 
+        product_count = 0
+        listing_count = 0
+
         for url, max_pg in url_pairs:
+            # Direct product URL → skip listing phase, go to detail parser
+            if ASIN_RE.search(url):
+                product_count += 1
+                meta = {
+                    "playwright": True,
+                    "playwright_page_init_callback": self._apply_stealth,
+                    "playwright_page_goto_kwargs": {"wait_until": "domcontentloaded"},
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_load_state", "domcontentloaded"),
+                        PageMethod("wait_for_timeout", random.randint(2500, 5000)),
+                    ],
+                }
+                yield scrapy.Request(
+                    url,
+                    callback=self.parse_product_page,
+                    errback=self.handle_error,
+                    headers=self._make_headers(),
+                    meta=meta,
+                )
+                continue
+
+            # Listing page — plain HTTP
+            listing_count += 1
             base = url.split("&page=")[0].split("?page=")[0]
             self._max_pages_map[base] = max_pg
 
             self.logger.info(f"Queuing category ({max_pg} pages): {url}")
-            # Phase 1: NO playwright — plain HTTP for listing pages
             yield scrapy.Request(
                 url,
                 callback=self.parse_listing_page,
@@ -480,7 +355,10 @@ class AmazonIndiaSpider(BaseWhydudSpider):
                 dont_filter=True,
             )
 
-        self.logger.info(f"Queued {len(url_pairs)} categories (plain HTTP)")
+        if product_count:
+            self.logger.info(f"Queued {product_count} product URLs (Playwright direct)")
+        if listing_count:
+            self.logger.info(f"Queued {listing_count} categories (plain HTTP)")
 
     def _load_urls(self) -> list[tuple[str, int]]:
         """Resolve the list of (url, max_pages) pairs to crawl.
@@ -1199,22 +1077,12 @@ class AmazonIndiaSpider(BaseWhydudSpider):
 
     @staticmethod
     def _resolve_category_from_url(url: str) -> str | None:
-        """Extract the Whydud category slug from an Amazon search URL.
+        """Extract a category hint from an Amazon search URL.
 
-        Parses the `k=` query parameter and looks it up in KEYWORD_CATEGORY_MAP.
+        Category resolution is now handled centrally by the pipeline via
+        apps.products.category_mapper.resolve_canonical_category().
+        This method returns None; the pipeline uses breadcrumbs + title.
         """
-        from urllib.parse import parse_qs, urlparse
-
-        try:
-            parsed = urlparse(url)
-            params = parse_qs(parsed.query)
-            keyword = params.get("k", [None])[0]
-            if keyword:
-                # Normalise: "phone+cases+covers" → "phone cases covers"
-                normalised = keyword.replace("+", " ").strip().lower()
-                return KEYWORD_CATEGORY_MAP.get(normalised)
-        except Exception:
-            pass
         return None
 
     # ------------------------------------------------------------------

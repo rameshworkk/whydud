@@ -18,8 +18,12 @@ class PriceAlertAdmin(admin.ModelAdmin):
 class BackfillProductAdmin(admin.ModelAdmin):
     list_display = [
         "external_id", "marketplace_slug", "title", "status",
-        "price_data_points", "created_at",
+        "scrape_status", "price_data_points", "cached_points", "created_at",
     ]
-    list_filter = ["status", "marketplace_slug"]
+    list_filter = ["status", "scrape_status", "marketplace_slug"]
     search_fields = ["external_id", "title", "ph_code"]
-    readonly_fields = ["id", "created_at", "updated_at"]
+    readonly_fields = ["id", "created_at", "updated_at", "cached_points", "raw_price_data"]
+
+    @admin.display(description="Cached Pts")
+    def cached_points(self, obj):
+        return len(obj.raw_price_data) if obj.raw_price_data else 0

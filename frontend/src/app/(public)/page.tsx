@@ -178,7 +178,8 @@ export default async function HomePage() {
   const trendingProducts = products.slice(0, 8);
   const topRatedProducts = [...products].sort((a, b) => (b.avgRating ?? 0) - (a.avgRating ?? 0)).slice(0, 6);
   const bestsellers = [...products].sort((a, b) => (b.totalReviews ?? 0) - (a.totalReviews ?? 0)).slice(0, 6);
-  const reviewProducts = products.slice(0, 3);
+  // reviewProducts removed — section needs order history from email import to show
+  // high-value products the user purchased but hasn't reviewed on Whydud
 
   return (
     <>
@@ -523,92 +524,11 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* ── Rate and review your products ────────────────────────────────── */}
-        {reviewProducts.length > 0 && (
-          <section className="bg-white py-8 border-b border-[#E2E8F0]">
-            <div className="mx-auto px-4 md:px-6 max-w-[1280px]">
-
-              {/* User header */}
-              <div className="flex items-start gap-4 mb-5">
-                <div className="h-[60px] w-[60px] shrink-0 rounded-full overflow-hidden relative border-2 border-[#E2E8F0]">
-                  <Image
-                    src="https://placehold.co/60x60/fef3c7/92400e?text=You"
-                    alt="Profile"
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                </div>
-                <div>
-                  <p className="text-[#1E293B] text-[18px] font-semibold leading-snug">
-                    Rate and review your products
-                  </p>
-                  <p className="text-[#64748B] text-[13px] mt-1 flex flex-wrap items-center gap-1.5">
-                    Get{" "}
-                    <span className="inline-block bg-[#FFF7ED] border border-[#FED7AA] text-[#F97316] text-[11px] font-semibold rounded-full px-2.5 py-0.5">
-                      Rewards
-                    </span>{" "}
-                    by{" "}
-                    <span className="inline-block bg-[#FFF7ED] border border-[#FED7AA] text-[#F97316] text-[11px] font-semibold rounded-full px-2.5 py-0.5">
-                      reviewing
-                    </span>{" "}
-                    any product below
-                  </p>
-                </div>
-              </div>
-
-              {/* Products to review + view all */}
-              <div className="flex gap-4 overflow-x-auto pb-1 no-scrollbar">
-                {reviewProducts.map((product) => {
-                  const imgUrl = product.images?.[0] ?? "https://placehold.co/90x90/f8fafc/94a3b8?text=?";
-                  return (
-                    <div key={product.id} className="shrink-0 w-[300px] md:w-[350px]">
-                      <div className="flex gap-3 rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="relative h-[90px] w-[90px] shrink-0 rounded-lg overflow-hidden bg-[#F8FAFC]">
-                          <Image
-                            src={imgUrl}
-                            alt={product.title}
-                            fill
-                            sizes="90px"
-                            className="object-contain p-2"
-                            unoptimized
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-                          <div>
-                            <p className="text-[11px] text-[#4DB6AC] font-medium">{product.brandName}</p>
-                            <p className="text-[13px] font-medium text-[#1E293B] line-clamp-2 leading-snug mt-0.5">
-                              {product.title}
-                            </p>
-                          </div>
-                          <Link
-                            href={`/product/${product.slug}`}
-                            className="mt-2 self-start inline-flex items-center justify-center rounded-full bg-[#F97316] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#EA580C] transition-colors"
-                          >
-                            Write a review
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* View all tile */}
-                <div className="shrink-0 w-[80px] flex items-center justify-center">
-                  <Link
-                    href="/reviews/new"
-                    className="flex flex-col items-center gap-1.5 text-[#F97316] hover:text-[#EA580C] transition-colors"
-                  >
-                    <div className="h-10 w-10 rounded-full border-2 border-[#F97316] flex items-center justify-center">
-                      <ChevronRight className="h-5 w-5" />
-                    </div>
-                    <span className="text-[11px] font-semibold whitespace-nowrap">View All</span>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
+        {/* ── Rate and review your products ──────────────────────────────────
+            TODO: Show for logged-in users only, populated with high-value
+            products from their order history (email import) that haven't
+            been reviewed on Whydud yet. Needs: auth check + new API endpoint.
+        ──────────────────────────────────────────────────────────────────── */}
 
         {/* ── Top Rated + Bestsellers ───────────────────────────────────────── */}
         {products.length > 0 && (

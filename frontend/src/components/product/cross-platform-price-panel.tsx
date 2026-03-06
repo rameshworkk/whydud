@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatPrice } from "@/lib/utils";
 import { clicksApi } from "@/lib/api/products";
 import { getMarketplace } from "@/config/marketplace";
+import { PriceAlertButton } from "@/components/product/price-alert-button";
 import type { ProductListing } from "@/types";
 
 /* ── Props ────────────────────────────────────────────────────────────────── */
@@ -11,6 +12,7 @@ import type { ProductListing } from "@/types";
 interface CrossPlatformPricePanelProps {
   listings: ProductListing[];
   lowestPriceEver: number | null;
+  productId: string;
   referrerPage?: string;
 }
 
@@ -28,10 +30,16 @@ function getBestPrice(listings: ProductListing[]): number | null {
 export function CrossPlatformPricePanel({
   listings,
   lowestPriceEver,
+  productId,
   referrerPage = "product_page",
 }: CrossPlatformPricePanelProps) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const bestPrice = getBestPrice(listings);
+
+  // Derive marketplaces for PriceAlertButton
+  const alertMarketplaces = [...new Map(
+    listings.map((l) => [l.marketplace.slug, { slug: l.marketplace.slug, name: l.marketplace.name }])
+  ).values()];
 
   // Sort: in-stock first (by price asc), then out-of-stock
   const sorted = [...listings].sort((a, b) => {
@@ -162,12 +170,14 @@ export function CrossPlatformPricePanel({
         );
       })}
 
-      {/* Price alert link */}
-      <p className="text-xs text-slate-500 text-center mt-1">
-        <button className="text-[#F97316] hover:text-[#EA580C] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] rounded">
-          Login to set price alert
-        </button>
-      </p>
+      {/* Price alert */}
+      <div className="flex justify-center mt-2">
+        <PriceAlertButton
+          productId={productId}
+          currentPrice={bestPrice ?? listings[0]?.currentPrice ?? 0}
+          marketplaces={alertMarketplaces}
+        />
+      </div>
     </div>
   );
 }

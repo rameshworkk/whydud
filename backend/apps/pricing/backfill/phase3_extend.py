@@ -109,6 +109,9 @@ def _save_bp_extended(bp, result, listing_info):
     if summary.get("max_date"):
         bp.max_price_date = summary["max_date"]
 
+    # Always cache raw data for later injection (appends to BH cache)
+    bp.append_price_data(price_points, source="pricehistory_app")
+
     # Update history range if PH extends beyond BH
     if price_points:
         first_time = price_points[0].time

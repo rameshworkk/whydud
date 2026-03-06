@@ -48,10 +48,13 @@ class Command(BaseCommand):
                 "title",
                 "brand_name",
                 "category_name",
+                "category_breadcrumb",
                 "description",
             ],
             "filterableAttributes": [
                 "category_slug",
+                "category_parent_slug",
+                "category_department_slug",
                 "brand_slug",
                 "current_best_price",
                 "dud_score",
@@ -77,7 +80,7 @@ class Command(BaseCommand):
         # Fetch all active products
         products = (
             Product.objects
-            .select_related("brand", "category")
+            .select_related("brand", "category__parent__parent")
             .filter(status=Product.Status.ACTIVE)
         )
         total = products.count()

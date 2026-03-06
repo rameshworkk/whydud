@@ -167,7 +167,6 @@ class ProductPipeline:
         from apps.products.matching import (
             match_product,
             resolve_or_create_brand,
-            resolve_category,
             update_canonical_product,
         )
         from apps.products.models import (
@@ -207,11 +206,15 @@ class ProductPipeline:
         # ------- 3. Brand (alias-aware resolution) ------------------------
         brand = resolve_or_create_brand(item["brand"]) if item.get("brand") else None
 
-        # ------- 3b. Category resolution (slug → breadcrumbs → auto-create) -
-        category = resolve_category(item.get("category_slug"))
-        # If no category from slug, try to auto-create from breadcrumbs
-        if not category and item.get("breadcrumbs"):
-            category = self._resolve_category_from_breadcrumbs(item["breadcrumbs"])
+        # ------- 3b. Category resolution (canonical mapper) ----------------
+        from apps.products.category_mapper import resolve_canonical_category
+
+        category = resolve_canonical_category(
+            marketplace_slug=item.get("marketplace_slug", ""),
+            breadcrumbs=item.get("breadcrumbs", []) or [],
+            title=item.get("title", ""),
+            raw_category=item.get("category", ""),
+        )
 
         # ------- 4. Find or create ProductListing + Product ---------------
         listing = ProductListing.objects.filter(
@@ -282,55 +285,6 @@ class ProductPipeline:
         self._track_product(self._crawler.spider, str(product.id))
 
         return item
-
-    @staticmethod
-    def _resolve_category_from_breadcrumbs(breadcrumbs: list[str]):
-        """Auto-create a category hierarchy from breadcrumb trail.
-
-        Uses the deepest meaningful breadcrumb as the category.
-        Skips generic terms like "Home", "All Categories".
-        """
-        from django.utils.text import slugify
-        from apps.products.models import Category
-
-        skip_terms = {"home", "all categories", "all", "search", "products"}
-
-        # Walk breadcrumbs from deepest to shallowest
-        for crumb in reversed(breadcrumbs):
-            clean = crumb.strip()
-            if not clean or clean.lower() in skip_terms:
-                continue
-            slug = slugify(clean)
-            if not slug or len(slug) < 2:
-                continue
-
-            # Check if category exists
-            category = Category.objects.filter(slug=slug).first()
-            if category:
-                return category
-
-            # Auto-create — find parent from the next level up
-            parent = None
-            crumb_idx = breadcrumbs.index(crumb)
-            if crumb_idx > 0:
-                parent_crumb = breadcrumbs[crumb_idx - 1].strip()
-                parent_slug = slugify(parent_crumb)
-                if parent_slug and parent_slug.lower() not in skip_terms:
-                    parent = Category.objects.filter(slug=parent_slug).first()
-
-            category, created = Category.objects.get_or_create(
-                slug=slug,
-                defaults={
-                    "name": clean,
-                    "parent": parent,
-                    "level": crumb_idx if crumb_idx >= 0 else 0,
-                },
-            )
-            if created:
-                logger.info("Auto-created category from breadcrumbs: %s (slug=%s, parent=%s)", clean, slug, parent)
-            return category
-
-        return None
 
     # Collect product IDs so MeilisearchIndexPipeline can batch-sync them
     _product_ids_attr = "_synced_product_ids"

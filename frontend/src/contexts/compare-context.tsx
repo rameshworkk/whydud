@@ -20,6 +20,8 @@ interface CompareItem {
   title: string;
   image: string | null;
   price: number | null;
+  categorySlug: string | null;
+  categoryName: string | null;
 }
 
 function toCompareItem(p: ProductSummary): CompareItem {
@@ -28,6 +30,8 @@ function toCompareItem(p: ProductSummary): CompareItem {
     title: p.title,
     image: p.images?.[0] ?? null,
     price: p.currentBestPrice,
+    categorySlug: p.categorySlug,
+    categoryName: p.categoryName,
   };
 }
 
@@ -62,8 +66,8 @@ function loadPersistedItems(): ProductSummary[] {
       title: item.title,
       brandName: null,
       brandSlug: null,
-      categoryName: null,
-      categorySlug: null,
+      categoryName: item.categoryName ?? null,
+      categorySlug: item.categorySlug ?? null,
       dudScore: null,
       dudScoreConfidence: null,
       avgRating: null,
@@ -113,6 +117,16 @@ export function CompareProvider({ children }: { children: ReactNode }) {
       if (prev.length >= MAX_COMPARE) {
         toast.warning("Max 4 products. Remove one first.");
         return prev;
+      }
+      // Only allow same-category products in the compare tray
+      const first = prev[0];
+      if (first && first.categorySlug && product.categorySlug) {
+        if (first.categorySlug !== product.categorySlug) {
+          toast.warning(
+            `You can only compare products in the same category. Current: ${first.categoryName ?? first.categorySlug}`
+          );
+          return prev;
+        }
       }
       return [...prev, product];
     });

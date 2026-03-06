@@ -12,9 +12,59 @@ class MarketplaceSerializer(serializers.ModelSerializer):
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    parent = serializers.SerializerMethodField()
+    children_count = serializers.SerializerMethodField()
+    breadcrumb = serializers.SerializerMethodField()
+
     class Meta:
         model = Category
-        fields = ["id", "slug", "name", "level", "has_tco_model", "product_count"]
+        fields = [
+            "id", "slug", "name", "level", "icon", "description",
+            "parent", "product_count", "children_count", "breadcrumb", "has_tco_model",
+        ]
+
+    def get_parent(self, obj):
+        if obj.parent:
+            return {"id": obj.parent.id, "slug": obj.parent.slug, "name": obj.parent.name}
+        return None
+
+    def get_children_count(self, obj):
+        return obj.children.filter(is_active=True).count() if hasattr(obj, "children") else 0
+
+    def get_breadcrumb(self, obj):
+        """Returns [{'slug': 'electronics', 'name': 'Electronics'}, ...] for hierarchy."""
+        parts = []
+        current = obj
+        while current:
+            parts.append({"slug": current.slug, "name": current.name})
+            current = current.parent
+        return list(reversed(parts))
+
+
+# ---------------------------------------------------------------------------
+# Category tree serializers (for mega-nav / browse page)
+# ---------------------------------------------------------------------------
+
+class SubcategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ["id", "slug", "name", "icon", "product_count"]
+
+
+class CategoryWithChildrenSerializer(serializers.ModelSerializer):
+    subcategories = SubcategorySerializer(source="children", many=True)
+
+    class Meta:
+        model = Category
+        fields = ["id", "slug", "name", "icon", "product_count", "subcategories"]
+
+
+class DepartmentTreeSerializer(serializers.ModelSerializer):
+    categories = CategoryWithChildrenSerializer(source="children", many=True)
+
+    class Meta:
+        model = Category
+        fields = ["id", "slug", "name", "icon", "product_count", "categories"]
 
 
 class BrandSerializer(serializers.ModelSerializer):

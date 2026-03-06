@@ -3502,3 +3502,65 @@ Full 15-phase platform audit completed. Generated `AUDIT-REPORT-2026-03-06.md` w
 **Created:**
 1. `docs/ERD.md` — Full Mermaid ERD diagram covering all 50+ models across 14 Django apps and 6 PostgreSQL schemas. Includes relationship summary table, TimescaleDB hypertable documentation, and encrypted fields reference.
 2. `docs/DATA-DICTIONARY.md` — Complete field-level data dictionary with types, constraints, and descriptions for every model. Includes appendices for schema mapping and index summary.
+
+### 2026-03-07 — Product Page Bug Fixes & Compare Feature Fix
+
+**5 product page bugs fixed:**
+
+| Bug | Fix | File |
+|-----|-----|------|
+| Price alert button was a dead static element | Replaced with working `PriceAlertButton` component, wired `productId` prop | `frontend/src/components/product/cross-platform-price-panel.tsx` |
+| Image gallery thumbnails not clickable (server component) | Created `"use client"` `ProductImageGallery` component with `useState` | `frontend/src/components/product/product-image-gallery.tsx` (new) |
+| Current price showing "—" for OOS products | Added fallback: show last known price with "Out of stock" badge when `currentBestPrice` is null | `frontend/src/app/(public)/product/[slug]/page.tsx` |
+| Title duplicated in breadcrumb + h1 | Removed product title from breadcrumb trail | `frontend/src/app/(public)/product/[slug]/page.tsx` |
+| Reviews not showing | Data issue — 0 reviews in DB, review spider not yet run (not a code bug) | N/A |
+
+**Homepage fixes:**
+- `update_canonical_product()` now falls back to OOS listing prices so product cards always show a price (`backend/apps/products/matching.py`)
+- Removed "Rate and review your products" section (needs order history feature to implement properly) (`frontend/src/app/(public)/page.tsx`)
+- Deleted 118 seed/mock products with no real listings — 1,495 real products remain
+
+**Compare page fixes:**
+
+| Bug | Fix | File |
+|-----|-----|------|
+| "products is not iterable" error on Compare Now | Fixed API return type + changed `response.data` → `response.data.products` | `frontend/src/lib/api/products.ts`, `frontend/src/app/(public)/compare/page.tsx` |
+| Cross-category comparison allowed (laptop vs headphone) | Added `categorySlug`/`categoryName` to `CompareItem`, enforced same-category check in `addToCompare` with toast warning | `frontend/src/contexts/compare-context.tsx` |
+
+### 2026-03-07 — Category Hierarchy Implementation (3-Level Canonical Taxonomy)
+
+**Replaced flat 19-category system with a 3-level canonical hierarchy:**
+
+| Level | Count | Examples |
+|-------|-------|---------|
+| Department (0) | 12 | Electronics, Home & Living, Fashion, Health & Personal Care |
+| Category (1) | 38 | Smartphones & Accessories, Laptops & Desktops, Kitchen Appliances |
+| Subcategory (2) | 133 | smartphones, laptops, refrigerators, running-shoes, protein-supplements |
+
+**New files created:**
+- `backend/apps/products/category_mapper.py` — Central 4-step category resolution engine (exact mapping → keyword matching → breadcrumb walk → fallback)
+- `backend/apps/products/management/commands/seed_category_hierarchy.py` — Idempotent seeder for full taxonomy
+- `frontend/src/app/(public)/categories/page.tsx` — Categories browse page with department/category/subcategory grid
+- `backend/apps/products/migrations/0005_category_hierarchy_marketplace_mapping.py` — Migration for new fields + MarketplaceCategoryMapping model
+
+**Backend changes:**
+- `models.py`: Added `icon`, `description`, `is_active`, `display_order` to Category; created `MarketplaceCategoryMapping` model
+- `serializers.py`: Added `SubcategorySerializer`, `CategoryWithChildrenSerializer`, `DepartmentTreeSerializer` for tree API; expanded `CategorySerializer` with parent/breadcrumb
+- `views.py`: Added `CategoryTreeView`, `CategoryListView`, `CategoryDetailView`
+- `urls.py`: Added `/categories/tree/`, `/categories/`, `/categories/<slug>/` endpoints
+- `admin.py`: Enhanced `CategoryAdmin` with hierarchy display; added `MarketplaceCategoryMappingAdmin`
+- `pipelines.py`: Replaced `_resolve_category_from_breadcrumbs()` with `resolve_canonical_category()` call
+- `amazon_spider.py` / `flipkart_spider.py`: Removed per-spider `KEYWORD_CATEGORY_MAP` dicts (~130 entries each), resolution now centralized
+- `search/tasks.py` + `sync_meilisearch.py`: Added `category_parent_slug`, `category_department_slug`, `category_breadcrumb` to Meilisearch index
+
+**Frontend changes:**
+- `types/product.ts`: Added `Department`, `CategoryWithChildren`, `Subcategory` interfaces; expanded `Category` with parent/breadcrumb
+- `lib/api/products.ts`: Added `categoriesApi` with `getTree()`, `list()`, `getDetail()`
+- `categories/[slug]/page.tsx`: Rewritten with breadcrumb nav, child category cards, product grid
+
+**Verification:**
+- Migration applied successfully
+- Seed command: 12 departments, 38 categories, 133 subcategories
+- Product counts propagated correctly (613 Electronics, 76 Home & Living, etc.)
+- 2 orphan categories detected: cameras (101 products), jewellery (206 products) — need manual mapping
+- TypeScript compiles with no errors

@@ -17,6 +17,15 @@ Usage::
     # Phase 3: PH deep history extension for top products
     python manage.py backfill_prices ph-extend --limit 5000
 
+    # Phase 4a: Targeted scrape of backfill products
+    python manage.py backfill_prices scrape --marketplace amazon-in --limit 50
+    python manage.py backfill_prices scrape --dry-run
+    python manage.py backfill_prices scrape --limit 100 --inject
+
+    # Phase 4b: Inject cached data after spiders create ProductListings
+    python manage.py backfill_prices inject --batch 5000
+    python manage.py backfill_prices inject --marketplace amazon-in --dry-run
+
     # Utilities
     python manage.py backfill_prices status
     python manage.py backfill_prices reset-failed
@@ -65,6 +74,21 @@ class Command(BaseCommand):
         p3.add_argument("--limit", type=int, default=5000, help="Max products to extend")
         p3.add_argument("--marketplace", type=str, default=None, help="Filter by marketplace slug")
         p3.add_argument("--delay", type=float, default=None, help="Override PH request delay")
+
+        # ── Phase 4a: scrape ─────────────────────────────────────
+        ps = sub.add_parser("scrape", help="Targeted scrape of backfill product ASINs/FPIDs")
+        ps.add_argument("--batch", type=int, default=None, help="URLs per spider subprocess")
+        ps.add_argument("--marketplace", type=str, default=None, help="Filter by marketplace slug")
+        ps.add_argument("--limit", type=int, default=None, help="Max products to scrape")
+        ps.add_argument("--dry-run", action="store_true", help="Show candidates without scraping")
+        ps.add_argument("--include-retried", action="store_true", help="Include retry_count >= 3")
+        ps.add_argument("--inject", action="store_true", help="Run Phase 4 inject after scraping")
+
+        # ── Phase 4b: inject ─────────────────────────────────────
+        p4 = sub.add_parser("inject", help="Inject cached price data after spider enrichment")
+        p4.add_argument("--batch", type=int, default=5000, help="Batch size")
+        p4.add_argument("--marketplace", type=str, default=None, help="Filter by marketplace slug")
+        p4.add_argument("--dry-run", action="store_true", help="Find matches but don't inject")
 
         # ── Utilities ────────────────────────────────────────────
         sub.add_parser("status", help="Show backfill pipeline status dashboard")
@@ -141,6 +165,35 @@ class Command(BaseCommand):
         )
         self._print_result("Phase 3", result)
 
+    # ── Phase 4a: Scrape ─────────────────────────────────────────
+
+    def _handle_scrape(self, **options):
+        from apps.pricing.backfill.targeted_scrape import scrape_backfill_products
+
+        self.stdout.write(self.style.MIGRATE_HEADING("Phase 4a: Targeted scrape"))
+        result = scrape_backfill_products(
+            batch_size=options.get("batch"),
+            marketplace_slug=options.get("marketplace"),
+            limit=options.get("limit"),
+            dry_run=options.get("dry_run", False),
+            include_retried=options.get("include_retried", False),
+            auto_inject=options.get("inject", False),
+        )
+        self._print_result("Scrape", result)
+
+    # ── Phase 4b: Inject ─────────────────────────────────────────
+
+    def _handle_inject(self, **options):
+        from apps.pricing.backfill.phase4_inject import inject_cached_data
+
+        self.stdout.write(self.style.MIGRATE_HEADING("Phase 4: Inject cached price data"))
+        result = inject_cached_data(
+            batch_size=options.get("batch", 5000),
+            marketplace_slug=options.get("marketplace"),
+            dry_run=options.get("dry_run", False),
+        )
+        self._print_result("Phase 4", result)
+
     # ── Status ───────────────────────────────────────────────────
 
     def _handle_status(self, **options):
@@ -197,6 +250,36 @@ class Command(BaseCommand):
 
         self.stdout.write("")
         self.stdout.write(f"  EXISTING LISTINGS: {eligible:,} eligible, {bh_covered:,} BH-covered")
+
+        # Phase 4 injectable candidates
+        injectable = BackfillProduct.objects.filter(
+            status__in=["bh_filled", "ph_extended"],
+            product_listing__isnull=True,
+        ).exclude(raw_price_data=[]).exclude(external_id="").count()
+
+        with_cache = BackfillProduct.objects.exclude(raw_price_data=[]).count()
+        self.stdout.write("")
+        self.stdout.write(f"  CACHED DATA: {with_cache:,} products with raw_price_data")
+        self.stdout.write(f"  INJECTABLE: {injectable:,} candidates for Phase 4 inject")
+
+        # Scrape status
+        from apps.pricing.backfill.config import BackfillConfig as BConfig
+        max_retries = BConfig.scrape_max_retries()
+        pending = BackfillProduct.objects.filter(scrape_status="pending").exclude(external_id="").count()
+        scraped = BackfillProduct.objects.filter(scrape_status="scraped").count()
+        failed_retryable = BackfillProduct.objects.filter(
+            scrape_status="failed", retry_count__lt=max_retries,
+        ).count()
+        failed_exhausted = BackfillProduct.objects.filter(
+            scrape_status="failed", retry_count__gte=max_retries,
+        ).count()
+
+        self.stdout.write("")
+        self.stdout.write("  SCRAPE STATUS:")
+        self.stdout.write(f"    {'pending':<25} {pending:>8,}  (never attempted)")
+        self.stdout.write(f"    {'scraped':<25} {scraped:>8,}  (ProductListing created)")
+        self.stdout.write(f"    {'failed (retry < {0})':<25} {failed_retryable:>8,}  (eligible for retry)".format(max_retries))
+        self.stdout.write(f"    {'failed (retry >= {0})':<25} {failed_exhausted:>8,}  (deprioritized)".format(max_retries))
 
     # ── Reset Failed ─────────────────────────────────────────────
 

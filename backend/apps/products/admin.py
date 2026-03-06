@@ -1,7 +1,10 @@
 """Django admin for products."""
 from django.contrib import admin
 
-from .models import BankCard, Brand, Category, Marketplace, Product, ProductListing, Seller
+from .models import (
+    BankCard, Brand, Category, Marketplace, MarketplaceCategoryMapping,
+    Product, ProductListing, Seller,
+)
 
 
 @admin.register(Product)
@@ -19,8 +22,35 @@ class MarketplaceAdmin(admin.ModelAdmin):
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "level", "has_tco_model", "product_count"]
-    list_filter = ["level", "has_tco_model"]
+    list_display = ["name", "parent_display", "level", "slug", "product_count", "is_active", "display_order"]
+    list_filter = ["level", "is_active", "parent"]
+    list_editable = ["display_order", "is_active"]
+    search_fields = ["name", "slug"]
+    ordering = ["level", "parent__name", "display_order", "name"]
+
+    @admin.display(description="Hierarchy")
+    def parent_display(self, obj):
+        parts = []
+        current = obj.parent
+        while current:
+            parts.append(current.name)
+            current = current.parent
+        return " > ".join(reversed(parts)) if parts else "—"
+
+
+@admin.register(MarketplaceCategoryMapping)
+class MarketplaceCategoryMappingAdmin(admin.ModelAdmin):
+    list_display = ["marketplace", "marketplace_category_path", "canonical_category", "confidence", "updated_at"]
+    list_filter = ["marketplace", "confidence"]
+    search_fields = ["marketplace_category_path", "canonical_category__name"]
+    list_editable = ["canonical_category", "confidence"]
+    raw_id_fields = ["canonical_category"]
+    actions = ["mark_as_reviewed"]
+
+    @admin.action(description="Mark selected mappings as reviewed (manual)")
+    def mark_as_reviewed(self, request, queryset):
+        updated = queryset.update(confidence="manual")
+        self.message_user(request, f"{updated} mappings marked as reviewed.")
 
 
 @admin.register(Brand)

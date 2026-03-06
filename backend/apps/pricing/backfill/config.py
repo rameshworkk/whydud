@@ -106,6 +106,29 @@ class BackfillConfig:
             },
         )
 
+    # ── Targeted scraping ───────────────────────────────────────
+
+    @classmethod
+    def product_url_map(cls) -> dict[str, str]:
+        """Marketplace slug → product URL template. Use {pid} placeholder."""
+        return _get(
+            "BACKFILL_PRODUCT_URL_MAP",
+            {
+                "amazon-in": "https://www.amazon.in/dp/{pid}",
+                "flipkart": "https://www.flipkart.com/p/{pid}",
+            },
+        )
+
+    @classmethod
+    def scrape_batch_size(cls) -> int:
+        """Product URLs per spider subprocess batch."""
+        return int(_get("BACKFILL_SCRAPE_BATCH_SIZE", 50))
+
+    @classmethod
+    def scrape_max_retries(cls) -> int:
+        """Max scrape attempts before deprioritizing a product."""
+        return int(_get("BACKFILL_SCRAPE_MAX_RETRIES", 3))
+
     # ── PH sitemap discovery ─────────────────────────────────────
 
     @classmethod

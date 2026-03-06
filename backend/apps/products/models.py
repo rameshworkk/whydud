@@ -38,6 +38,10 @@ class Category(models.Model):
     level = models.SmallIntegerField(default=0)
     has_tco_model = models.BooleanField(default=False)
     product_count = models.IntegerField(default=0)
+    icon = models.CharField(max_length=50, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -46,6 +50,53 @@ class Category(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class MarketplaceCategoryMapping(models.Model):
+    """Maps a marketplace's raw category path to a Whydud canonical category.
+
+    Example:
+      marketplace: Amazon.in
+      marketplace_category_path: "Home, Kitchen, Pets > Home Decor > Artificial Flora"
+      marketplace_category_slug: "artificial-flora"
+      canonical_category: -> Indoor Plants (Whydud subcategory)
+    """
+
+    marketplace = models.ForeignKey(
+        Marketplace, on_delete=models.CASCADE, related_name="category_mappings"
+    )
+    marketplace_category_path = models.CharField(
+        max_length=1000,
+        help_text="Full breadcrumb path as scraped, e.g. 'Electronics > Audio > Headphones'",
+    )
+    marketplace_category_slug = models.SlugField(
+        max_length=300,
+        help_text="Slugified version of marketplace's leaf category",
+    )
+    canonical_category = models.ForeignKey(
+        Category, on_delete=models.CASCADE, related_name="marketplace_mappings"
+    )
+    confidence = models.CharField(
+        max_length=20,
+        default="auto",
+        choices=[
+            ("manual", "Manual — admin verified"),
+            ("auto", "Auto — mapped by rules"),
+            ("unreviewed", "Unreviewed — needs admin check"),
+        ],
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "marketplace_category_mappings"
+        unique_together = ("marketplace", "marketplace_category_slug")
+        indexes = [
+            models.Index(fields=["marketplace", "marketplace_category_slug"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.marketplace.name}: {self.marketplace_category_path} -> {self.canonical_category.name}"
 
 
 class Brand(models.Model):

@@ -214,6 +214,15 @@ def update_canonical_product(product) -> None:
         .first()
     )
 
+    # Fall back to any listing with a price (even OOS) so cards always show a price
+    if not cheapest:
+        cheapest = (
+            listings.filter(current_price__isnull=False)
+            .order_by("current_price")
+            .values_list("current_price", "marketplace__slug")
+            .first()
+        )
+
     if cheapest:
         product.current_best_price = cheapest[0]
         product.current_best_marketplace = cheapest[1]

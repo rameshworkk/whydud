@@ -1,7 +1,7 @@
 """Product views."""
 from decimal import Decimal, InvalidOperation
 
-from django.db.models import Count, Max, Min
+from django.db.models import Count, Max, Min, Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -17,6 +17,8 @@ from common.utils import error_response, success_response
 from .models import BankCard, Category, Product, ProductListing, RecentlyViewed, StockAlert
 from .serializers import (
     BankCardSerializer,
+    CategorySerializer,
+    DepartmentTreeSerializer,
     ProductDetailSerializer,
     ProductListingSerializer,
     ProductListSerializer,
@@ -147,10 +149,62 @@ class ProductPriceHistoryView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request: Request, slug: str) -> Response:
-        # TODO Sprint 2 Week 5: query TimescaleDB price_snapshots
-        return error_response(
-            "not_implemented", "Price history available in Sprint 2.", status=501
-        )
+        from datetime import timedelta
+
+        from django.db import connection
+
+        product = get_object_or_404(Product, slug=slug)
+
+        # Parse days param (default 0 = all time, max 3650)
+        try:
+            days = min(int(request.query_params.get("days", 0)), 3650)
+        except (ValueError, TypeError):
+            days = 0
+
+        # Raw SQL for TimescaleDB hypertable — avoids Django ORM overhead
+        # on potentially large result sets.  time_bucket downsamples to
+        # 1 day so response stays bounded (~1 row per day per marketplace).
+        if days > 0:
+            since = timezone.now() - timedelta(days=days)
+            sql = """
+                SELECT
+                    time_bucket('1 day', ps.time) AS bucket,
+                    ps.marketplace_id,
+                    MIN(ps.price) AS price
+                FROM price_snapshots ps
+                WHERE ps.product_id = %s
+                  AND ps.time >= %s
+                GROUP BY bucket, ps.marketplace_id
+                ORDER BY bucket ASC
+            """
+            params = [str(product.id), since]
+        else:
+            sql = """
+                SELECT
+                    time_bucket('1 day', ps.time) AS bucket,
+                    ps.marketplace_id,
+                    MIN(ps.price) AS price
+                FROM price_snapshots ps
+                WHERE ps.product_id = %s
+                GROUP BY bucket, ps.marketplace_id
+                ORDER BY bucket ASC
+            """
+            params = [str(product.id)]
+
+        with connection.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+        data = [
+            {
+                "time": row[0].isoformat(),
+                "price": int(row[2]),  # paisa as integer
+                "marketplaceId": row[1],
+            }
+            for row in rows
+        ]
+
+        return success_response(data)
 
 
 class ProductBestDealsView(APIView):
@@ -217,6 +271,73 @@ class ProductDiscussionsView(APIView):
         return success_response(
             DiscussionThreadSerializer(thread, context={"request": request}).data, status=201
         )
+
+
+# ---------------------------------------------------------------------------
+# Category Hierarchy
+# ---------------------------------------------------------------------------
+
+
+class CategoryTreeView(APIView):
+    """GET /api/v1/categories/tree/ — returns full 3-level hierarchy."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        departments = (
+            Category.objects.filter(level=0, is_active=True)
+            .prefetch_related(
+                Prefetch(
+                    "children",
+                    queryset=Category.objects.filter(is_active=True).prefetch_related(
+                        Prefetch("children", queryset=Category.objects.filter(is_active=True))
+                    ),
+                )
+            )
+            .order_by("display_order", "name")
+        )
+        return success_response(DepartmentTreeSerializer(departments, many=True).data)
+
+
+class CategoryListView(APIView):
+    """GET /api/v1/categories/ — list categories with optional filters.
+
+    Query params:
+        level: filter by level (0=departments, 1=categories, 2=subcategories)
+        parent: filter by parent slug
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        qs = Category.objects.filter(is_active=True)
+
+        level = request.query_params.get("level")
+        if level is not None:
+            try:
+                qs = qs.filter(level=int(level))
+            except (ValueError, TypeError):
+                pass
+
+        parent_slug = request.query_params.get("parent")
+        if parent_slug:
+            qs = qs.filter(parent__slug=parent_slug)
+
+        qs = qs.select_related("parent").order_by("display_order", "name")
+        return success_response(CategorySerializer(qs, many=True).data)
+
+
+class CategoryDetailView(APIView):
+    """GET /api/v1/categories/:slug/ — single category with hierarchy info."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request, slug: str) -> Response:
+        category = get_object_or_404(
+            Category.objects.select_related("parent__parent"),
+            slug=slug, is_active=True,
+        )
+        return success_response(CategorySerializer(category).data)
 
 
 class CompareView(APIView):

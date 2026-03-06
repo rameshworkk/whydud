@@ -80,6 +80,9 @@ def _save_bp_filled(bp, result, listing_info):
     bp.bh_prediction_weeks = pred.get("weeks")
     bp.bh_prediction_months = pred.get("months")
 
+    # Always cache raw data for later injection
+    bp.append_price_data(result.price_points, source="buyhatke")
+
     bp.status = BackfillProduct.Status.BH_FILLED
     bp.error_message = ""
 

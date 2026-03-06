@@ -32,6 +32,11 @@ urlpatterns = [
     path("cards/banks/", views.BankListView.as_view(), name="banks-list"),
     path("cards/banks/<slug:bank_slug>/variants/", views.BankCardVariantsView.as_view(), name="bank-variants"),
 
+    # Category hierarchy
+    path("categories/tree/", views.CategoryTreeView.as_view(), name="category-tree"),
+    path("categories/", views.CategoryListView.as_view(), name="category-list"),
+    path("categories/<slug:slug>/", views.CategoryDetailView.as_view(), name="category-detail"),
+
     # Trending & Analytics
     path("trending/products", views.TrendingProductsView.as_view(), name="trending-products"),
     path("trending/rising", views.RisingProductsView.as_view(), name="trending-rising"),

@@ -12,6 +12,7 @@ import { AlternativeProducts } from "@/components/product/AlternativeProducts";
 import { ShareButton } from "@/components/product/share-button";
 import { AddToCompareButton } from "@/components/product/add-to-compare-button";
 import { RecentlyViewedTracker } from "@/components/product/recently-viewed-tracker";
+import { ProductImageGallery } from "@/components/product/product-image-gallery";
 import { BrandTrustBadge } from "@/components/product/brand-trust-badge";
 import { DiscussionSection } from "@/components/discussions/DiscussionSection";
 import { productsApi } from "@/lib/api/products";
@@ -196,7 +197,7 @@ function buildProductJsonLd(p: ProductDetail, slug: string): Record<string, unkn
 async function fetchProductData(slug: string) {
   const [detailRes, priceRes, reviewsRes] = await Promise.all([
     productsApi.getDetail(slug),
-    productsApi.getPriceHistory(slug),
+    productsApi.getPriceHistory(slug, 0),
     productsApi.getReviews(slug),
   ]);
 
@@ -276,8 +277,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       : 0;
 
   const specs = specsToList(p.specs);
-  const breadcrumb = ["Home", p.category.name, p.brand.name, p.title];
-  const mainImage = p.images?.[0] ?? "https://placehold.co/400x500/e8f4fd/1e40af?text=No+Image";
+  const breadcrumb = ["Home", p.category.name, p.brand.name];
   const dudScoreLabel = getDudScoreLabel(p.dudScore);
   const dudScoreComponents = makePlaceholderComponents(p.dudScore);
 
@@ -334,37 +334,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
         {/* -- Left Sidebar: Product image + Key Specs -- */}
         <aside className="w-[260px] shrink-0 overflow-y-auto no-scrollbar border-r border-slate-200 bg-white flex flex-col">
-          {/* Product image */}
-          <div className="p-4 border-b border-slate-100">
-            <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={mainImage}
-                alt={p.title}
-                className="object-contain p-4 w-full h-full"
-              />
-            </div>
-            {/* Thumbnail strip */}
-            {p.images && p.images.length > 1 && (
-              <div className="flex gap-2 mt-3">
-                {p.images.slice(0, 4).map((img, i) => (
-                  <div
-                    key={i}
-                    className={`w-14 h-14 rounded-lg border-2 overflow-hidden cursor-pointer ${
-                      i === 0 ? "border-[#F97316]" : "border-slate-200"
-                    }`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img}
-                      alt={`View ${i + 1}`}
-                      className="object-contain p-1 w-full h-full"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Product image gallery */}
+          <ProductImageGallery
+            images={p.images ?? []}
+            title={p.title}
+          />
 
           {/* Key Specs */}
           <div className="p-4 flex flex-col gap-0.5 flex-1">
@@ -471,35 +445,62 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
 
           {/* Price block */}
-          <div className="flex items-baseline gap-3 mb-1">
-            <span className="text-2xl font-black text-slate-900">
-              {formatPrice(p.currentBestPrice)}
-            </span>
-            {mrp && mrp !== p.currentBestPrice && (
-              <span className="text-sm text-slate-400 line-through">
-                {formatPrice(mrp)}
-              </span>
-            )}
-            {discountPct > 0 && (
-              <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                {discountPct}% off
-              </span>
-            )}
-          </div>
-
-          {/* Best price source + lowest ever */}
-          <p className="text-xs text-slate-500 mb-4">
-            Best price on{" "}
-            <span className="font-semibold text-slate-700">{p.currentBestMarketplace}</span>
-            {p.lowestPriceEver != null && (
-              <>
-                {" · "}
-                <span className="text-green-600 font-medium">
-                  Lowest ever: {formatPrice(p.lowestPriceEver)}
+          {p.currentBestPrice != null ? (
+            <>
+              <div className="flex items-baseline gap-3 mb-1">
+                <span className="text-2xl font-black text-slate-900">
+                  {formatPrice(p.currentBestPrice)}
                 </span>
-              </>
-            )}
-          </p>
+                {mrp && mrp !== p.currentBestPrice && (
+                  <span className="text-sm text-slate-400 line-through">
+                    {formatPrice(mrp)}
+                  </span>
+                )}
+                {discountPct > 0 && (
+                  <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {discountPct}% off
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mb-4">
+                Best price on{" "}
+                <span className="font-semibold text-slate-700">{p.currentBestMarketplace}</span>
+                {p.lowestPriceEver != null && (
+                  <>
+                    {" · "}
+                    <span className="text-green-600 font-medium">
+                      Lowest ever: {formatPrice(p.lowestPriceEver)}
+                    </span>
+                  </>
+                )}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-baseline gap-3 mb-1">
+                <span className="text-2xl font-black text-slate-900">
+                  {formatPrice(bestListing?.currentPrice ?? null)}
+                </span>
+                {mrp && bestListing?.currentPrice && mrp !== bestListing.currentPrice && (
+                  <span className="text-sm text-slate-400 line-through">
+                    {formatPrice(mrp)}
+                  </span>
+                )}
+                <span className="bg-red-50 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">
+                  Out of stock
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">
+                Last known price
+                {bestListing?.marketplace?.name && (
+                  <>
+                    {" on "}
+                    <span className="font-semibold text-slate-700">{bestListing.marketplace.name}</span>
+                  </>
+                )}
+              </p>
+            </>
+          )}
 
           {/* -- DudScore section -- */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
@@ -543,6 +544,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <CrossPlatformPricePanel
                 listings={p.listings}
                 lowestPriceEver={p.lowestPriceEver}
+                productId={p.id}
               />
             </div>
           )}

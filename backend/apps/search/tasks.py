@@ -36,6 +36,20 @@ def _product_to_document(product) -> dict:
     Includes all searchable, filterable, sortable, and display fields
     expected by SearchView and AutocompleteView.
     """
+    # Build category hierarchy fields
+    cat = product.category
+    cat_parent = cat.parent if cat else None
+    cat_grandparent = cat_parent.parent if cat_parent else None
+
+    # Build breadcrumb string: "Electronics > Audio > Headphones"
+    breadcrumb_parts = []
+    if cat_grandparent:
+        breadcrumb_parts.append(cat_grandparent.name)
+    if cat_parent:
+        breadcrumb_parts.append(cat_parent.name)
+    if cat:
+        breadcrumb_parts.append(cat.name)
+
     return {
         "id": str(product.id),
         "slug": product.slug,
@@ -43,8 +57,13 @@ def _product_to_document(product) -> dict:
         "description": product.description or "",
         "brand_name": product.brand.name if product.brand else "",
         "brand_slug": product.brand.slug if product.brand else "",
-        "category_name": product.category.name if product.category else "",
-        "category_slug": product.category.slug if product.category else "",
+        "category_name": cat.name if cat else "",
+        "category_slug": cat.slug if cat else "",
+        "category_parent_name": cat_parent.name if cat_parent else "",
+        "category_parent_slug": cat_parent.slug if cat_parent else "",
+        "category_department_name": cat_grandparent.name if cat_grandparent else (cat_parent.name if cat_parent and not cat_grandparent else ""),
+        "category_department_slug": cat_grandparent.slug if cat_grandparent else (cat_parent.slug if cat_parent and not cat_grandparent else ""),
+        "category_breadcrumb": " > ".join(breadcrumb_parts),
         "current_best_price": float(product.current_best_price) if product.current_best_price else 0,
         "current_best_marketplace": product.current_best_marketplace or "",
         "lowest_price_ever": float(product.lowest_price_ever) if product.lowest_price_ever else None,
@@ -71,10 +90,13 @@ def _configure_index(index) -> None:
             "title",
             "brand_name",
             "category_name",
+            "category_breadcrumb",
             "description",
         ],
         "filterableAttributes": [
             "category_slug",
+            "category_parent_slug",
+            "category_department_slug",
             "brand_slug",
             "current_best_price",
             "dud_score",
@@ -120,13 +142,13 @@ def sync_products_to_meilisearch(product_ids: list[str] | None = None) -> dict:
     if product_ids:
         products = (
             Product.objects
-            .select_related("brand", "category")
+            .select_related("brand", "category__parent__parent")
             .filter(id__in=product_ids)
         )
     else:
         products = (
             Product.objects
-            .select_related("brand", "category")
+            .select_related("brand", "category__parent__parent")
             .filter(status=Product.Status.ACTIVE)
         )
 

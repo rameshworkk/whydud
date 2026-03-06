@@ -265,7 +265,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     );
   }
 
-  const products = response.data;
+  const products = response.data.products;
 
   if (products.length === 0) {
     return (

@@ -234,6 +234,38 @@ def run_phase3_extend(
     )
 
 
+@shared_task(queue="scraping", soft_time_limit=None, time_limit=None)
+def scrape_backfill_products_task(
+    batch_size: int = 50,
+    marketplace_slug: str | None = None,
+    limit: int | None = None,
+    auto_inject: bool = True,
+) -> dict:
+    """Targeted scrape of BackfillProduct ASINs/FPIDs via marketplace spiders."""
+    from apps.pricing.backfill.targeted_scrape import scrape_backfill_products
+
+    return scrape_backfill_products(
+        batch_size=batch_size,
+        marketplace_slug=marketplace_slug,
+        limit=limit,
+        auto_inject=auto_inject,
+    )
+
+
+@shared_task(queue="scraping")
+def run_phase4_inject(
+    batch_size: int = 5000,
+    marketplace_slug: str | None = None,
+) -> dict:
+    """Phase 4: Inject cached price data after spider enrichment."""
+    from apps.pricing.backfill.phase4_inject import inject_cached_data
+
+    return inject_cached_data(
+        batch_size=batch_size,
+        marketplace_slug=marketplace_slug,
+    )
+
+
 @shared_task(queue="default")
 def refresh_price_daily_aggregate() -> dict:
     """Refresh the price_daily continuous aggregate after backfill."""

@@ -42,8 +42,39 @@ export interface Category {
   slug: string;
   name: string;
   level: number;
-  hasTcoModel: boolean;
+  icon: string;
+  description: string;
+  parent: { id: number; slug: string; name: string } | null;
   productCount: number;
+  childrenCount: number;
+  breadcrumb: { slug: string; name: string }[];
+  hasTcoModel: boolean;
+}
+
+export interface Subcategory {
+  id: number;
+  slug: string;
+  name: string;
+  icon: string;
+  productCount: number;
+}
+
+export interface CategoryWithChildren {
+  id: number;
+  slug: string;
+  name: string;
+  icon: string;
+  productCount: number;
+  subcategories: Subcategory[];
+}
+
+export interface Department {
+  id: number;
+  slug: string;
+  name: string;
+  icon: string;
+  productCount: number;
+  categories: CategoryWithChildren[];
 }
 
 export interface Brand {
