@@ -33,7 +33,7 @@ broker_api = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 # Keep task history in a local SQLite DB so it survives Flower restarts.
 persistent = True
 db = os.environ.get("FLOWER_DB", "flower.db")
-state_save_interval = 10000.0  # save state every 10 seconds (ms)
+state_save_interval = 10  # save state every 10 seconds
 
 # ---------------------------------------------------------------------------
 # Task defaults
@@ -43,7 +43,7 @@ max_tasks = 50000
 
 # How far back to look when Flower connects to the broker (seconds).
 # 3 days = good balance between history and memory.
-inspect_timeout = 10000.0  # 10s timeout for worker inspection (ms)
+inspect_timeout = 10000  # 10s timeout for worker inspection (ms)
 
 # ---------------------------------------------------------------------------
 # Auto-refresh
