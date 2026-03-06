@@ -2,7 +2,7 @@
 import logging
 from decimal import Decimal
 
-from celery import shared_task
+from celery import chain, shared_task
 from django.db.models import Min
 from django.utils import timezone
 
@@ -274,3 +274,52 @@ def refresh_price_daily_aggregate() -> dict:
     with connection.cursor() as cur:
         cur.execute("CALL refresh_continuous_aggregate('price_daily', NULL, NULL);")
     return {"success": True}
+
+
+# ── Full pipeline ────────────────────────────────────────────────
+
+
+@shared_task(queue="scraping", bind=True)
+def run_full_backfill_pipeline(
+    self,
+    sitemap_start: int = 1,
+    sitemap_end: int = 115,
+    filter_electronics: bool = False,
+    batch_size: int = 5000,
+) -> dict:
+    """Run the complete backfill pipeline as a Celery chain.
+
+    Phase 1: Discover products from PH sitemaps
+    Phase 2: BuyHatke bulk price history fill
+    Phase 3: PH deep history extension for top products
+    Phase 4: Inject cached price data
+    Phase 5: Refresh price_daily aggregate
+
+    Each phase runs sequentially. Monitor progress via Flower
+    or `manage.py backfill_prices status`.
+    """
+    pipeline = chain(
+        run_phase1_discover.si(
+            sitemap_start=sitemap_start,
+            sitemap_end=sitemap_end,
+            filter_electronics=filter_electronics,
+        ),
+        run_phase2_buyhatke.si(batch_size=batch_size),
+        run_phase3_extend.si(limit=batch_size),
+        run_phase4_inject.si(batch_size=batch_size),
+        refresh_price_daily_aggregate.si(),
+    )
+    result = pipeline.apply_async()
+    logger.info(
+        "Full backfill pipeline started: chain_id=%s, sitemaps=%d–%d",
+        result.id,
+        sitemap_start,
+        sitemap_end,
+    )
+    return {
+        "status": "pipeline_started",
+        "chain_id": result.id,
+        "phases": ["discover", "bh-fill", "ph-extend", "inject", "refresh-aggregate"],
+        "sitemap_range": f"{sitemap_start}–{sitemap_end}",
+        "filter_electronics": filter_electronics,
+    }
