@@ -34,7 +34,8 @@ whydud.com, www.whydud.com {
 	}
 
 	# Flower: Celery monitoring dashboard (basic-auth handled by Flower)
-	handle /flower/* {
+	@flower path /flower /flower/*
+	handle @flower {
 		reverse_proxy flower:5555
 	}
 
