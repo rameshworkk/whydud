@@ -287,6 +287,8 @@ class PHClient:
                     if isinstance(offered_by, dict):
                         mp_name = offered_by.get("name", "").lower().strip()
                         result["marketplace_slug"] = _PH_MARKETPLACE_MAP.get(mp_name, "")
+                        if mp_name and not result["marketplace_slug"]:
+                            logger.warning("Unmapped marketplace: %r", mp_name)
 
                     raw_price = offers.get("price")
                     if raw_price is not None:
