@@ -3496,3 +3496,9 @@ Full 15-phase platform audit completed. Generated `AUDIT-REPORT-2026-03-06.md` w
 - 16 spiders all real, DudScore fully implemented, fraud detection working
 - Test suite credibility: 6.5/10 — 284 tests but 0 frontend component tests, limited negative-path coverage
 - Docker infra solid, deploy.sh automated, backup pipeline complete
+
+### 2026-03-06 — ERD Diagram & Data Dictionary
+
+**Created:**
+1. `docs/ERD.md` — Full Mermaid ERD diagram covering all 50+ models across 14 Django apps and 6 PostgreSQL schemas. Includes relationship summary table, TimescaleDB hypertable documentation, and encrypted fields reference.
+2. `docs/DATA-DICTIONARY.md` — Complete field-level data dictionary with types, constraints, and descriptions for every model. Includes appendices for schema mapping and index summary.
