@@ -3407,3 +3407,15 @@ Added `tests/frontend/test_pages.py` — 13 tests verifying Next.js pages return
 - `TestPublicPages` (8 tests): parametrized public page checks (Homepage, Search, Deals, Categories, Login, Register), product detail page with dynamic slug from API, 404 page returns non-500
 - `TestPagePerformance` (5 tests): page load time assertions (Homepage ≤5s, Search ≤5s, Deals ≤5s, Login ≤3s), HTML error indicator scan (no server-side traces in homepage)
 - Run: `pytest tests/frontend/test_pages.py -v` (requires Next.js dev server on localhost:3000)
+
+### Data Integrity & Smoke Tests — 2026-03-06
+
+Added `tests/smoke/test_smoke.py` — 15 tests covering database invariants, API response format validation, and product data quality.
+
+**Test classes (15 tests):**
+- `TestDataIntegrity` (7 tests): no orphaned listings (LEFT JOIN check), no negative prices, no duplicate (marketplace, external_id) pairs, products have slugs, marketplaces have base_url, price snapshots have valid prices (0 < price < 99999999), reviews have valid ratings (1–5)
+- `TestResponseFormat` (3 tests): product list follows `{success, data}` or `{results}` wrapper format, 404 error response has error info (`detail`/`error`/`message`), authenticated endpoints (`/me`, `/wishlists`) reject anonymous requests with 401/403
+- `TestProductDataQuality` (4 tests): products exist in DB, marketplaces exist, product has at least one listing, prices are in paisa (> 100)
+- `TestModelCounts` (1 test): prints counts for Products, Listings, Marketplaces, Categories, Reviews, PriceSnapshots — informational, always passes
+- Run: `POSTGRES_PASSWORD=whydud_dev pytest tests/smoke/ -m smoke -v`
+- **Note:** All tests verified against actual DB schema (table names, column names match models). Test runner currently blocked by Python 3.14 + Celery circular import deadlock (`whydud/__init__.py` → `celery.py` → `django.conf:settings` → `whydud` package). This affects all Django tests, not just smoke tests.
