@@ -221,6 +221,11 @@ services:
     command: >
       celery -A whydud flower
       --conf=whydud/flowerconfig.py
+      --port=5555
+      --max-tasks=50000
+      --inspect-timeout=10000
+      --state-save-interval=10000
+      --purge-offline-workers=24
     ports:
       - "5555:5555"
     env_file: ../.env

@@ -100,3 +100,107 @@ whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options
 whydud-flower  |     raise Error(
 whydud-flower  | tornado.options.Error: Option 'state_save_interval' is required to be a int (<class 'float'> given)
 deploy@whydud-primary:/opt/whydud/whydud$ 
+
+
+deploy@whydud-primary:/opt/whydud/whydud$ docker compose -f docker-compose.primary.yml logs flower --tail 100
+whydud-flower  |     return ctx.invoke(self.callback, **ctx.params)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 824, in invoke
+whydud-flower  |     return callback(*args, **kwargs)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/decorators.py", line 34, in new_func
+whydud-flower  |     return f(get_current_context(), *args, **kwargs)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/flower/command.py", line 42, in flower
+whydud-flower  |     apply_options(sys.argv[0], tornado_argv)
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/flower/command.py", line 88, in apply_options
+whydud-flower  |     parse_config_file(os.path.abspath(options.conf), final=False)
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 725, in parse_config_file
+whydud-flower  |     return options.parse_config_file(path, final=final)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 435, in parse_config_file
+whydud-flower  |     option.set(config[name])
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 604, in set
+whydud-flower  |     raise Error(
+whydud-flower  | tornado.options.Error: Option 'inspect_timeout' is required to be a float (<class 'int'> given)
+whydud-flower  | Traceback (most recent call last):
+whydud-flower  |   File "/usr/local/bin/celery", line 8, in <module>
+whydud-flower  |     sys.exit(main())
+whydud-flower  |              ^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/celery/__main__.py", line 15, in main
+whydud-flower  |     sys.exit(_main())
+whydud-flower  |              ^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/celery/bin/celery.py", line 227, in main
+whydud-flower  |     return celery(auto_envvar_prefix="CELERY")
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1485, in __call__
+whydud-flower  |     return self.main(*args, **kwargs)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1406, in main
+whydud-flower  |     rv = self.invoke(ctx)
+whydud-flower  |          ^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1873, in invoke
+whydud-flower  |     return _process_result(sub_ctx.command.invoke(sub_ctx))
+whydud-flower  |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1269, in invoke
+whydud-flower  |     return ctx.invoke(self.callback, **ctx.params)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 824, in invoke
+whydud-flower  |     return callback(*args, **kwargs)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/decorators.py", line 34, in new_func
+whydud-flower  |     return f(get_current_context(), *args, **kwargs)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/flower/command.py", line 42, in flower
+whydud-flower  |     apply_options(sys.argv[0], tornado_argv)
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/flower/command.py", line 88, in apply_options
+whydud-flower  |     parse_config_file(os.path.abspath(options.conf), final=False)
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 725, in parse_config_file
+whydud-flower  |     return options.parse_config_file(path, final=final)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 435, in parse_config_file
+whydud-flower  |     option.set(config[name])
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 604, in set
+whydud-flower  |     raise Error(
+whydud-flower  | tornado.options.Error: Option 'inspect_timeout' is required to be a float (<class 'int'> given)
+whydud-flower  | Traceback (most recent call last):
+whydud-flower  |   File "/usr/local/bin/celery", line 8, in <module>
+whydud-flower  |     sys.exit(main())
+whydud-flower  |              ^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/celery/__main__.py", line 15, in main
+whydud-flower  |     sys.exit(_main())
+whydud-flower  |              ^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/celery/bin/celery.py", line 227, in main
+whydud-flower  |     return celery(auto_envvar_prefix="CELERY")
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1485, in __call__
+whydud-flower  |     return self.main(*args, **kwargs)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1406, in main
+whydud-flower  |     rv = self.invoke(ctx)
+whydud-flower  |          ^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1873, in invoke
+whydud-flower  |     return _process_result(sub_ctx.command.invoke(sub_ctx))
+whydud-flower  |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1269, in invoke
+whydud-flower  |     return ctx.invoke(self.callback, **ctx.params)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 824, in invoke
+whydud-flower  |     return callback(*args, **kwargs)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/click/decorators.py", line 34, in new_func
+whydud-flower  |     return f(get_current_context(), *args, **kwargs)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/flower/command.py", line 42, in flower
+whydud-flower  |     apply_options(sys.argv[0], tornado_argv)
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/flower/command.py", line 88, in apply_options
+whydud-flower  |     parse_config_file(os.path.abspath(options.conf), final=False)
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 725, in parse_config_file
+whydud-flower  |     return options.parse_config_file(path, final=final)
+whydud-flower  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 435, in parse_config_file
+whydud-flower  |     option.set(config[name])
+whydud-flower  |   File "/usr/local/lib/python3.12/site-packages/tornado/options.py", line 604, in set
+whydud-flower  |     raise Error(
+whydud-flower  | tornado.options.Error: Option 'inspect_timeout' is required to be a float (<class 'int'> given)
+deploy@whydud-primary:/opt/whydud/whydud$ 
