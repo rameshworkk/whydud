@@ -1,11 +1,55 @@
-deploy@whydud-primary:/opt/whydud/whydud$ docker compose -f docker-compose.primary.yml logs flower --tail 100
-whydud-flower  | {"event": "Visit me at http://0.0.0.0:5555", "level": "info", "logger": "flower.command", "timestamp": "2026-03-06T21:48:22.360852Z"}
-whydud-flower  | {"event": "Broker: redis://:**@redis:6379/0", "level": "info", "logger": "flower.command", "timestamp": "2026-03-06T21:48:22.378493Z"}
-whydud-flower  | {"event": "Registered tasks: \n['apps.accounts.tasks.create_notification',\n 'apps.accounts.tasks.generate_data_export',\n 'apps.accounts.tasks.hard_delete_user',\n 'apps.accounts.tasks.send_deletion_confirmation_email',\n 'apps.accounts.tasks.send_notification_email',\n 'apps.accounts.tasks.send_password_reset_email',\n 'apps.accounts.tasks.send_verification_email',\n 'apps.accounts.tasks.send_verification_otp',\n 'apps.accounts.tasks.sync_gmail_account',\n 'apps.deals.tasks.detect_blockbuster_deals',\n 'apps.email_intel.tasks.check_return_window_alerts',\n 'apps.email_intel.tasks.detect_refund_delays',\n 'apps.email_intel.tasks.process_inbound_email',\n 'apps.email_intel.tasks.send_return_window_alert',\n 'apps.pricing.tasks.backfill_existing_listings',\n 'apps.pricing.tasks.check_price_alerts',\n 'apps.pricing.tasks.refresh_price_daily_aggregate',\n 'apps.pricing.tasks.run_full_backfill_pipeline',\n 'apps.pricing.tasks.run_phase1_discover',\n 'apps.pricing.tasks.run_phase2_buyhatke',\n 'apps.pricing.tasks.run_phase3_extend',\n 'apps.pricing.tasks.run_phase4_inject',\n 'apps.pricing.tasks.scrape_backfill_products_task',\n 'apps.pricing.tasks.snapshot_product_prices',\n 'apps.products.tasks.reindex_product_in_meilisearch',\n 'apps.products.tasks.update_product_aggregate_stats',\n 'apps.reviews.tasks.aggregate_review_sentiment',\n 'apps.reviews.tasks.detect_fake_reviews',\n 'apps.reviews.tasks.publish_pending_reviews',\n 'apps.reviews.tasks.run_sentiment_analysis',\n 'apps.reviews.tasks.update_reviewer_profiles',\n 'apps.rewards.tasks.award_points_task',\n 'apps.rewards.tasks.clawback_review_points_task',\n 'apps.rewards.tasks.expire_points',\n 'apps.rewards.tasks.fulfill_gift_card',\n 'apps.scoring.tasks.compute_dudscore',\n 'apps.scoring.tasks.full_dudscore_recalculation',\n 'apps.scoring.tasks.recompute_brand_trust_scores',\n 'apps.scraping.tasks.run_marketplace_spider',\n 'apps.scraping.tasks.run_review_spider',\n 'apps.scraping.tasks.run_spider',\n 'apps.scraping.tasks.scrape_daily_prices',\n 'apps.scraping.tasks.scrape_product_adhoc',\n 'apps.search.tasks.full_reindex',\n 'apps.search.tasks.sync_products_to_meilisearch',\n 'apps.wishlists.tasks.update_wishlist_prices',\n 'celery.accumulate',\n 'celery.backend_cleanup',\n 'celery.chain',\n 'celery.chord',\n 'celery.chord_unlock',\n 'celery.chunks',\n 'celery.group',\n 'celery.map',\n 'celery.starmap']", "level": "info", "logger": "flower.command", "timestamp": "2026-03-06T21:48:22.406294Z"}
-whydud-flower  | {"event": "Connected to redis://:**@redis:6379/0", "level": "info", "logger": "kombu.mixins", "timestamp": "2026-03-06T21:48:22.432087Z"}
-deploy@whydud-primary:/opt/whydud/whydud$ docker compose -f docker-compose.primary.yml exec backend python -c "
-from apps.pricing.tasks import run_full_backfill_pipeline
-r = run_full_backfill_pipeline.delay(sitemap_start=1, sitemap_end=1, filter_electronics=False)
-print(f'Task ID: {r.id}')
-"
-Task ID: 03a2c6fc-365a-4454-9128-bf96d69f7a2f
+whydud-celery-worker  | [2026-03-06 23:27:32,089: INFO/ForkPoolWorker-2] HTTP Request: GET https://pricehistory.app/p/a72V1vyp "HTTP/1.1 200 OK"
+whydud-celery-worker  | [2026-03-06 23:27:33,887: INFO/ForkPoolWorker-2] HTTP Request: GET https://pricehistory.app/p/NEJCT6G5 "HTTP/1.1 200 OK"
+whydud-celery-worker  | [2026-03-06 23:27:35,817: INFO/ForkPoolWorker-2] HTTP Request: GET https://pricehistory.app/p/eyx8Ndmb "HTTP/1.1 200 OK"
+whydud-celery-worker  | [2026-03-06 23:27:36,782: WARNING/MainProcess] Soft time limit (1500s) exceeded for apps.pricing.tasks.run_phase1_discover[42f3d741-1629-401a-9962-2d754a549a7f]
+whydud-celery-worker  | [2026-03-06 23:27:36,791: INFO/ForkPoolWorker-2] PHClient closed: 799 requests, 0 errors
+whydud-celery-worker  | [2026-03-06 23:27:37,148: INFO/ForkPoolWorker-2] HTTP Request: POST https://discordapp.com/api/webhooks/1478214042136088598/qXEuu5ZQCKpgprNJ3iOC6l-facfTpqNO7qPSL-UddxLbaxiTaZW3ky1oxD4Zmpb8VidE "HTTP/1.1 204 No Content"
+whydud-celery-worker  | [2026-03-06 23:27:37,149: ERROR/ForkPoolWorker-2] Task apps.pricing.tasks.run_phase1_discover[42f3d741-1629-401a-9962-2d754a549a7f] raised unexpected: SoftTimeLimitExceeded()
+whydud-celery-worker  | Traceback (most recent call last):
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/site-packages/celery/app/trace.py", line 479, in trace_task
+whydud-celery-worker  |     R = retval = fun(*args, **kwargs)
+whydud-celery-worker  |                  ^^^^^^^^^^^^^^^^^^^^
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/site-packages/celery/app/trace.py", line 779, in __protected_call__
+whydud-celery-worker  |     return self.run(*args, **kwargs)
+whydud-celery-worker  |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-celery-worker  |   File "/app/apps/pricing/tasks.py", line 189, in run_phase1_discover
+whydud-celery-worker  |     return asyncio.run(
+whydud-celery-worker  |            ^^^^^^^^^^^^
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/asyncio/runners.py", line 195, in run
+whydud-celery-worker  |     return runner.run(main)
+whydud-celery-worker  |            ^^^^^^^^^^^^^^^^
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/asyncio/runners.py", line 118, in run
+whydud-celery-worker  |     return self._loop.run_until_complete(task)
+whydud-celery-worker  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/asyncio/base_events.py", line 678, in run_until_complete
+whydud-celery-worker  |     self.run_forever()
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/asyncio/base_events.py", line 645, in run_forever
+whydud-celery-worker  |     self._run_once()
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/asyncio/base_events.py", line 1961, in _run_once
+whydud-celery-worker  |     event_list = self._selector.select(timeout)
+whydud-celery-worker  |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/selectors.py", line 468, in select
+whydud-celery-worker  |     fd_event_list = self._selector.poll(timeout, max_ev)
+whydud-celery-worker  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+whydud-celery-worker  |   File "/usr/local/lib/python3.12/site-packages/billiard/pool.py", line 228, in soft_timeout_sighandler
+whydud-celery-worker  |     raise SoftTimeLimitExceeded()
+whydud-celery-worker  | billiard.exceptions.SoftTimeLimitExceeded: SoftTimeLimitExceeded()
+whydud-celery-worker  | [2026-03-06 23:30:00,019: INFO/MainProcess] Task apps.deals.tasks.detect_blockbuster_deals[20d596d4-04a9-4715-8c30-7a45bbfecdd0] received
+whydud-celery-worker  | [2026-03-06 23:30:00,160: INFO/ForkPoolWorker-2] deal_detection_complete error_price=0 lowest_ever=0 genuine_discount=0 flash_sale=0 skipped_zero_price=0 skipped_insufficient_data=0 deactivated=0
+whydud-celery-worker  | [2026-03-06 23:30:00,494: INFO/ForkPoolWorker-2] HTTP Request: POST https://discordapp.com/api/webhooks/1478214042136088598/qXEuu5ZQCKpgprNJ3iOC6l-facfTpqNO7qPSL-UddxLbaxiTaZW3ky1oxD4Zmpb8VidE "HTTP/1.1 204 No Content"
+whydud-celery-worker  | [2026-03-06 23:30:00,495: INFO/ForkPoolWorker-2] Task apps.deals.tasks.detect_blockbuster_deals[20d596d4-04a9-4715-8c30-7a45bbfecdd0] succeeded in 0.12811558099929243s: {'error_price': 0, 'lowest_ever': 0, 'genuine_discount': 0, 'flash_sale': 0, 'skipped_zero_price': 0, 'skipped_insufficient_data': 0, 'deactivated': 0}
+whydud-celery-worker  | [2026-03-07 00:00:00,022: INFO/MainProcess] Task apps.pricing.tasks.check_price_alerts[4abf6f23-ea90-413a-8a36-d55868c1cc6c] received
+whydud-celery-worker  | [2026-03-07 00:00:00,030: INFO/MainProcess] Task apps.deals.tasks.detect_blockbuster_deals[43b7f0ef-a7bf-42e7-83bf-0b0e4cabf746] received
+whydud-celery-worker  | [2026-03-07 00:00:00,043: INFO/MainProcess] Task apps.reviews.tasks.publish_pending_reviews[4843f9ad-c36f-4d16-84ba-6f1321e720b5] received
+whydud-celery-worker  | [2026-03-07 00:00:00,051: INFO/MainProcess] Task apps.deals.tasks.detect_blockbuster_deals[b3332870-5857-4285-ab89-4e10f661a7d9] received
+whydud-celery-worker  | [2026-03-07 00:00:00,186: INFO/ForkPoolWorker-1] deal_detection_complete error_price=0 lowest_ever=0 genuine_discount=0 flash_sale=0 skipped_zero_price=0 skipped_insufficient_data=0 deactivated=0
+whydud-celery-worker  | [2026-03-07 00:00:00,628: INFO/ForkPoolWorker-2] HTTP Request: POST https://discordapp.com/api/webhooks/1478214042136088598/qXEuu5ZQCKpgprNJ3iOC6l-facfTpqNO7qPSL-UddxLbaxiTaZW3ky1oxD4Zmpb8VidE "HTTP/1.1 204 No Content"
+whydud-celery-worker  | [2026-03-07 00:00:00,630: INFO/ForkPoolWorker-2] Task apps.pricing.tasks.check_price_alerts[4abf6f23-ea90-413a-8a36-d55868c1cc6c] succeeded in 0.153028059983626s: {'checked': 0, 'triggered': 0, 'errors': 0}
+whydud-celery-worker  | [2026-03-07 00:00:00,656: INFO/ForkPoolWorker-1] HTTP Request: POST https://discordapp.com/api/webhooks/1478214042136088598/qXEuu5ZQCKpgprNJ3iOC6l-facfTpqNO7qPSL-UddxLbaxiTaZW3ky1oxD4Zmpb8VidE "HTTP/1.1 204 No Content"
+whydud-celery-worker  | [2026-03-07 00:00:00,658: INFO/ForkPoolWorker-1] Task apps.deals.tasks.detect_blockbuster_deals[43b7f0ef-a7bf-42e7-83bf-0b0e4cabf746] succeeded in 0.15366814902517945s: {'error_price': 0, 'lowest_ever': 0, 'genuine_discount': 0, 'flash_sale': 0, 'skipped_zero_price': 0, 'skipped_insufficient_data': 0, 'deactivated': 0}
+whydud-celery-worker  | [2026-03-07 00:00:00,801: INFO/ForkPoolWorker-1] deal_detection_complete error_price=0 lowest_ever=0 genuine_discount=0 flash_sale=0 skipped_zero_price=0 skipped_insufficient_data=0 deactivated=0
+whydud-celery-worker  | [2026-03-07 00:00:00,963: INFO/ForkPoolWorker-2] HTTP Request: POST https://discordapp.com/api/webhooks/1478214042136088598/qXEuu5ZQCKpgprNJ3iOC6l-facfTpqNO7qPSL-UddxLbaxiTaZW3ky1oxD4Zmpb8VidE "HTTP/1.1 204 No Content"
+whydud-celery-worker  | [2026-03-07 00:00:00,964: INFO/ForkPoolWorker-2] Task apps.reviews.tasks.publish_pending_reviews[4843f9ad-c36f-4d16-84ba-6f1321e720b5] succeeded in 0.06395420001354069s: 0
+whydud-celery-worker  | [2026-03-07 00:00:01,248: INFO/ForkPoolWorker-1] HTTP Request: POST https://discordapp.com/api/webhooks/1478214042136088598/qXEuu5ZQCKpgprNJ3iOC6l-facfTpqNO7qPSL-UddxLbaxiTaZW3ky1oxD4Zmpb8VidE "HTTP/1.1 204 No Content"
+whydud-celery-worker  | [2026-03-07 00:00:01,249: INFO/ForkPoolWorker-1] Task apps.deals.tasks.detect_blockbuster_deals[b3332870-5857-4285-ab89-4e10f661a7d9] succeeded in 0.13873549195704982s: {'error_price': 0, 'lowest_ever': 0, 'genuine_discount': 0, 'flash_sale': 0, 'skipped_zero_price': 0, 'skipped_insufficient_data': 0, 'deactivated': 0}
+whydud-celery-worker  | [20

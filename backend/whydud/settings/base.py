@@ -165,8 +165,8 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes hard limit
-CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes soft limit
+
+# No global time limits — individual tasks set their own if needed
 
 # ---------------------------------------------------------------------------
 # Frontend URL (for email links: verification, password reset, etc.)
