@@ -33,6 +33,7 @@ class PriceSnapshot(models.Model):
     class Meta:
         db_table = "price_snapshots"
         managed = False  # TimescaleDB manages this table
+        ordering = ["-time"]
 
 
 class MarketplaceOffer(models.Model):

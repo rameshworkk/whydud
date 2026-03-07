@@ -744,11 +744,13 @@ class PriceDroppingView(APIView):
                 continue
             old_price = (
                 PriceSnapshot.objects.filter(product_id=pid, time=oldest_map[pid])
+                .order_by("time")
                 .values_list("price", flat=True)
                 .first()
             )
             new_price = (
                 PriceSnapshot.objects.filter(product_id=pid, time=latest_map[pid])
+                .order_by("time")
                 .values_list("price", flat=True)
                 .first()
             )
