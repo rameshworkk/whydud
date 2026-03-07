@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -93,6 +94,7 @@ class BHClient:
         self._request_count = 0
         self._error_count = 0
         self._ua_idx = 0
+        self._next_burst_at = random.randint(10, 15)  # burst pause after this many requests
 
     async def __aenter__(self) -> BHClient:
         self._semaphore = asyncio.Semaphore(self._concurrency)
@@ -151,8 +153,19 @@ class BHClient:
         assert self._client is not None
 
         async with self._semaphore:
+            # Minimum delay between every request
             await asyncio.sleep(self._delay)
             self._request_count += 1
+
+            # Random burst pause every 10-15 requests to avoid rate limiting
+            if self._request_count >= self._next_burst_at:
+                burst_delay = random.uniform(3.0, 4.0)
+                logger.info(
+                    "BH burst pause: %.1fs after %d requests",
+                    burst_delay, self._request_count,
+                )
+                await asyncio.sleep(burst_delay)
+                self._next_burst_at = self._request_count + random.randint(10, 15)
 
             max_retries = BackfillConfig.bh_max_retries()
             for attempt in range(max_retries):
@@ -286,6 +299,13 @@ class BHClient:
         async with self._semaphore:
             await asyncio.sleep(self._delay)
             self._request_count += 1
+
+            if self._request_count >= self._next_burst_at:
+                burst_delay = random.uniform(3.0, 4.0)
+                logger.info("BH burst pause: %.1fs after %d requests", burst_delay, self._request_count)
+                await asyncio.sleep(burst_delay)
+                self._next_burst_at = self._request_count + random.randint(10, 15)
+
             try:
                 resp = await self._client.get(
                     f"{BackfillConfig.bh_base_url()}/getPopular.php",
@@ -318,6 +338,13 @@ class BHClient:
         async with self._semaphore:
             await asyncio.sleep(self._delay)
             self._request_count += 1
+
+            if self._request_count >= self._next_burst_at:
+                burst_delay = random.uniform(3.0, 4.0)
+                logger.info("BH burst pause: %.1fs after %d requests", burst_delay, self._request_count)
+                await asyncio.sleep(burst_delay)
+                self._next_burst_at = self._request_count + random.randint(10, 15)
+
             try:
                 resp = await self._client.get(
                     f"{BackfillConfig.bh_compare_url()}/buyhatke/comparePrice",
