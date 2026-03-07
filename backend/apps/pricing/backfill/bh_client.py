@@ -166,11 +166,18 @@ class BHClient:
                     return self._parse_price_history(resp.text)
 
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 429 and attempt < max_retries - 1:
-                        wait = (attempt + 1) * 5
-                        logger.warning("BH rate limited, waiting %ds", wait)
+                    if e.response.status_code in (429, 403) and attempt < max_retries - 1:
+                        wait = (attempt + 1) * 10
+                        logger.warning(
+                            "BH rate limited (%d), waiting %ds (attempt %d/%d)",
+                            e.response.status_code, wait, attempt + 1, max_retries,
+                        )
                         await asyncio.sleep(wait)
                         continue
+                    if e.response.status_code in (429, 403):
+                        # All retries exhausted — pause longer before next product
+                        logger.warning("BH blocked, pausing 60s before continuing")
+                        await asyncio.sleep(60)
                     self._error_count += 1
                     raise
 
