@@ -24,6 +24,7 @@ import asyncio
 import logging
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.db import transaction
 
 from apps.pricing.backfill.bh_client import BHClient
@@ -32,6 +33,15 @@ from apps.pricing.backfill.injector import inject_price_points
 from apps.pricing.models import BackfillProduct
 
 logger = logging.getLogger(__name__)
+
+
+def _write_db() -> str:
+    """Return the database alias for write operations.
+
+    On replica nodes, 'write' points to primary via WireGuard.
+    On primary nodes (or dev), falls back to 'default'.
+    """
+    return "write" if "write" in settings.DATABASES else "default"
 
 
 def _claim_batch(
@@ -43,12 +53,15 @@ def _claim_batch(
     parallel workers. Claimed items get status='bh_filling' so they
     won't appear in other workers' queries.
 
+    Routes to the write database so this works on replica nodes too.
+
     Returns list of claimed BackfillProduct IDs.
     """
     supported_slugs = list(BackfillConfig.bh_pos_map().keys())
+    db = _write_db()
 
-    with transaction.atomic():
-        qs = BackfillProduct.objects.filter(
+    with transaction.atomic(using=db):
+        qs = BackfillProduct.objects.using(db).filter(
             status=BackfillProduct.Status.DISCOVERED,
         ).exclude(
             external_id="",
@@ -67,7 +80,7 @@ def _claim_batch(
         )
 
         if claimed_ids:
-            BackfillProduct.objects.filter(id__in=claimed_ids).update(
+            BackfillProduct.objects.using(db).filter(id__in=claimed_ids).update(
                 status=BackfillProduct.Status.BH_FILLING
             )
 
@@ -151,7 +164,8 @@ def _release_unclaimed(claimed_ids: list[str], processed_ids: set[str]) -> int:
     """
     unprocessed = set(claimed_ids) - processed_ids
     if unprocessed:
-        count = BackfillProduct.objects.filter(
+        db = _write_db()
+        count = BackfillProduct.objects.using(db).filter(
             id__in=list(unprocessed), status=BackfillProduct.Status.BH_FILLING
         ).update(status=BackfillProduct.Status.DISCOVERED)
         if count:

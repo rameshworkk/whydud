@@ -28,6 +28,7 @@ import asyncio
 import logging
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 
@@ -39,6 +40,15 @@ from apps.pricing.models import BackfillProduct
 logger = logging.getLogger(__name__)
 
 
+def _write_db() -> str:
+    """Return the database alias for write operations.
+
+    On replica nodes, 'write' points to primary via WireGuard.
+    On primary nodes (or dev), falls back to 'default'.
+    """
+    return "write" if "write" in settings.DATABASES else "default"
+
+
 def _claim_batch(
     limit: int, marketplace_slug: str | None
 ) -> list[str]:
@@ -48,10 +58,14 @@ def _claim_batch(
     parallel workers. Claimed items get status='ph_extending' so they
     won't appear in other workers' queries.
 
+    Routes to the write database so this works on replica nodes too.
+
     Returns list of claimed BackfillProduct IDs.
     """
-    with transaction.atomic():
-        qs = BackfillProduct.objects.filter(
+    db = _write_db()
+
+    with transaction.atomic(using=db):
+        qs = BackfillProduct.objects.using(db).filter(
             status=BackfillProduct.Status.BH_FILLED,
         ).exclude(
             ph_code="",
@@ -72,7 +86,7 @@ def _claim_batch(
         )
 
         if claimed_ids:
-            BackfillProduct.objects.filter(id__in=claimed_ids).update(
+            BackfillProduct.objects.using(db).filter(id__in=claimed_ids).update(
                 status=BackfillProduct.Status.PH_EXTENDING
             )
 
@@ -196,7 +210,8 @@ def _release_unclaimed(claimed_ids: list[str], processed_ids: set[str]) -> int:
     """Release any claimed items that weren't processed back to BH_FILLED."""
     unprocessed = set(claimed_ids) - processed_ids
     if unprocessed:
-        count = BackfillProduct.objects.filter(
+        db = _write_db()
+        count = BackfillProduct.objects.using(db).filter(
             id__in=list(unprocessed), status=BackfillProduct.Status.PH_EXTENDING
         ).update(status=BackfillProduct.Status.BH_FILLED)
         if count:
