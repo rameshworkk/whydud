@@ -3943,3 +3943,43 @@ Added DataImpulse sticky session routing for multi-worker enrichment. Each Celer
 | `frontend/src/components/product/product-card.tsx` | "Price tracked" badge for lightweight products |
 | `frontend/src/components/product/ProductCard.tsx` | "Price tracked" badge for lightweight products |
 | `apps/pricing/management/commands/backfill_prices.py` | Comprehensive status dashboard with `--watch` and `--json` flags |
+
+---
+
+### BF-18: Utility Commands + Overnight Runner + Data Verification (2026-03-08)
+
+**Status: DONE**
+
+Added four new subcommands to `backfill_prices` management command for pipeline operations.
+
+**1. `retry-failed`** — Granular retry for failed operations:
+- `--scrape`: Reset failed enrichments (scrape_status=failed) to pending
+- `--reviews`: Reset failed review scrapes (review_status=failed) to pending
+- `--history`: Reset failed history fetches (status=failed) to discovered
+- All increment `retry_count`. Supports `--dry-run`.
+
+**2. `skip-products`** — Remove low-value products from enrichment queue:
+- `--price-below N`: Skip products under N paisa (e.g. 10000 = under Rs.100)
+- `--category PATTERN`: Skip matching categories (case-insensitive regex)
+- Marks as scrape_status=failed with descriptive error_message. Supports `--dry-run`.
+
+**3. `run-overnight`** — All-in-one overnight enrichment:
+- Auto-runs `assign-priorities` if P1 count is 0
+- Dispatches `enrich_batch` in a loop (Celery workers handle P1 Playwright / P2-P3 curl_cffi routing)
+- Progress report every 5 minutes (dispatched, scraped, pending, failed, time remaining)
+- Stops at `--stop-at` time (default "06:00" IST)
+- Prints full summary on exit (duration, batches, tasks dispatched, newly scraped)
+
+**4. `verify-data`** — Data quality checks:
+- is_lightweight=True but listing.last_scraped_at is not NULL
+- scrape_status='scraped' but product_listing is NULL
+- review_status='scraped' but 0 reviews in DB
+- Duplicate (marketplace_slug, external_id) pairs
+- Products with current_price=0 or NULL (pending only)
+- BackfillProduct with product_listing pointing to deleted Product
+
+**Changes (1 file):**
+
+| File | Change |
+|---|---|
+| `apps/pricing/management/commands/backfill_prices.py` | Added `retry-failed`, `skip-products`, `run-overnight`, `verify-data` subcommands |
