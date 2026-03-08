@@ -3793,3 +3793,125 @@ python manage.py backfill_prices create-lightweight --batch 5  # small test
 **`enrich` subcommand added to `backfill_prices` management command**:
 - `python manage.py backfill_prices enrich --batch 100` — batch mode
 - `python manage.py backfill_prices enrich --id <uuid>` — single product
+
+---
+
+### BF-12: curl_cffi Product Data Extractor ✅
+**Date:** 2026-03-08
+
+**Created `apps/pricing/backfill/curlffi_extractor.py`** — HTTP-only product data extraction using Chrome TLS fingerprint impersonation (no browser). Used by P2-P3 enrichment path in `enrich_via_http()`.
+
+**Public API:** `extract_product_data(url, marketplace_slug, proxy_url=None) -> dict | None`
+
+**Supports two marketplaces:**
+
+1. **Amazon.in** — 3-layer extraction:
+   - JSON-LD `<script type="application/ld+json">` (title, brand, price, rating, images, stock, seller)
+   - HTML CSS selectors (MRP, specs table, about bullets, seller name, ASIN)
+   - All selectors copied from working `amazon_spider.py` with full fallback chains
+   - Tested: extracts title, brand, price (paisa), rating, 7 images, 19 specs, 5 about bullets
+
+2. **Flipkart** — 3-layer extraction:
+   - JSON-LD structured data
+   - `window.__INITIAL_STATE__` Redux store → `psi` product summary
+   - CSS selector fallbacks from `flipkart_spider.py`
+   - Note: Flipkart returns 403 without proxy/browser (expected — curl_cffi works through residential proxy)
+
+**Block detection:** Checks first 10KB for captcha, robot, automated access, validatecaptcha, Amazon empty challenge page (<30KB with bare title).
+
+**Return dict fields:** title, brand, price (paisa int), mrp (paisa int), rating (float), review_count (int), images (list, max 10), in_stock (bool), specs (dict), about_bullets (list), seller_name (str), external_id (ASIN/FPID).
+
+**No new dependencies** — `curl_cffi>=0.14.0` already in `requirements/base.txt`.
+
+---
+
+### Persist All Spider-Extracted Fields to DB ✅
+**Date:** 2026-03-08
+
+Spiders extract 11 fields (variant_options, offer_details, about_bullets, warranty, delivery_info, return_policy, country_of_origin, manufacturer, model_number, weight, dimensions) that were silently dropped at persistence because models lacked columns. Now all data is persisted.
+
+**Changes (6 files + 1 migration):**
+
+| File | Change |
+|---|---|
+| `apps/products/models.py` | Added 5 Product fields (country_of_origin, manufacturer, model_number, weight, dimensions) + 6 ProductListing fields (variant_options, offer_details, about_bullets, warranty, delivery_info, return_policy) |
+| `apps/products/migrations/0007_add_extended_fields.py` | **NEW** — 11 AddField ops, depends on 0006_add_is_lightweight, all additive |
+| `apps/scraping/pipelines.py` | `_update_listing()`: saves 6 listing fields conditionally. `_create_listing()`: includes 6 fields. `_update_product_from_listing()`: 5 Product fields with first-wins pattern + spec-key extraction. Seller: updates avg_rating on every scrape |
+| `apps/products/matching.py` | `_create_canonical_product()`: includes 5 Product physical fields from item dict |
+| `apps/pricing/backfill/enrichment.py` | `enrich_via_http()`: saves about_bullets to listing, specs/description/images to Product, extracts physical fields from specs dict |
+| `apps/pricing/backfill/curlffi_extractor.py` | Added `description` extraction to both `_extract_amazon()` and `_extract_flipkart()` return dicts |
+
+**Design decisions:**
+- JSONFields guarded with `is not None` (empty `[]` is valid data)
+- CharFields truncated with `[:max_length]`
+- Product physical fields use "first-wins" — only set if currently empty
+- Seller.avg_rating updated on every scrape (ratings change)
+- No spider changes needed — they already extract everything
+
+---
+
+### BF-13: Review Completion Hook + DudScore Chain (2026-03-08)
+
+**Status: DONE**
+
+Created the review completion handler that finalizes the review+DudScore chain after review spiders finish.
+
+**Two new tasks in `apps/pricing/backfill/enrichment.py`:**
+
+1. **`post_review_enrichment(product_id)`** — Finalizes review enrichment:
+   - Counts reviews, calculates avg_rating via aggregate query
+   - Updates `Product.total_reviews` and `avg_rating`
+   - Updates `BackfillProduct.review_status='scraped'` + `review_count_scraped`
+   - Chains `detect_fake_reviews` (from reviews app)
+   - Chains `compute_dudscore` (from scoring app) — product is now FULLY COMPLETE
+
+2. **`check_review_completion()`** — Periodic task (every 15 min via Beat):
+   - Finds BackfillProducts with `review_status='scraping'` that now have reviews in DB
+   - Triggers `post_review_enrichment` for each
+   - Times out products stuck in 'scraping' for >3 hours → `review_status='failed'`
+
+**Celery Beat entry added:** `backfill-check-reviews` runs every 15 minutes.
+
+**Changes (2 files):**
+
+| File | Change |
+|---|---|
+| `apps/pricing/backfill/enrichment.py` | Added `post_review_enrichment` + `check_review_completion` tasks |
+| `whydud/celery.py` | Added `backfill-check-reviews` Beat schedule entry |
+
+---
+
+### BF-14: Review Spider External ID Filtering (2026-03-08)
+
+**Status: DONE**
+
+Made review spiders accept `external_ids` to scrape reviews for specific products only (used by enrichment pipeline). Default behavior unchanged when no IDs passed.
+
+**Data flow:** `queue_review_scraping(external_id='B0CX23GFMV')` → `run_review_spider.delay('amazon-in', product_external_ids=['B0CX23GFMV'])` → subprocess `--external-ids B0CX23GFMV` → spider `start_requests()` filters `external_id__in=[...]`
+
+**Changes (5 files):**
+
+| File | Change |
+|---|---|
+| `apps/scraping/runner.py` | Added `--external-ids` CLI arg, forwarded as `external_ids` spider kwarg |
+| `apps/scraping/spiders/amazon_review_spider.py` | Parse `external_ids` kwarg in `__init__`; filter `start_requests()` to only those IDs when set |
+| `apps/scraping/spiders/flipkart_review_spider.py` | Same pattern as Amazon spider |
+| `apps/scraping/tasks.py` | `run_review_spider` accepts `product_external_ids: list[str] | None`, passes `--external-ids` to subprocess |
+| `apps/pricing/backfill/enrichment.py` | `queue_review_scraping` passes `product_external_ids=[external_id]` to `run_review_spider` |
+
+---
+
+### BF-15: DataImpulse Sticky Session Routing (2026-03-08)
+
+**Status: DONE**
+
+Added DataImpulse sticky session routing for multi-worker enrichment. Each Celery worker gets a unique `CELERY_WORKER_ID` env var; session keys are appended to the proxy username so the same residential IP is reused for ~10-30 min per session.
+
+**Format:** `customer_abc-session-{worker_id}_{session_key}` → same IP for all requests with that session string.
+
+**Changes (2 files):**
+
+| File | Change |
+|---|---|
+| `common/app_settings.py` | Added `ScrapingConfig.worker_id()` (reads `CELERY_WORKER_ID` env) and `sticky_session_rotation_interval()` |
+| `apps/scraping/middlewares.py` | Added `ProxyPool.get_sticky_proxy(session_key)` for Playwright, `SessionManager` class (rotates IP every N products), `get_curlffi_proxy_url(session_key)` helper for curl_cffi |

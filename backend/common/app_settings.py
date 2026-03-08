@@ -208,6 +208,29 @@ class ScrapingConfig:
         """Whether proxy rotation is enabled (True if proxy list is non-empty)."""
         return len(cls.proxy_list()) > 0
 
+    @staticmethod
+    def worker_id() -> str:
+        """Unique worker identifier for DataImpulse sticky session routing.
+
+        Set CELERY_WORKER_ID env var per node (e.g. oracle-w1, oci-w1, gcp-w1).
+        Falls back to a random ID if not set — fine for dev, not for production.
+        """
+        import os
+        import uuid
+
+        return os.environ.get(
+            "CELERY_WORKER_ID", f"worker-{uuid.uuid4().hex[:6]}"
+        )
+
+    @classmethod
+    def sticky_session_rotation_interval(cls) -> int:
+        """Number of products per sticky session before rotating IP.
+
+        DataImpulse sessions last ~10-30 min. Rotating every 20 products
+        keeps sessions short enough to avoid detection.
+        """
+        return int(_get("SCRAPING_STICKY_SESSION_ROTATION", 20))
+
 
 # ---------------------------------------------------------------------------
 # Product Matching

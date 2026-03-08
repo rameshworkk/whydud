@@ -147,6 +147,29 @@ class ProxyPool:
                 return state
         return None
 
+    def get_sticky_proxy(self, session_key: str) -> dict | None:
+        """Build a DataImpulse sticky-session proxy dict for Playwright.
+
+        Appends ``-session-{worker_id}_{session_key}`` to the base username,
+        which tells DataImpulse to route all requests with the same session
+        string through the same residential IP (~10-30 min lifetime).
+
+        Returns a Playwright-compatible proxy dict, or None if pool is empty.
+        """
+        if self.is_empty:
+            return None
+        from common.app_settings import ScrapingConfig
+
+        base_url = self._states[0].url
+        parsed = urlparse(base_url)
+        worker_id = ScrapingConfig.worker_id()
+        sticky_username = f"{parsed.username}-session-{worker_id}_{session_key}"
+        return {
+            "server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}",
+            "username": sticky_username,
+            "password": parsed.password or "",
+        }
+
     def get_proxy_by_context(self, context_name: str) -> ProxyState | None:
         for state in self._states:
             if state.context_name == context_name:
@@ -591,8 +614,92 @@ class PlaywrightProxyMiddleware:
 
 
 # ===================================================================
+# SessionManager — sticky session rotation for enrichment workers
+# ===================================================================
+
+class SessionManager:
+    """Manages DataImpulse sticky session keys, rotating every N products.
+
+    Each session key maps to the same residential IP for ~10-30 minutes.
+    Rotating periodically avoids detection and spreads load across IPs.
+
+    Usage::
+
+        sm = SessionManager()                     # uses default rotation interval
+        proxy_dict = sm.get_playwright_proxy(pool) # for Playwright enrichment
+        proxy_url  = sm.get_curlffi_proxy()        # for curl_cffi enrichment
+        sm.tick()                                  # call after each product
+    """
+
+    def __init__(self, rotation_interval: int | None = None) -> None:
+        from common.app_settings import ScrapingConfig
+
+        self._interval = rotation_interval or ScrapingConfig.sticky_session_rotation_interval()
+        self._count: int = 0
+        self._session_key: str = self._generate_key()
+
+    @staticmethod
+    def _generate_key() -> str:
+        import uuid
+
+        return uuid.uuid4().hex[:8]
+
+    @property
+    def session_key(self) -> str:
+        return self._session_key
+
+    def tick(self) -> None:
+        """Call after processing each product. Rotates session when interval is reached."""
+        self._count += 1
+        if self._count >= self._interval:
+            self._session_key = self._generate_key()
+            self._count = 0
+            logger.info(
+                "SessionManager: rotated to new session key %s",
+                self._session_key,
+            )
+
+    def get_playwright_proxy(self, pool: ProxyPool) -> dict | None:
+        """Get a Playwright-compatible sticky proxy dict from the pool."""
+        return pool.get_sticky_proxy(self._session_key)
+
+    def get_curlffi_proxy(self) -> str | None:
+        """Get a curl_cffi-compatible sticky proxy URL string."""
+        return get_curlffi_proxy_url(self._session_key)
+
+
+# ===================================================================
 # Helpers
 # ===================================================================
+
+def get_curlffi_proxy_url(session_key: str | None = None) -> str | None:
+    """Build a proxy URL for curl_cffi with optional DataImpulse sticky session.
+
+    Returns a full proxy URL string (``http://user:pass@host:port``) suitable
+    for ``curl_cffi.requests.get(proxies={"https": url})``.
+
+    If ``session_key`` is provided, appends the DataImpulse sticky session
+    suffix to the username so all requests with the same key route through
+    the same residential IP.
+
+    Returns None if no proxies are configured.
+    """
+    from common.app_settings import ScrapingConfig
+
+    proxy_list = ScrapingConfig.proxy_list()
+    if not proxy_list:
+        return None
+    base = proxy_list[0]
+    if not session_key:
+        return base
+    parsed = urlparse(base)
+    worker_id = ScrapingConfig.worker_id()
+    sticky_username = f"{parsed.username}-session-{worker_id}_{session_key}"
+    return (
+        f"{parsed.scheme}://{sticky_username}:{parsed.password}"
+        f"@{parsed.hostname}:{parsed.port}"
+    )
+
 
 def _parse_proxy_url(proxy_url: str) -> dict:
     """Convert a proxy URL to Playwright's proxy dict format."""
