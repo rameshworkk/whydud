@@ -183,6 +183,20 @@ class BackfillProduct(models.Model):
 
     class ScrapeStatus(models.TextChoices):
         PENDING = "pending", "Pending"
+        ENRICHING = "enriching", "Enriching"
+        SCRAPED = "scraped", "Scraped"
+        FAILED = "failed", "Failed"
+
+    class EnrichmentMethod(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PLAYWRIGHT = "playwright", "Playwright"
+        CURL_CFFI = "curl_cffi", "curl_cffi"
+        SKIPPED = "skipped", "Skipped"
+
+    class ReviewStatus(models.TextChoices):
+        SKIP = "skip", "Skip"
+        PENDING = "pending", "Pending"
+        SCRAPING = "scraping", "Scraping"
         SCRAPED = "scraped", "Scraped"
         FAILED = "failed", "Failed"
 
@@ -197,6 +211,14 @@ class BackfillProduct(models.Model):
     title = models.CharField(max_length=1000, blank=True)
     brand_name = models.CharField(max_length=200, blank=True)
     image_url = models.URLField(max_length=500, blank=True)
+    current_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Latest known price in paisa (from tracker or raw_price_data)",
+    )
+    category_name = models.CharField(
+        max_length=100, blank=True, db_index=True,
+        help_text="Inferred from title via regex (e.g. smartphone, laptop, tv)",
+    )
 
     # Link to our ProductListing (populated when matched)
     product_listing = models.ForeignKey(
@@ -240,6 +262,28 @@ class BackfillProduct(models.Model):
     error_message = models.TextField(blank=True)
     retry_count = models.IntegerField(default=0)
 
+    # Enrichment routing
+    enrichment_priority = models.SmallIntegerField(
+        default=3,
+        db_index=True,
+        help_text="0=on-demand, 1=Playwright, 2=curl_cffi, 3=curl_cffi-low",
+    )
+    enrichment_method = models.CharField(
+        max_length=20,
+        choices=EnrichmentMethod.choices,
+        default=EnrichmentMethod.PENDING,
+    )
+    enrichment_queued_at = models.DateTimeField(null=True, blank=True)
+
+    # Review tracking (only for top 100K products)
+    review_status = models.CharField(
+        max_length=20,
+        choices=ReviewStatus.choices,
+        default=ReviewStatus.SKIP,
+        help_text="Review scraping status — only top 100K get reviews",
+    )
+    review_count_scraped = models.IntegerField(default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -248,6 +292,14 @@ class BackfillProduct(models.Model):
         indexes = [
             models.Index(fields=["status", "marketplace_slug"]),
             models.Index(fields=["external_id", "marketplace_slug"]),
+            models.Index(
+                fields=["scrape_status", "enrichment_priority", "created_at"],
+                name="idx_backfill_enrich_queue",
+            ),
+            models.Index(
+                fields=["review_status", "scrape_status"],
+                name="idx_backfill_review_queue",
+            ),
         ]
 
     def append_price_data(self, price_points, source: str) -> int:

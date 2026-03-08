@@ -178,6 +178,10 @@ app.conf.beat_schedule = {
         "task": "apps.pricing.backfill.enrichment.cleanup_stale_enrichments",
         "schedule": crontab(minute=30, hour="*/1"),
     },
+    "backfill-check-reviews": {
+        "task": "apps.pricing.backfill.enrichment.check_review_completion",
+        "schedule": crontab(minute="*/15"),
+    },
     # --- Missing periodic tasks ---
     "expire-reward-points-monthly": {
         "task": "apps.rewards.tasks.expire_points",

@@ -176,12 +176,21 @@ def run_marketplace_spider(self, marketplace_slug: str, category_slugs: list[str
     soft_time_limit=None,   # no limit — scraping can take hours
     time_limit=None,        # no limit
 )
-def run_review_spider(self, marketplace_slug: str, max_review_pages: int | None = None) -> dict:
+def run_review_spider(
+    self,
+    marketplace_slug: str,
+    max_review_pages: int | None = None,
+    product_external_ids: list[str] | None = None,
+) -> dict:
     """Scrape reviews for products from a marketplace.
 
     Triggered automatically after a successful product spider run (chained
     from ``run_marketplace_spider``) and also scheduled independently via
     Celery Beat for daily catch-up.
+
+    When ``product_external_ids`` is provided (by the enrichment pipeline),
+    the spider only scrapes reviews for those specific products instead of
+    its default batch.
 
     The review spiders handle dedup internally (skip existing
     ``external_review_id``), so double-running is safe.
@@ -227,6 +236,8 @@ def run_review_spider(self, marketplace_slug: str, max_review_pages: int | None 
         "--job-id", str(job.id),
         "--max-review-pages", str(max_review_pages),
     ]
+    if product_external_ids:
+        cmd.extend(["--external-ids", ",".join(product_external_ids)])
 
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")

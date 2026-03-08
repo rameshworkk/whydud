@@ -74,6 +74,7 @@ def _product_to_document(product) -> dict:
         "images": product.images or [],
         "image_url": product.images[0] if product.images else "",
         "is_refurbished": product.is_refurbished,
+        "is_lightweight": product.is_lightweight,
         "status": product.status,
         "in_stock": product.current_best_price is not None,
         "created_at": product.created_at.timestamp() if product.created_at else 0,
@@ -102,6 +103,7 @@ def _configure_index(index) -> None:
             "dud_score",
             "status",
             "in_stock",
+            "is_lightweight",
         ],
         "sortableAttributes": [
             "current_best_price",
@@ -109,6 +111,15 @@ def _configure_index(index) -> None:
             "avg_rating",
             "total_reviews",
             "created_at",
+        ],
+        "rankingRules": [
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "sort",
+            "exactness",
+            "is_lightweight:asc",
         ],
         "displayedAttributes": ["*"],
     })

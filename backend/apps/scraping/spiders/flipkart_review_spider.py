@@ -180,6 +180,13 @@ class FlipkartReviewSpider(BaseWhydudSpider):
         super().__init__(*args, **kwargs)
         self.max_review_pages = int(kwargs.get("max_review_pages", 3))
 
+        # Optional: only scrape reviews for these specific external IDs
+        # Passed as comma-separated string from runner CLI
+        raw_ids = kwargs.get("external_ids", "")
+        self.external_ids: list[str] = [
+            eid.strip() for eid in raw_ids.split(",") if eid.strip()
+        ] if raw_ids else []
+
         # Stats
         self._reviews_scraped: int = 0
         self._products_processed: int = 0
@@ -199,25 +206,38 @@ class FlipkartReviewSpider(BaseWhydudSpider):
     # ------------------------------------------------------------------
 
     def start_requests(self):
-        """Get all Flipkart ProductListings that have fewer than 10 reviews in our DB."""
+        """Get Flipkart ProductListings to scrape reviews for.
+
+        When ``external_ids`` is set (passed by enrichment worker), only
+        scrape those specific products.  Otherwise use the default batch
+        (products with < 10 reviews, ordered by popularity, max 200).
+        """
         from django.db.models import Count, Q
 
         from apps.products.models import ProductListing
 
-        listings = (
-            ProductListing.objects.filter(
+        if self.external_ids:
+            # Targeted mode: only specific products from enrichment pipeline
+            listings = ProductListing.objects.filter(
                 marketplace__slug="flipkart",
-                in_stock=True,
+                external_id__in=self.external_ids,
             )
-            .annotate(
-                db_review_count=Count(
-                    "product__reviews",
-                    filter=Q(product__reviews__marketplace__slug="flipkart"),
+        else:
+            # Default batch mode: products needing reviews
+            listings = (
+                ProductListing.objects.filter(
+                    marketplace__slug="flipkart",
+                    in_stock=True,
                 )
+                .annotate(
+                    db_review_count=Count(
+                        "product__reviews",
+                        filter=Q(product__reviews__marketplace__slug="flipkart"),
+                    )
+                )
+                .filter(db_review_count__lt=10)
+                .order_by("-product__total_reviews")[:200]
             )
-            .filter(db_review_count__lt=10)
-            .order_by("-product__total_reviews")[:200]
-        )
 
         for listing in listings:
             fpid = listing.external_id

@@ -24,6 +24,7 @@ def main() -> None:
     parser.add_argument("--max-pages", default=None, help="Max listing pages per category")
     parser.add_argument("--save-html", action="store_true", help="Save raw HTML for debugging")
     parser.add_argument("--max-review-pages", default=None, help="Max review pages per product (review spiders)")
+    parser.add_argument("--external-ids", default=None, help="Comma-separated external IDs to filter (review spiders)")
     parser.add_argument("--proxy-list", default=None, help="Comma-separated proxy URLs (overrides SCRAPING_PROXY_LIST env var)")
     args = parser.parse_args()
 
@@ -61,6 +62,8 @@ def main() -> None:
         spider_kwargs["save_html"] = "1"
     if args.max_review_pages:
         spider_kwargs["max_review_pages"] = args.max_review_pages
+    if args.external_ids:
+        spider_kwargs["external_ids"] = args.external_ids
 
     process.crawl(args.spider_name, **spider_kwargs)
     process.start()  # blocks until all spiders finish

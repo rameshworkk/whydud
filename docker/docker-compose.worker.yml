@@ -1,0 +1,58 @@
+# ============================================================
+# Whydud — Worker-Only Node (Remote Enrichment)
+#
+# Runs a single Celery worker that connects to the primary
+# Oracle VPS over WireGuard (10.0.0.x) for Redis + PostgreSQL.
+#
+# NO database, Redis, web server, or frontend on this node.
+#
+# Usage:
+#   cp .env.worker.example .env.worker
+#   # Edit .env.worker with real credentials + WireGuard IPs
+#   docker compose -f docker-compose.worker.yml --env-file .env.worker up -d
+# ============================================================
+
+services:
+
+  celery-enrichment:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfiles/backend.Dockerfile
+      target: production
+    restart: unless-stopped
+    command: >
+      celery -A whydud worker
+      --loglevel=info
+      --concurrency=2
+      --queues=scraping
+      --hostname=${CELERY_WORKER_ID:-remote-w1}@%h
+    environment:
+      DJANGO_SETTINGS_MODULE: whydud.settings.prod
+      # --- Connect to primary node over WireGuard ---
+      POSTGRES_HOST: ${WG_PRIMARY_IP:?Set WireGuard IP of primary node}
+      POSTGRES_DB: ${POSTGRES_DB:-whydud}
+      POSTGRES_USER: ${POSTGRES_USER:-whydud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      REDIS_URL: redis://${WG_PRIMARY_IP:?required}:6379/0
+      CELERY_BROKER_URL: redis://${WG_PRIMARY_IP:?required}:6379/0
+      MEILISEARCH_URL: http://${WG_PRIMARY_IP:?required}:7700
+      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:?required}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?required}
+      EMAIL_ENCRYPTION_KEY: ${EMAIL_ENCRYPTION_KEY:-placeholder}
+      OAUTH_ENCRYPTION_KEY: ${OAUTH_ENCRYPTION_KEY:-placeholder}
+      # --- Worker identity for DataImpulse session routing ---
+      CELERY_WORKER_ID: ${CELERY_WORKER_ID:?Set unique worker ID e.g. oci-w1}
+      # --- Proxy config ---
+      SCRAPING_PROXY_LIST: ${SCRAPING_PROXY_LIST:-}
+      SCRAPING_PROXY_TYPE: ${SCRAPING_PROXY_TYPE:-rotating}
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    # No healthcheck dependencies — primary node services are external
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A whydud inspect ping --destination=${CELERY_WORKER_ID:-remote-w1}@$$HOSTNAME 2>/dev/null | grep -q pong || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

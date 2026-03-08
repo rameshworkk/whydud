@@ -60,6 +60,7 @@ class Command(BaseCommand):
                 "dud_score",
                 "status",
                 "in_stock",
+                "is_lightweight",
             ],
             "sortableAttributes": [
                 "current_best_price",
@@ -67,6 +68,15 @@ class Command(BaseCommand):
                 "avg_rating",
                 "total_reviews",
                 "created_at",
+            ],
+            "rankingRules": [
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "sort",
+                "exactness",
+                "is_lightweight:asc",
             ],
             "displayedAttributes": ["*"],
         })

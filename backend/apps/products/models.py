@@ -133,6 +133,13 @@ class Product(models.Model):
     specs = models.JSONField(null=True, blank=True)
     images = models.JSONField(null=True, blank=True)
 
+    # Physical / identification fields (canonical — doesn't vary across listings)
+    country_of_origin = models.CharField(max_length=200, blank=True, default="")
+    manufacturer = models.CharField(max_length=500, blank=True, default="")
+    model_number = models.CharField(max_length=200, blank=True, default="")
+    weight = models.CharField(max_length=100, blank=True, default="")
+    dimensions = models.CharField(max_length=200, blank=True, default="")
+
     dud_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     dud_score_confidence = models.CharField(max_length=20, blank=True)
     dud_score_updated_at = models.DateTimeField(null=True, blank=True)
@@ -148,6 +155,11 @@ class Product(models.Model):
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="merged_from"
     )
     is_refurbished = models.BooleanField(default=False)
+    is_lightweight = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True if created from tracker data only (no marketplace scrape yet)",
+    )
     first_seen_at = models.DateTimeField(auto_now_add=True)
     last_scraped_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -207,6 +219,15 @@ class ProductListing(models.Model):
     in_stock = models.BooleanField(default=True)
     rating = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
     review_count = models.IntegerField(default=0)
+
+    # Extended fields (per-marketplace detail data)
+    variant_options = models.JSONField(null=True, blank=True)
+    offer_details = models.JSONField(null=True, blank=True)
+    about_bullets = models.JSONField(null=True, blank=True)
+    warranty = models.CharField(max_length=500, blank=True, default="")
+    delivery_info = models.CharField(max_length=500, blank=True, default="")
+    return_policy = models.CharField(max_length=500, blank=True, default="")
+
     match_confidence = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
     match_method = models.CharField(max_length=50, blank=True)
     last_scraped_at = models.DateTimeField(null=True, blank=True)

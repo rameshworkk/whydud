@@ -194,14 +194,19 @@ class ProductPipeline:
             # on marketplace + external_seller_id). Fall back to a slug
             # derived from the seller name when no explicit ID is available.
             ext_id = item.get("external_seller_id") or slugify(item["seller_name"])
-            seller, _ = Seller.objects.get_or_create(
+            seller, created = Seller.objects.get_or_create(
                 marketplace=marketplace,
                 external_seller_id=ext_id,
                 defaults={
                     "name": item["seller_name"],
                     "fulfilled_by": item.get("fulfilled_by") or "",
+                    "avg_rating": item.get("seller_rating"),
                 },
             )
+            # Update seller rating on existing sellers
+            if not created and item.get("seller_rating") is not None:
+                seller.avg_rating = item["seller_rating"]
+                seller.save(update_fields=["avg_rating", "updated_at"])
 
         # ------- 3. Brand (alias-aware resolution) ------------------------
         brand = resolve_or_create_brand(item["brand"]) if item.get("brand") else None
@@ -321,13 +326,34 @@ class ProductPipeline:
             listing.discount_pct = round(
                 (1 - item["price"] / item["mrp"]) * 100, 2
             )
-        listing.save(
-            update_fields=[
-                "title", "external_url", "current_price", "mrp", "discount_pct",
-                "in_stock", "rating", "review_count", "seller",
-                "last_scraped_at", "updated_at",
-            ]
-        )
+
+        update_fields = [
+            "title", "external_url", "current_price", "mrp", "discount_pct",
+            "in_stock", "rating", "review_count", "seller",
+            "last_scraped_at", "updated_at",
+        ]
+
+        # Extended listing fields — only overwrite when spider provides data
+        if item.get("variant_options") is not None:
+            listing.variant_options = item["variant_options"]
+            update_fields.append("variant_options")
+        if item.get("offer_details") is not None:
+            listing.offer_details = item["offer_details"]
+            update_fields.append("offer_details")
+        if item.get("about_bullets"):
+            listing.about_bullets = item["about_bullets"]
+            update_fields.append("about_bullets")
+        if item.get("warranty"):
+            listing.warranty = item["warranty"][:500]
+            update_fields.append("warranty")
+        if item.get("delivery_info"):
+            listing.delivery_info = item["delivery_info"][:500]
+            update_fields.append("delivery_info")
+        if item.get("return_policy"):
+            listing.return_policy = item["return_policy"][:500]
+            update_fields.append("return_policy")
+
+        listing.save(update_fields=update_fields)
 
     @staticmethod
     def _update_product_from_listing(product, item, brand, category, now):
@@ -365,6 +391,29 @@ class ProductPipeline:
         if item.get("description") and not product.description:
             product.description = item["description"][:5000]
             update_fields.append("description")
+
+        # Physical / identification fields — first-wins (only fill if empty)
+        _spec_field_map = {
+            "country_of_origin": ("country_of_origin", ["Country of Origin", "country of origin"], 200),
+            "manufacturer": ("manufacturer", ["Manufacturer", "manufacturer"], 500),
+            "model_number": ("model_number", ["Item model number", "Model Number", "Model Name"], 200),
+            "weight": ("weight", ["Item Weight", "Product Weight", "Weight"], 100),
+            "dimensions": ("dimensions", ["Product Dimensions", "Item Dimensions", "Dimensions"], 200),
+        }
+        for field_name, (item_key, spec_keys, max_len) in _spec_field_map.items():
+            if not getattr(product, field_name, ""):
+                # Check item directly first (spider may set these)
+                val = item.get(item_key)
+                if not val:
+                    # Fall back to extracting from specs dict
+                    specs = item.get("specs") or {}
+                    for sk in spec_keys:
+                        val = specs.get(sk)
+                        if val:
+                            break
+                if val:
+                    setattr(product, field_name, str(val)[:max_len])
+                    update_fields.append(field_name)
 
         # Update rating / review aggregation
         if item.get("rating") is not None:
@@ -404,6 +453,13 @@ class ProductPipeline:
             match_confidence=match_confidence or Decimal("1.00"),
             match_method=match_method or "external_id",
             last_scraped_at=now,
+            # Extended fields
+            variant_options=item.get("variant_options"),
+            offer_details=item.get("offer_details"),
+            about_bullets=item.get("about_bullets") or None,
+            warranty=(item.get("warranty") or "")[:500],
+            delivery_info=(item.get("delivery_info") or "")[:500],
+            return_policy=(item.get("return_policy") or "")[:500],
         )
         logger.info(
             f"Created listing: {item['external_id']} on {marketplace.slug}"

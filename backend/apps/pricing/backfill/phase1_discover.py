@@ -39,14 +39,21 @@ def _get_existing_codes(ph_codes: list[str]) -> set[str]:
 
 def _create_backfill_product(code: str, product: dict, meta: dict) -> None:
     """Synchronous ORM create for a BackfillProduct."""
+    from apps.pricing.backfill.prioritizer import infer_category_from_title
+
+    title = meta.get("title", "")[:1000]
+    current_price = meta.get("current_price") or None
+
     BackfillProduct.objects.create(
         ph_code=code,
         ph_url=product.get("ph_url", ""),
         marketplace_slug=meta.get("marketplace_slug", ""),
         external_id=meta.get("external_id", ""),
-        title=meta.get("title", "")[:1000],
+        title=title,
         brand_name=meta.get("brand_name", "")[:200],
         image_url=meta.get("image_url", "")[:500],
+        current_price=current_price,
+        category_name=infer_category_from_title(title),
         status=BackfillProduct.Status.DISCOVERED,
     )
 

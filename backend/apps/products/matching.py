@@ -526,6 +526,12 @@ def _create_canonical_product(item, brand, category=None):
         current_best_marketplace=item.get("marketplace_slug", ""),
         status=Product.Status.ACTIVE,
         last_scraped_at=now,
+        # Physical / identification fields
+        country_of_origin=(item.get("country_of_origin") or "")[:200],
+        manufacturer=(item.get("manufacturer") or "")[:500],
+        model_number=(item.get("model_number") or "")[:200],
+        weight=(item.get("weight") or "")[:100],
+        dimensions=(item.get("dimensions") or "")[:200],
     )
     logger.info("Created new canonical product: %s (category=%s)", product.slug, category)
     return product
