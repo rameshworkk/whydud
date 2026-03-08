@@ -89,7 +89,8 @@ class Command(BaseCommand):
         p2.add_argument("--marketplace", type=str, default=None, help="Filter by marketplace slug")
         p2.add_argument("--delay", type=float, default=None, help="Override BH request delay")
         p2.add_argument("--celery", action="store_true", help="Dispatch to Celery workers instead of running in-process")
-        p2.add_argument("--workers", type=int, default=4, help="Number of Celery tasks to dispatch (default: 4)")
+        p2.add_argument("--workers", type=int, default=2, help="Number of Celery tasks to dispatch (default: 2)")
+        p2.add_argument("--repeat", action="store_true", help="Keep claiming new batches until nothing left")
 
         # ── Phase 3: ph-extend ───────────────────────────────────
         p3 = sub.add_parser("ph-extend", help="Extend top products with PH deep history")
@@ -97,7 +98,8 @@ class Command(BaseCommand):
         p3.add_argument("--marketplace", type=str, default=None, help="Filter by marketplace slug")
         p3.add_argument("--delay", type=float, default=None, help="Override PH request delay")
         p3.add_argument("--celery", action="store_true", help="Dispatch to Celery workers instead of running in-process")
-        p3.add_argument("--workers", type=int, default=4, help="Number of Celery tasks to dispatch (default: 4)")
+        p3.add_argument("--workers", type=int, default=2, help="Number of Celery tasks to dispatch (default: 2)")
+        p3.add_argument("--repeat", action="store_true", help="Keep claiming new batches until nothing left")
 
         # ── Phase 4a: scrape ─────────────────────────────────────
         ps = sub.add_parser("scrape", help="Targeted scrape of backfill product ASINs/FPIDs")
@@ -262,13 +264,15 @@ class Command(BaseCommand):
     def _dispatch_celery_bh_fill(self, **options):
         from apps.pricing.tasks import run_phase2_buyhatke
 
-        workers = options.get("workers", 4)
+        workers = options.get("workers", 2)
         batch = options.get("batch", 5000)
         marketplace = options.get("marketplace")
         delay = options.get("delay")
+        repeat = options.get("repeat", False)
 
+        mode = "repeat" if repeat else "single-batch"
         self.stdout.write(self.style.MIGRATE_HEADING(
-            f"Phase 2: Dispatching {workers} Celery tasks (batch={batch} each)"
+            f"Phase 2: Dispatching {workers} Celery tasks (batch={batch}, mode={mode})"
         ))
 
         task_ids = []
@@ -278,14 +282,16 @@ class Command(BaseCommand):
                     "batch_size": batch,
                     "marketplace_slug": marketplace,
                     "delay": delay,
+                    "repeat": repeat,
                 },
             )
             task_ids.append(result.id)
             self.stdout.write(f"  Worker {i + 1}: task_id={result.id}")
 
+        repeat_note = " Each will keep claiming batches until queue is empty." if repeat else ""
         self.stdout.write(self.style.SUCCESS(
             f"\nDispatched {workers} bh-fill tasks to Celery. "
-            f"Each claims up to {batch} products via SKIP LOCKED.\n"
+            f"Each claims up to {batch} products via SKIP LOCKED.{repeat_note}\n"
             f"Monitor via: celery -A whydud inspect active\n"
             f"Or Flower dashboard."
         ))
@@ -311,13 +317,15 @@ class Command(BaseCommand):
     def _dispatch_celery_ph_extend(self, **options):
         from apps.pricing.tasks import run_phase3_extend
 
-        workers = options.get("workers", 4)
+        workers = options.get("workers", 2)
         limit = options.get("limit", 5000)
         marketplace = options.get("marketplace")
         delay = options.get("delay")
+        repeat = options.get("repeat", False)
 
+        mode = "repeat" if repeat else "single-batch"
         self.stdout.write(self.style.MIGRATE_HEADING(
-            f"Phase 3: Dispatching {workers} Celery tasks (limit={limit} each)"
+            f"Phase 3: Dispatching {workers} Celery tasks (limit={limit}, mode={mode})"
         ))
 
         task_ids = []
@@ -327,14 +335,16 @@ class Command(BaseCommand):
                     "limit": limit,
                     "marketplace_slug": marketplace,
                     "delay": delay,
+                    "repeat": repeat,
                 },
             )
             task_ids.append(result.id)
             self.stdout.write(f"  Worker {i + 1}: task_id={result.id}")
 
+        repeat_note = " Each will keep claiming batches until queue is empty." if repeat else ""
         self.stdout.write(self.style.SUCCESS(
             f"\nDispatched {workers} ph-extend tasks to Celery. "
-            f"Each claims up to {limit} products via SKIP LOCKED.\n"
+            f"Each claims up to {limit} products via SKIP LOCKED.{repeat_note}\n"
             f"Monitor via: celery -A whydud inspect active\n"
             f"Or Flower dashboard."
         ))

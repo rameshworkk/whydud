@@ -202,23 +202,40 @@ def run_phase2_buyhatke(
     batch_size: int = 5000,
     marketplace_slug: str | None = None,
     delay: float | None = None,
+    repeat: bool = False,
 ) -> dict:
     """Phase 2: BuyHatke bulk price history fill for discovered products.
 
     Safe to dispatch multiple times concurrently — each task claims its own
     batch via SELECT ... FOR UPDATE SKIP LOCKED.
+
+    If repeat=True, keeps claiming new batches until no items remain.
     """
     import asyncio
 
     from apps.pricing.backfill.phase2_buyhatke import buyhatke_bulk_fill
 
-    return asyncio.run(
-        buyhatke_bulk_fill(
-            batch_size=batch_size,
-            marketplace_slug=marketplace_slug,
-            delay=delay,
+    all_stats = {"total": 0, "filled": 0, "injected": 0, "empty": 0, "failed": 0, "points": 0, "rounds": 0}
+
+    while True:
+        result = asyncio.run(
+            buyhatke_bulk_fill(
+                batch_size=batch_size,
+                marketplace_slug=marketplace_slug,
+                delay=delay,
+            )
         )
-    )
+        all_stats["rounds"] += 1
+        for key in ("total", "filled", "injected", "empty", "failed", "points"):
+            all_stats[key] += result.get(key, 0)
+
+        if not repeat or result.get("total", 0) == 0:
+            break
+
+        logger.info("Phase 2 repeat: round %d done (%d filled so far), claiming next batch...",
+                     all_stats["rounds"], all_stats["filled"])
+
+    return all_stats
 
 
 @shared_task(queue="scraping", bind=True, max_retries=1, soft_time_limit=None, time_limit=None)
@@ -227,23 +244,40 @@ def run_phase3_extend(
     limit: int = 5000,
     marketplace_slug: str | None = None,
     delay: float | None = None,
+    repeat: bool = False,
 ) -> dict:
     """Phase 3: Extend top products with PH deep history.
 
     Safe to dispatch multiple times concurrently — each task claims its own
     batch via SELECT ... FOR UPDATE SKIP LOCKED.
+
+    If repeat=True, keeps claiming new batches until no items remain.
     """
     import asyncio
 
     from apps.pricing.backfill.phase3_extend import extend_with_pricehistory
 
-    return asyncio.run(
-        extend_with_pricehistory(
-            limit=limit,
-            marketplace_slug=marketplace_slug,
-            delay=delay,
+    all_stats = {"total": 0, "extended": 0, "injected": 0, "token_failed": 0, "api_failed": 0, "points": 0, "rounds": 0}
+
+    while True:
+        result = asyncio.run(
+            extend_with_pricehistory(
+                limit=limit,
+                marketplace_slug=marketplace_slug,
+                delay=delay,
+            )
         )
-    )
+        all_stats["rounds"] += 1
+        for key in ("total", "extended", "injected", "token_failed", "api_failed", "points"):
+            all_stats[key] += result.get(key, 0)
+
+        if not repeat or result.get("total", 0) == 0:
+            break
+
+        logger.info("Phase 3 repeat: round %d done (%d extended so far), claiming next batch...",
+                     all_stats["rounds"], all_stats["extended"])
+
+    return all_stats
 
 
 @shared_task(queue="scraping", soft_time_limit=None, time_limit=None)
