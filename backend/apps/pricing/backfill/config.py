@@ -22,12 +22,12 @@ class BackfillConfig:
     @classmethod
     def bh_delay(cls) -> float:
         """Seconds between BuyHatke requests."""
-        return float(_get("BACKFILL_BH_DELAY", 0.5))
+        return float(_get("BACKFILL_BH_DELAY", 1.0))
 
     @classmethod
     def bh_concurrency(cls) -> int:
         """Max concurrent BuyHatke requests (asyncio.Semaphore)."""
-        return int(_get("BACKFILL_BH_CONCURRENCY", 5))
+        return int(_get("BACKFILL_BH_CONCURRENCY", 2))
 
     @classmethod
     def bh_timeout(cls) -> float:
