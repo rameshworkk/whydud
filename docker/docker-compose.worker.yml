@@ -17,8 +17,7 @@ services:
   celery-enrichment:
     build:
       context: ..
-      dockerfile: docker/Dockerfiles/backend.Dockerfile
-      target: production
+      dockerfile: docker/Dockerfiles/worker-light.Dockerfile
     restart: unless-stopped
     command: >
       celery -A whydud worker
