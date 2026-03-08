@@ -3564,3 +3564,206 @@ Full 15-phase platform audit completed. Generated `AUDIT-REPORT-2026-03-06.md` w
 - Product counts propagated correctly (613 Electronics, 76 Home & Living, etc.)
 - 2 orphan categories detected: cameras (101 products), jewellery (206 products) — need manual mapping
 - TypeScript compiles with no errors
+
+### 2026-03-07 — Backfill Pipeline Production Deployment & Bug Fixes
+
+**Flower Monitoring Dashboard:**
+- Fixed Tornado type errors in `flowerconfig.py` — moved all numeric options to CLI args in docker-compose
+- Flower accessible at `http://95.111.232.70:5555/` (direct port, Caddy route doesn't work — Next.js catches `/flower`)
+- Added flower service to `docker-compose.primary.yml` with `--max-tasks=50000 --inspect-timeout=10000 --state-save-interval=10000`
+
+**Celery Time Limits Removed (permanently):**
+- Removed global `CELERY_TASK_TIME_LIMIT` (30min) and `CELERY_TASK_SOFT_TIME_LIMIT` (25min) from `base.py`
+- Added `soft_time_limit=None, time_limit=None` to all backfill task decorators
+- Required `docker compose build --no-cache` — Docker was caching old layers with stale settings
+
+**BuyHatke Rate Limiting Fixes:**
+- Added 403 handling alongside 429 in retry logic with exponential backoff (10s, 20s, 30s)
+- Added 60s pause after all retries exhausted on persistent blocks
+- Increased default BH delay from 0.5s → 2.0s (minimum between every request)
+- Reduced BH concurrency from 5 → 1 (serial requests to avoid IP bans)
+- Added random 3-4 second burst pause every 10-15 requests to mimic human browsing
+- Server IP got blacklisted after ~150 fast requests — ban expected to lift within hours
+
+**PostgreSQL Connection Exhaustion Fix:**
+- Increased `max_connections` from 100 → 200 in `docker/postgres/primary.conf`
+- Error was `FATAL: sorry, too many clients already` during Phase 2
+
+**Marketplace Coverage Verified:**
+- All 12 Indian marketplaces supported in backfill pipeline (amazon-in, flipkart, croma, myntra, ajio, tata-cliq, jiomart, reliance-digital, vijay-sales, nykaa, snapdeal)
+- Added unmapped marketplace logging in `ph_client.py`
+
+**PriceSnapshot API Bug Fix:**
+- `GET /api/v1/trending/price-dropping` returning 500: `UndefinedColumn: column price_snapshots.id does not exist`
+- Root cause: TimescaleDB hypertable has no `id` column, but Django ORM defaults to `ORDER BY id` on `.first()`
+- Fix: Added `ordering = ["-time"]` to `PriceSnapshot.Meta` + explicit `.order_by("time")` in `PriceDroppingView`
+
+**Targeted Scrape (Phase 4a) — First Production Run:**
+- 206 products with cached BH+PH price data processed through Amazon spider
+- Spider running at ~5-6 pages/min via Playwright + proxy rotation
+- In-progress: 43 ProductListings created so far, 163 injectable candidates for Phase 4 inject
+- Using `--inject` flag to auto-run Phase 4 after scrape completes
+
+**Pipeline Status (as of 2026-03-07 12:13 IST):**
+
+| Metric | Count |
+|--------|-------|
+| BackfillProduct total | 2,246 |
+| Discovered (Phase 2 pending) | 1,136 |
+| PH Extended (Phase 2+3 done) | 206 |
+| Failed (BH 403 errors) | 904 |
+| Existing listings | 3,424 |
+| Price snapshots | 3,269 |
+| Scraped (ProductListing created) | 43 (in progress) |
+| Injectable candidates | 163 |
+
+**Multi-Node Setup:**
+- Primary worker: `primary@<hostname>` — all queues (default, scoring, alerts, email, scraping)
+- Replica worker: `scraping@<hostname>` — scraping queue only (on replica server 46.250.237.93)
+- Replica IP blocked by PriceHistory.app (Cloudflare) — Phase 1 discovery only from primary
+- Replica service name is `celery-scraping` in `docker-compose.replica.yml`
+
+**Files Modified:**
+| File | Change |
+|------|--------|
+| `backend/whydud/flowerconfig.py` | Stripped numeric options (Tornado compatibility) |
+| `docker-compose.primary.yml` | Flower service + CLI args, celery-worker scraping queue |
+| `backend/whydud/settings/base.py` | Removed global Celery time limits |
+| `backend/apps/pricing/tasks.py` | `soft_time_limit=None, time_limit=None` on all backfill tasks |
+| `backend/apps/pricing/backfill/bh_client.py` | 403 retry, burst delays, `import random` |
+| `backend/apps/pricing/backfill/config.py` | BH delay 0.5→2.0, concurrency 5→1 |
+| `backend/apps/pricing/backfill/ph_client.py` | Unmapped marketplace warning log |
+| `backend/apps/pricing/models.py` | `PriceSnapshot.Meta.ordering = ["-time"]` |
+| `backend/apps/products/views.py` | `PriceDroppingView` explicit `.order_by("time")` |
+| `docker/postgres/primary.conf` | `max_connections` 100→200 |
+| `docs/backfill_guide.md` | Comprehensive operations guide |
+
+**Next Steps:**
+1. Wait for BuyHatke IP ban to lift (2-4 hours), then `reset-failed` + re-run Phase 2
+2. Complete targeted scrape for remaining 206 products
+3. Run Phase 4 inject + Phase 5 refresh-aggregate
+4. Discover more sitemaps (start with 10-20, spread over nights)
+5. Deploy PriceSnapshot ordering fix to production
+
+---
+
+### BF-1: Model Additions — Enrichment + Review Fields + is_lightweight ✅
+**Date:** 2026-03-08
+
+Added fields to support tiered enrichment pipeline, review scraping chain, and lightweight product tracking.
+
+**BackfillProduct model changes:**
+- `enrichment_priority` (SmallIntegerField, default=3): 0=on-demand, 1=Playwright, 2=curl_cffi, 3=curl_cffi-low
+- `enrichment_method` (CharField): pending/playwright/curl_cffi/skipped
+- `enrichment_queued_at` (DateTimeField, nullable)
+- `review_status` (CharField, default='skip'): skip/pending/scraping/scraped/failed
+- `review_count_scraped` (IntegerField, default=0)
+- `scrape_status`: added 'enriching' choice
+- New index: `idx_backfill_enrich_queue` (scrape_status, enrichment_priority, created_at)
+- New index: `idx_backfill_review_queue` (review_status, scrape_status)
+
+**Product model changes:**
+- `is_lightweight` (BooleanField, default=False, indexed)
+
+**Admin changes:**
+- BackfillProductAdmin: enrichment_priority, enrichment_method, review_status in list_display + list_filter
+- Added "Mark for review scraping" admin action
+
+**Migrations:** pricing/0009, products/0006
+
+---
+
+### BF-7: Lightweight Record Creator — Product+Listing from Tracker Data ✅
+**Date:** 2026-03-08
+
+Created `apps/pricing/backfill/lightweight_creator.py` — converts BackfillProduct records into real Product + ProductListing records using tracker data alone, zero marketplace scraping. Products appear on the site immediately with price history charts.
+
+**Key features:**
+- `create_lightweight_records(batch_size)` — main function, processes BackfillProducts with status bh_filled/ph_extended/done + no linked listing
+- `extract_brand(title)` — prefix matching against 40+ top Indian e-commerce brands
+- `_get_current_price()` / `_get_lowest_price()` — extracts from raw_price_data
+- `_generate_unique_slug()` — slugify + UUID suffix on collision (matches existing pattern)
+- `_inject_history()` — reuses existing `inject_price_points()` from injector.py, groups by source
+- Links existing listings if external_id already present (avoids duplicates)
+- Queues Meilisearch sync for new products
+
+**Price unit verification:** All prices (price_snapshots, Product.current_best_price, raw_price_data) are in PAISA — no conversion needed.
+
+**Management command:** Added `create-lightweight` subcommand to `backfill_prices.py`, loops until no more candidates.
+
+**Test result:** 4 products created, 905 price snapshots injected from 4 BackfillProduct records.
+
+**Usage:**
+```bash
+python manage.py backfill_prices create-lightweight --batch 1000
+python manage.py backfill_prices create-lightweight --batch 5  # small test
+```
+
+---
+
+### BF-8: COPY-based Fast Injection + Meilisearch Lightweight Field ✅
+**Date:** 2026-03-08
+
+**Step 1: Created `apps/pricing/backfill/fast_inject.py`**
+- `copy_inject_snapshots(rows)` — uses PostgreSQL COPY protocol via psycopg3 `cursor.copy()` for 5-10x faster bulk loads
+- `batch_inject_from_backfill(batch_size)` — processes BackfillProduct records with linked listings, gathers all rows, injects via single COPY call
+- Idempotent: checks existing row counts per listing+source before injecting
+- Compatible with psycopg3 (Django 5 backend), NOT psycopg2's `copy_from`
+
+**Step 2: Added `is_lightweight` to Meilisearch**
+- `_product_to_document()` in `apps/search/tasks.py`: added `is_lightweight` field
+- `_configure_index()` in `apps/search/tasks.py`: added `is_lightweight` to filterableAttributes
+- Added ranking rule `is_lightweight:asc` — enriched products (false) rank above lightweight (true) when relevance scores are equal
+- Updated `sync_meilisearch` management command with matching settings
+
+**Test results:**
+- COPY function: 2 test rows inserted and cleaned up successfully
+- `batch_inject_from_backfill`: correctly detected all data already injected (idempotent)
+- Meilisearch document builder confirmed `is_lightweight` field present
+
+---
+
+### BF-9: Enrichment Priority Assigner + Review Target Assignment ✅
+**Date:** 2026-03-08
+
+**Step 1: Added `current_price` and `category_name` fields to BackfillProduct**
+- `current_price` (Decimal 12,2) — latest known price in paisa, populated from PH JSON-LD during Phase 1 discovery, or derived from most recent `raw_price_data` entry for existing records
+- `category_name` (CharField, indexed) — inferred from product title via regex (e.g. "Samsung Galaxy S24" → "smartphone")
+- Migration: `0010_backfillproduct_current_price_category_name.py`
+- Updated `phase1_discover.py` to store both fields at creation time
+
+**Step 2: Created `apps/pricing/backfill/prioritizer.py`**
+- `infer_category_from_title(title)` — 30+ regex rules mapping title patterns to categories (smartphone, laptop, tv, earphone, smartwatch, refrigerator, etc.)
+- `populate_derived_fields()` — backfills `current_price` from `raw_price_data` and `category_name` from title regex for existing records missing these values. Runs before priority assignment.
+- `assign_enrichment_priorities()` — scores pending BackfillProducts into P1/P2/P3:
+  - P1 (Playwright): 200+ data points, tier-1 category match, or top brand + price ≥₹10K
+  - P2 (curl_cffi): 50+ data points, mid-range price (₹5K–₹2L), Amazon 30+ points, or tier-2 category match
+  - P3 (curl_cffi-low): everything else (default)
+- `assign_review_targets(max_review_products=100000)` — marks top 100K for review scraping:
+  - All P1 products get reviews first
+  - Remaining quota filled from P2 ordered by popularity (price_data_points desc)
+
+**Step 3: Wired `assign-priorities` subcommand in `backfill_prices` management command**
+- `python manage.py backfill_prices assign-priorities [--max-review N]`
+- Runs: populate_derived_fields → assign_enrichment_priorities → assign_review_targets
+
+**Step 4: Enhanced status dashboard**
+- Added "ENRICHMENT PRIORITY (pending only)" section showing P0/P1/P2/P3 distribution
+- Added "REVIEW STATUS" section showing skip/pending/scraping/scraped/failed counts
+
+---
+
+### BF-10: Pipeline Hook — Enrichment Status + Review Chaining ✅
+**Date:** 2026-03-08
+
+**Added `_close_backfill_loop()` to ProductPipeline** (`apps/scraping/pipelines.py`)
+- Called at end of `process_item()` after listing is saved
+- Finds matching `BackfillProduct` records by `(marketplace_slug, external_id)` with `scrape_status` in `(pending, enriching)` — hits composite index, sub-millisecond
+- Updates `scrape_status='scraped'` and links `product_listing`
+- Calls `_upgrade_lightweight_product()` to set `Product.is_lightweight=False` and copy rating/review_count
+- If `review_status='pending'`, chains `queue_review_scraping.delay()` for review spider
+- Entire method wrapped in `try/except` — **never crashes the main pipeline**
+- `ImportError → pass` for both backfill module and enrichment module (may not exist yet)
+- For normal (non-backfill) scrapes: finds 0 matches, returns instantly
+
+**`source='scraper'` in price_snapshots INSERT** — already present in existing code, no change needed

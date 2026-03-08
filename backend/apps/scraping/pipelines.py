@@ -281,6 +281,10 @@ class ProductPipeline:
         # ------- 6. Recalculate canonical product aggregates (Step 4) -----
         update_canonical_product(product)
 
+        # ------- 7. Close backfill loop if this was an enrichment scrape --
+        if listing:
+            self._close_backfill_loop(listing)
+
         # Track product ID for batch Meilisearch sync in close_spider
         self._track_product(self._crawler.spider, str(product.id))
 
@@ -405,6 +409,88 @@ class ProductPipeline:
             f"Created listing: {item['external_id']} on {marketplace.slug}"
         )
         return listing
+
+    def _close_backfill_loop(self, listing):
+        """If this listing was scraped as part of backfill enrichment,
+        mark it complete and optionally chain review scraping.
+
+        For non-backfill scrapes (99% of cases), finds 0 matches and returns
+        instantly. Uses composite index on (external_id, marketplace_slug).
+        Must NEVER crash the main pipeline — everything is wrapped in try/except.
+        """
+        try:
+            from apps.pricing.models import BackfillProduct
+
+            # Find matching backfill records with pending/enriching status
+            matching = BackfillProduct.objects.filter(
+                marketplace_slug=listing.marketplace.slug,
+                external_id=listing.external_id,
+                scrape_status__in=("pending", "enriching"),
+            )
+
+            # Check if any need reviews BEFORE updating status
+            needs_reviews = list(
+                matching.filter(review_status="pending")
+                .values_list("id", flat=True)
+            )
+
+            # Mark enrichment complete
+            updated = matching.update(
+                scrape_status="scraped",
+                product_listing=listing,
+            )
+
+            if updated > 0:
+                self._upgrade_lightweight_product(listing)
+                logger.info(
+                    "Backfill enrichment complete: %s", listing.external_id
+                )
+
+                # Chain review scraping for eligible products
+                if needs_reviews:
+                    try:
+                        from apps.pricing.backfill.enrichment import (
+                            queue_review_scraping,
+                        )
+
+                        queue_review_scraping.delay(
+                            listing_id=str(listing.id),
+                            marketplace_slug=listing.marketplace.slug,
+                            external_id=listing.external_id,
+                        )
+                        logger.info(
+                            "Chained review scraping for %s",
+                            listing.external_id,
+                        )
+                    except ImportError:
+                        pass  # enrichment module not built yet
+
+        except ImportError:
+            pass  # backfill module not available
+        except Exception as e:
+            logger.debug("Backfill loop skipped: %s", e)
+
+    @staticmethod
+    def _upgrade_lightweight_product(listing):
+        """Upgrade Product from lightweight to full after enrichment scrape."""
+        try:
+            from apps.products.models import Product
+
+            product = listing.product
+            if not product or not product.is_lightweight:
+                return
+
+            updates = {"is_lightweight": False}
+            if listing.rating and not product.avg_rating:
+                updates["avg_rating"] = listing.rating
+            if listing.review_count and (
+                not product.total_reviews or product.total_reviews == 0
+            ):
+                updates["total_reviews"] = listing.review_count
+
+            Product.objects.filter(id=product.id).update(**updates)
+        except Exception as e:
+            logger.debug("Lightweight upgrade skipped: %s", e)
 
 
 # ===================================================================
