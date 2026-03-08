@@ -10,6 +10,9 @@ predictions) so Phase 4 can re-run injection after spider enrichment.
 
 Speed: ~120 products/minute with default settings (0.5s delay, 5 concurrent).
 
+Supports parallel workers: uses ``SELECT ... FOR UPDATE SKIP LOCKED`` so
+multiple nodes can run ``bh-fill`` simultaneously without overlap.
+
 Usage::
 
     python manage.py backfill_prices bh-fill --batch 5000
@@ -17,9 +20,11 @@ Usage::
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from asgiref.sync import sync_to_async
+from django.db import transaction
 
 from apps.pricing.backfill.bh_client import BHClient
 from apps.pricing.backfill.config import BackfillConfig
@@ -29,28 +34,52 @@ from apps.pricing.models import BackfillProduct
 logger = logging.getLogger(__name__)
 
 
-def _query_batch_and_listings(
+def _claim_batch(
     batch_size: int, marketplace_slug: str | None
-) -> tuple[list, dict]:
-    """Synchronous ORM queries for batch + listing map."""
-    from apps.products.models import ProductListing
+) -> list[str]:
+    """Atomically claim a batch of DISCOVERED products for this worker.
 
+    Uses SELECT ... FOR UPDATE SKIP LOCKED to prevent overlap between
+    parallel workers. Claimed items get status='bh_filling' so they
+    won't appear in other workers' queries.
+
+    Returns list of claimed BackfillProduct IDs.
+    """
     supported_slugs = list(BackfillConfig.bh_pos_map().keys())
 
-    qs = BackfillProduct.objects.filter(
-        status=BackfillProduct.Status.DISCOVERED,
-    ).exclude(
-        external_id="",
-    ).filter(
-        marketplace_slug__in=supported_slugs,
-    )
+    with transaction.atomic():
+        qs = BackfillProduct.objects.filter(
+            status=BackfillProduct.Status.DISCOVERED,
+        ).exclude(
+            external_id="",
+        ).filter(
+            marketplace_slug__in=supported_slugs,
+        )
 
-    if marketplace_slug:
-        qs = qs.filter(marketplace_slug=marketplace_slug)
+        if marketplace_slug:
+            qs = qs.filter(marketplace_slug=marketplace_slug)
 
-    batch = list(qs.order_by("created_at")[:batch_size])
+        # select_for_update(skip_locked=True) skips rows locked by other workers
+        claimed_ids = list(
+            qs.order_by("created_at")
+            .select_for_update(skip_locked=True)
+            .values_list("id", flat=True)[:batch_size]
+        )
 
-    # Pre-fetch existing listings for batch matching
+        if claimed_ids:
+            BackfillProduct.objects.filter(id__in=claimed_ids).update(
+                status=BackfillProduct.Status.BH_FILLING
+            )
+
+    return claimed_ids
+
+
+def _load_batch_and_listings(claimed_ids: list[str]) -> tuple[list, dict]:
+    """Load claimed BackfillProducts and pre-fetch matching listings."""
+    from apps.products.models import ProductListing
+
+    batch = list(BackfillProduct.objects.filter(id__in=claimed_ids))
+
     listing_map: dict[tuple[str, str], dict] = {}
     if batch:
         external_pairs = [(bp.marketplace_slug, bp.external_id) for bp in batch]
@@ -115,12 +144,32 @@ def _save_bp_failed(bp, error_msg):
     bp.save(update_fields=["status", "error_message", "retry_count", "updated_at"])
 
 
+def _release_unclaimed(claimed_ids: list[str], processed_ids: set[str]) -> int:
+    """Release any claimed items that weren't processed (e.g. worker crash recovery).
+
+    Resets them back to DISCOVERED so they can be picked up again.
+    """
+    unprocessed = set(claimed_ids) - processed_ids
+    if unprocessed:
+        count = BackfillProduct.objects.filter(
+            id__in=list(unprocessed), status=BackfillProduct.Status.BH_FILLING
+        ).update(status=BackfillProduct.Status.DISCOVERED)
+        if count:
+            logger.warning("Released %d unclaimed bh_filling items back to discovered", count)
+        return count
+    return 0
+
+
 async def buyhatke_bulk_fill(
     batch_size: int | None = None,
     marketplace_slug: str | None = None,
     delay: float | None = None,
 ) -> dict:
     """Phase 2: For all discovered products, fetch BuyHatke price history.
+
+    Uses SELECT ... FOR UPDATE SKIP LOCKED for safe parallel execution
+    across multiple worker nodes. Processes products concurrently via
+    asyncio.gather() with semaphore-based rate limiting.
 
     Args:
         batch_size: Max products to process in this run.
@@ -132,31 +181,36 @@ async def buyhatke_bulk_fill(
     """
     batch_size = batch_size or BackfillConfig.phase2_batch_size()
 
-    batch, listing_map = await sync_to_async(_query_batch_and_listings)(
-        batch_size, marketplace_slug
-    )
-    total = len(batch)
+    # Atomically claim a batch — other workers will skip these rows
+    claimed_ids = await sync_to_async(_claim_batch)(batch_size, marketplace_slug)
 
-    if total == 0:
-        logger.info("Phase 2: no discovered products to fill")
+    if not claimed_ids:
+        logger.info("Phase 2: no discovered products to fill (or all claimed by other workers)")
         return {"total": 0, "filled": 0, "injected": 0, "empty": 0, "failed": 0, "points": 0}
 
-    logger.info("Phase 2: BuyHatke bulk fill for %d products", total)
+    # Load full objects + listings for claimed batch
+    batch, listing_map = await sync_to_async(_load_batch_and_listings)(claimed_ids)
+    total = len(batch)
+
+    logger.info("Phase 2: BuyHatke bulk fill for %d products (claimed from pool)", total)
     stats = {"total": total, "filled": 0, "injected": 0, "empty": 0, "failed": 0, "points": 0}
+    processed_ids: set[str] = set()
+    _done_count = 0
 
-    async with BHClient(delay=delay) as client:
-        for i, bp in enumerate(batch):
-            try:
-                result = await client.fetch_price_history(
-                    pid=bp.external_id,
-                    marketplace_slug=bp.marketplace_slug,
-                )
+    async def _process_one(bp, client):
+        """Fetch + save one product. Semaphore inside BHClient limits concurrency."""
+        nonlocal _done_count
+        try:
+            result = await client.fetch_price_history(
+                pid=bp.external_id,
+                marketplace_slug=bp.marketplace_slug,
+            )
 
-                if not result.found or result.point_count == 0:
-                    await sync_to_async(_save_bp_empty)(bp)
-                    stats["empty"] += 1
-                    continue
-
+            if not result.found or result.point_count == 0:
+                await sync_to_async(_save_bp_empty)(bp)
+                stats["empty"] += 1
+                processed_ids.add(bp.id)
+            else:
                 listing_key = (bp.marketplace_slug, bp.external_id)
                 listing_info = listing_map.get(listing_key)
 
@@ -167,22 +221,30 @@ async def buyhatke_bulk_fill(
                 if listing_info:
                     stats["injected"] += 1
                 stats["filled"] += 1
+                processed_ids.add(bp.id)
 
-                if (i + 1) % 200 == 0:
-                    logger.info(
-                        "  Phase 2: %d/%d — %d filled (%s points), %d injected, %d empty, %d failed",
-                        i + 1,
-                        total,
-                        stats["filled"],
-                        f"{stats['points']:,}",
-                        stats["injected"],
-                        stats["empty"],
-                        stats["failed"],
-                    )
+        except Exception as e:
+            await sync_to_async(_save_bp_failed)(bp, str(e))
+            stats["failed"] += 1
+            processed_ids.add(bp.id)
 
-            except Exception as e:
-                await sync_to_async(_save_bp_failed)(bp, str(e))
-                stats["failed"] += 1
+        _done_count += 1
+        if _done_count % 200 == 0:
+            logger.info(
+                "  Phase 2: %d/%d — %d filled (%s points), %d injected, %d empty, %d failed",
+                _done_count, total,
+                stats["filled"], f"{stats['points']:,}",
+                stats["injected"], stats["empty"], stats["failed"],
+            )
+
+    try:
+        async with BHClient(delay=delay) as client:
+            # Fire all tasks concurrently — BHClient semaphore limits to N in-flight
+            tasks = [_process_one(bp, client) for bp in batch]
+            await asyncio.gather(*tasks)
+    finally:
+        # Release any items we claimed but didn't process (e.g. crash/interrupt)
+        await sync_to_async(_release_unclaimed)(claimed_ids, processed_ids)
 
     logger.info("Phase 2 complete: %s", stats)
     return stats

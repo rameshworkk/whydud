@@ -13,9 +13,11 @@ Usage::
     # Phase 2: BuyHatke bulk fill for discovered products
     python manage.py backfill_prices bh-fill --batch 5000
     python manage.py backfill_prices bh-fill --marketplace amazon-in
+    python manage.py backfill_prices bh-fill --celery --workers 4  # dispatch to Celery workers
 
     # Phase 3: PH deep history extension for top products
     python manage.py backfill_prices ph-extend --limit 5000
+    python manage.py backfill_prices ph-extend --celery --workers 4  # dispatch to Celery workers
 
     # Phase 4a: Targeted scrape of backfill products
     python manage.py backfill_prices scrape --marketplace amazon-in --limit 50
@@ -78,20 +80,24 @@ class Command(BaseCommand):
         p1.add_argument("--start", type=int, default=1, help="First sitemap index (1-343)")
         p1.add_argument("--end", type=int, default=5, help="Last sitemap index (inclusive)")
         p1.add_argument("--limit", type=int, default=None, help="Max products to process")
-        p1.add_argument("--no-filter", action="store_true", help="Skip electronics keyword filter")
+        p1.add_argument("--filter-electronics", action="store_true", help="Only keep electronics/tech products (off by default)")
         p1.add_argument("--delay", type=float, default=None, help="Override PH request delay")
 
         # ── Phase 2: bh-fill ─────────────────────────────────────
         p2 = sub.add_parser("bh-fill", help="BuyHatke bulk price history fill")
-        p2.add_argument("--batch", type=int, default=5000, help="Batch size")
+        p2.add_argument("--batch", type=int, default=5000, help="Batch size per worker")
         p2.add_argument("--marketplace", type=str, default=None, help="Filter by marketplace slug")
         p2.add_argument("--delay", type=float, default=None, help="Override BH request delay")
+        p2.add_argument("--celery", action="store_true", help="Dispatch to Celery workers instead of running in-process")
+        p2.add_argument("--workers", type=int, default=4, help="Number of Celery tasks to dispatch (default: 4)")
 
         # ── Phase 3: ph-extend ───────────────────────────────────
         p3 = sub.add_parser("ph-extend", help="Extend top products with PH deep history")
-        p3.add_argument("--limit", type=int, default=5000, help="Max products to extend")
+        p3.add_argument("--limit", type=int, default=5000, help="Max products per worker")
         p3.add_argument("--marketplace", type=str, default=None, help="Filter by marketplace slug")
         p3.add_argument("--delay", type=float, default=None, help="Override PH request delay")
+        p3.add_argument("--celery", action="store_true", help="Dispatch to Celery workers instead of running in-process")
+        p3.add_argument("--workers", type=int, default=4, help="Number of Celery tasks to dispatch (default: 4)")
 
         # ── Phase 4a: scrape ─────────────────────────────────────
         ps = sub.add_parser("scrape", help="Targeted scrape of backfill product ASINs/FPIDs")
@@ -228,7 +234,7 @@ class Command(BaseCommand):
             discover_from_sitemaps(
                 sitemap_start=options["start"],
                 sitemap_end=options["end"],
-                filter_electronics=not options.get("no_filter", False),
+                filter_electronics=options.get("filter_electronics", False),
                 max_products=options.get("limit"),
                 delay=options.get("delay"),
             )
@@ -238,6 +244,9 @@ class Command(BaseCommand):
     # ── Phase 2 ──────────────────────────────────────────────────
 
     def _handle_bh_fill(self, **options):
+        if options.get("celery"):
+            return self._dispatch_celery_bh_fill(**options)
+
         from apps.pricing.backfill.phase2_buyhatke import buyhatke_bulk_fill
 
         self.stdout.write(self.style.MIGRATE_HEADING("Phase 2: BuyHatke bulk fill"))
@@ -250,9 +259,43 @@ class Command(BaseCommand):
         )
         self._print_result("Phase 2", result)
 
+    def _dispatch_celery_bh_fill(self, **options):
+        from apps.pricing.tasks import run_phase2_buyhatke
+
+        workers = options.get("workers", 4)
+        batch = options.get("batch", 5000)
+        marketplace = options.get("marketplace")
+        delay = options.get("delay")
+
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"Phase 2: Dispatching {workers} Celery tasks (batch={batch} each)"
+        ))
+
+        task_ids = []
+        for i in range(workers):
+            result = run_phase2_buyhatke.apply_async(
+                kwargs={
+                    "batch_size": batch,
+                    "marketplace_slug": marketplace,
+                    "delay": delay,
+                },
+            )
+            task_ids.append(result.id)
+            self.stdout.write(f"  Worker {i + 1}: task_id={result.id}")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"\nDispatched {workers} bh-fill tasks to Celery. "
+            f"Each claims up to {batch} products via SKIP LOCKED.\n"
+            f"Monitor via: celery -A whydud inspect active\n"
+            f"Or Flower dashboard."
+        ))
+
     # ── Phase 3 ──────────────────────────────────────────────────
 
     def _handle_ph_extend(self, **options):
+        if options.get("celery"):
+            return self._dispatch_celery_ph_extend(**options)
+
         from apps.pricing.backfill.phase3_extend import extend_with_pricehistory
 
         self.stdout.write(self.style.MIGRATE_HEADING("Phase 3: PH deep history extension"))
@@ -264,6 +307,37 @@ class Command(BaseCommand):
             )
         )
         self._print_result("Phase 3", result)
+
+    def _dispatch_celery_ph_extend(self, **options):
+        from apps.pricing.tasks import run_phase3_extend
+
+        workers = options.get("workers", 4)
+        limit = options.get("limit", 5000)
+        marketplace = options.get("marketplace")
+        delay = options.get("delay")
+
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"Phase 3: Dispatching {workers} Celery tasks (limit={limit} each)"
+        ))
+
+        task_ids = []
+        for i in range(workers):
+            result = run_phase3_extend.apply_async(
+                kwargs={
+                    "limit": limit,
+                    "marketplace_slug": marketplace,
+                    "delay": delay,
+                },
+            )
+            task_ids.append(result.id)
+            self.stdout.write(f"  Worker {i + 1}: task_id={result.id}")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"\nDispatched {workers} ph-extend tasks to Celery. "
+            f"Each claims up to {limit} products via SKIP LOCKED.\n"
+            f"Monitor via: celery -A whydud inspect active\n"
+            f"Or Flower dashboard."
+        ))
 
     # ── Phase 4a: Scrape ─────────────────────────────────────────
 
@@ -691,6 +765,31 @@ class Command(BaseCommand):
                     retry_count=F("retry_count") + 1,
                 )
                 w(self.style.SUCCESS(f"  Reset {count:,} to discovered (retry_count incremented)"))
+
+            # Also recover stale claims from crashed parallel workers
+            from django.utils import timezone
+            from datetime import timedelta
+            stale_cutoff = timezone.now() - timedelta(hours=1)
+
+            stale_bh = BackfillProduct.objects.filter(
+                status="bh_filling", updated_at__lt=stale_cutoff
+            )
+            stale_bh_count = stale_bh.count()
+            if stale_bh_count:
+                w(f"{prefix}Stale bh_filling claims (>1hr): {stale_bh_count:,}")
+                if not dry_run:
+                    stale_bh.update(status="discovered")
+                    w(self.style.SUCCESS(f"  Released {stale_bh_count:,} back to discovered"))
+
+            stale_ph = BackfillProduct.objects.filter(
+                status="ph_extending", updated_at__lt=stale_cutoff
+            )
+            stale_ph_count = stale_ph.count()
+            if stale_ph_count:
+                w(f"{prefix}Stale ph_extending claims (>1hr): {stale_ph_count:,}")
+                if not dry_run:
+                    stale_ph.update(status="bh_filled")
+                    w(self.style.SUCCESS(f"  Released {stale_ph_count:,} back to bh_filled"))
 
     # ── Skip Products ─────────────────────────────────────────────
 

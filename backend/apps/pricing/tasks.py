@@ -201,8 +201,13 @@ def run_phase2_buyhatke(
     self,
     batch_size: int = 5000,
     marketplace_slug: str | None = None,
+    delay: float | None = None,
 ) -> dict:
-    """Phase 2: BuyHatke bulk price history fill for discovered products."""
+    """Phase 2: BuyHatke bulk price history fill for discovered products.
+
+    Safe to dispatch multiple times concurrently — each task claims its own
+    batch via SELECT ... FOR UPDATE SKIP LOCKED.
+    """
     import asyncio
 
     from apps.pricing.backfill.phase2_buyhatke import buyhatke_bulk_fill
@@ -211,6 +216,7 @@ def run_phase2_buyhatke(
         buyhatke_bulk_fill(
             batch_size=batch_size,
             marketplace_slug=marketplace_slug,
+            delay=delay,
         )
     )
 
@@ -220,8 +226,13 @@ def run_phase3_extend(
     self,
     limit: int = 5000,
     marketplace_slug: str | None = None,
+    delay: float | None = None,
 ) -> dict:
-    """Phase 3: Extend top products with PH deep history."""
+    """Phase 3: Extend top products with PH deep history.
+
+    Safe to dispatch multiple times concurrently — each task claims its own
+    batch via SELECT ... FOR UPDATE SKIP LOCKED.
+    """
     import asyncio
 
     from apps.pricing.backfill.phase3_extend import extend_with_pricehistory
@@ -230,6 +241,7 @@ def run_phase3_extend(
         extend_with_pricehistory(
             limit=limit,
             marketplace_slug=marketplace_slug,
+            delay=delay,
         )
     )
 

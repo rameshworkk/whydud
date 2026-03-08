@@ -175,7 +175,9 @@ class BackfillProduct(models.Model):
 
     class Status(models.TextChoices):
         DISCOVERED = "discovered", "Discovered"
+        BH_FILLING = "bh_filling", "BH Filling"      # Worker has claimed for Phase 2
         BH_FILLED = "bh_filled", "BuyHatke Filled"
+        PH_EXTENDING = "ph_extending", "PH Extending"  # Worker has claimed for Phase 3
         PH_EXTENDED = "ph_extended", "PH Extended"
         DONE = "done", "Done"
         FAILED = "failed", "Failed"

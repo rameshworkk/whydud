@@ -94,7 +94,7 @@ class BHClient:
         self._request_count = 0
         self._error_count = 0
         self._ua_idx = 0
-        self._next_burst_at = random.randint(10, 15)  # burst pause after this many requests
+        self._next_burst_at = random.randint(40, 60)  # burst pause after this many requests
 
     async def __aenter__(self) -> BHClient:
         self._semaphore = asyncio.Semaphore(self._concurrency)
@@ -157,15 +157,15 @@ class BHClient:
             await asyncio.sleep(self._delay)
             self._request_count += 1
 
-            # Random burst pause every 10-15 requests to avoid rate limiting
+            # Random burst pause every 40-60 requests to avoid rate limiting
             if self._request_count >= self._next_burst_at:
-                burst_delay = random.uniform(3.0, 4.0)
+                burst_delay = random.uniform(1.5, 2.5)
                 logger.info(
                     "BH burst pause: %.1fs after %d requests",
                     burst_delay, self._request_count,
                 )
                 await asyncio.sleep(burst_delay)
-                self._next_burst_at = self._request_count + random.randint(10, 15)
+                self._next_burst_at = self._request_count + random.randint(40, 60)
 
             max_retries = BackfillConfig.bh_max_retries()
             for attempt in range(max_retries):
@@ -301,10 +301,10 @@ class BHClient:
             self._request_count += 1
 
             if self._request_count >= self._next_burst_at:
-                burst_delay = random.uniform(3.0, 4.0)
+                burst_delay = random.uniform(1.5, 2.5)
                 logger.info("BH burst pause: %.1fs after %d requests", burst_delay, self._request_count)
                 await asyncio.sleep(burst_delay)
-                self._next_burst_at = self._request_count + random.randint(10, 15)
+                self._next_burst_at = self._request_count + random.randint(40, 60)
 
             try:
                 resp = await self._client.get(
@@ -340,10 +340,10 @@ class BHClient:
             self._request_count += 1
 
             if self._request_count >= self._next_burst_at:
-                burst_delay = random.uniform(3.0, 4.0)
+                burst_delay = random.uniform(1.5, 2.5)
                 logger.info("BH burst pause: %.1fs after %d requests", burst_delay, self._request_count)
                 await asyncio.sleep(burst_delay)
-                self._next_burst_at = self._request_count + random.randint(10, 15)
+                self._next_burst_at = self._request_count + random.randint(40, 60)
 
             try:
                 resp = await self._client.get(

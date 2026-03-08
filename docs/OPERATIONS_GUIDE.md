@@ -77,8 +77,8 @@ python manage.py <command> <subcommand> [options]
 | `backfill_prices` | `status --watch` | Live-updating status (refreshes every 30s) |
 | `backfill_prices` | `status --json` | Machine-readable JSON output |
 | `backfill_prices` | `discover` | Phase 1: Discover products from PH sitemaps |
-| `backfill_prices` | `bh-fill` | Phase 2: Bulk BuyHatke price history |
-| `backfill_prices` | `ph-extend` | Phase 3: Deep PriceHistory.app data |
+| `backfill_prices` | `bh-fill` | Phase 2: Bulk BuyHatke price history (`--celery --workers N` for parallel) |
+| `backfill_prices` | `ph-extend` | Phase 3: Deep PriceHistory.app data (`--celery --workers N` for parallel) |
 | `backfill_prices` | `scrape` | Phase 4a: Targeted marketplace scraping |
 | `backfill_prices` | `inject` | Phase 4b: Inject cached price data |
 | `backfill_prices` | `create-lightweight` | Create Product+Listing from tracker data |
@@ -126,6 +126,9 @@ print(f'Result: {r.result}')
 
 | Task | Queue | Trigger | Purpose |
 |------|-------|---------|---------|
+| `run_phase1_discover` | scraping | Manual / `--celery` | Discover products from PH sitemaps |
+| `run_phase2_buyhatke` | scraping | Manual / `--celery` | BuyHatke bulk price history (parallel-safe via SKIP LOCKED) |
+| `run_phase3_extend` | scraping | Manual / `--celery` | PH deep history extension (parallel-safe via SKIP LOCKED) |
 | `enrich_batch` | scraping | Beat (every 15 min) | Process 100 products by priority |
 | `enrich_single_product` | scraping | On-demand | Enrich 1 product (routes to Playwright/curl_cffi) |
 | `enrich_via_http` | scraping | Chained | curl_cffi extraction (P2-P3 products) |
@@ -231,15 +234,28 @@ PHASE 1: DISCOVER          PHASE 2-3: HISTORY          PHASE 3: CREATE
 
 ```bash
 # Discover from PriceHistory.app sitemaps (1-343 available, ~49K products each)
-python manage.py backfill_prices discover --start 1 --end 5 --no-filter
+python manage.py backfill_prices discover --start 1 --end 5
 
 # Options
---start N          # First sitemap index (default: 1)
---end N            # Last sitemap index (default: 5)
---limit N          # Cap max products
---no-filter        # Import ALL categories (default: electronics only)
---delay N          # Seconds between requests (default: 2)
+--start N              # First sitemap index (default: 1)
+--end N                # Last sitemap index (default: 5)
+--limit N              # Cap max products
+--filter-electronics   # Only keep electronics/tech (default: all categories)
+--delay N              # Seconds between requests (default: 0.5)
 ```
+
+**Discovery is concurrent:** Sitemaps are parsed in parallel, HTML pages are fetched via `asyncio.gather()` with semaphore-limited concurrency (default: 5). ~45K products from 1 sitemap takes ~2 hours.
+
+**Launch Phase 1 via Celery with split ranges:**
+```bash
+docker compose -f docker-compose.primary.yml exec backend python -c "
+from apps.pricing.tasks import run_phase1_discover
+r1 = run_phase1_discover.delay(sitemap_start=1, sitemap_end=1)
+r2 = run_phase1_discover.delay(sitemap_start=2, sitemap_end=2)
+print(f'Task 1: {r1.id}')
+print(f'Task 2: {r2.id}')
+"
+
 
 **Safe to re-run:** Products are upserted by ASIN — duplicates silently skipped.
 
@@ -248,12 +264,65 @@ python manage.py backfill_prices discover --start 1 --end 5 --no-filter
 ## 2.3 Price History Fill (Phase 2-3)
 
 ```bash
-# BuyHatke bulk fill (3 months of history, covers more marketplaces)
+# BuyHatke bulk fill — in-process (blocks terminal)
 python manage.py backfill_prices bh-fill --batch 5000
 
-# PriceHistory.app deep extension (years of history, fewer marketplaces)
+# BuyHatke bulk fill — via Celery workers (recommended for large runs)
+python manage.py backfill_prices bh-fill --celery --workers 4 --batch 5000
+
+# PriceHistory.app deep extension — in-process
 python manage.py backfill_prices ph-extend --limit 5000
+
+# PriceHistory.app deep extension — via Celery workers
+python manage.py backfill_prices ph-extend --celery --workers 4 --limit 5000
 ```
+
+Both phases use `asyncio.gather()` with semaphore-limited concurrency (default: 5 concurrent requests, 0.5s delay per request). Each run claims a batch via `SELECT ... FOR UPDATE SKIP LOCKED` — safe for parallel execution.
+
+### Parallel Workers (Phase 2-3)
+
+Both `bh-fill` and `ph-extend` support **safe parallel execution** across multiple worker nodes using PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED`. Each worker atomically claims a non-overlapping batch — no duplicate work.
+
+**Option A: Celery dispatch (recommended)** — one command dispatches N tasks to your worker pool:
+
+```bash
+# Dispatch 4 parallel bh-fill tasks to Celery workers
+python manage.py backfill_prices bh-fill --celery --workers 4 --batch 12000
+
+# Dispatch 4 parallel ph-extend tasks to Celery workers
+python manage.py backfill_prices ph-extend --celery --workers 4 --limit 5000
+
+# Customize delay per task
+python manage.py backfill_prices bh-fill --celery --workers 4 --delay 0.8
+```
+
+Each dispatched task claims its own batch via SKIP LOCKED. Monitor via Flower or `celery -A whydud inspect active`.
+
+**Option B: Manual per-node** — run on each node individually:
+
+```bash
+# Node 1 (primary)
+docker compose -f docker-compose.primary.yml exec \
+  backend python manage.py backfill_prices bh-fill --batch 12000
+
+# Node 2 (oracle)
+docker compose -f docker-compose.oracle.yml exec \
+  backend python manage.py backfill_prices bh-fill --batch 12000
+
+# Node 3, Node 4: same command — each claims its own batch automatically
+```
+
+**How it works:**
+1. Worker starts → atomically claims N items (status → `bh_filling` / `ph_extending`)
+2. Other workers' queries skip locked/claimed rows
+3. On success → status moves to `bh_filled` / `ph_extended`
+4. On crash → `finally` block releases unclaimed items back to original status
+5. Stale claims (>1hr) can be recovered: `backfill_prices retry-failed --history`
+
+**Speed (~300 products/min per node, 5 concurrent requests, 0.5s delay):**
+- `bh-fill`: 4 nodes × ~300/min = **~1,200/min → 45K in ~38 minutes**
+- `ph-extend`: 4 nodes × 3 concurrent → **12 parallel requests**
+- Slow down if needed: `-e BACKFILL_BH_DELAY=1.0 -e BACKFILL_BH_CONCURRENCY=3`
 
 ---
 
@@ -693,9 +762,13 @@ python manage.py backfill_prices verify-data          # Data quality checks
 
 ## Discovery & History
 ```bash
-python manage.py backfill_prices discover --start 1 --end 10 --no-filter
+python manage.py backfill_prices discover --start 1 --end 10
 python manage.py backfill_prices bh-fill --batch 5000
 python manage.py backfill_prices ph-extend --limit 5000
+
+# Via Celery workers (parallel)
+python manage.py backfill_prices bh-fill --celery --workers 4 --batch 5000
+python manage.py backfill_prices ph-extend --celery --workers 4 --limit 5000
 ```
 
 ## Lightweight Records
@@ -754,7 +827,8 @@ docker exec whydud-postgres psql -U whydud -c \
 ## BackfillProduct Status Field Reference
 
 ```
-status:              Discovered → BH Filled → PH Extended → Done → Failed/Skipped
+status:              Discovered → [BH Filling] → BH Filled → [PH Extending] → PH Extended → Done → Failed/Skipped
+                     (bracketed = transient parallel-worker claim states)
 scrape_status:       pending → enriching → scraped → failed
 review_status:       skip → pending → scraping → scraped → failed
 enrichment_priority: 0=on-demand, 1=Playwright, 2=curl_cffi, 3=curl_cffi-low

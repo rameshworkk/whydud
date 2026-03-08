@@ -3983,3 +3983,69 @@ Added four new subcommands to `backfill_prices` management command for pipeline 
 | File | Change |
 |---|---|
 | `apps/pricing/management/commands/backfill_prices.py` | Added `retry-failed`, `skip-products`, `run-overnight`, `verify-data` subcommands |
+
+---
+
+### Parallel Worker Support for Phase 2-3 (bh-fill, ph-extend) — 2026-03-08
+
+**Problem:** `bh-fill` and `ph-extend` fetched the entire batch upfront with no locking. Running on multiple worker nodes simultaneously caused duplicate API calls (all nodes grabbed the same items).
+
+**Solution:** Added `SELECT ... FOR UPDATE SKIP LOCKED` claim mechanism:
+- Each worker atomically claims a non-overlapping batch by setting an intermediate status (`bh_filling` / `ph_extending`)
+- Other workers' queries skip locked/claimed rows — zero overlap
+- On success: status transitions to final state (`bh_filled` / `ph_extended`)
+- On crash/interrupt: `finally` block releases unclaimed items back to original status
+- Stale claims (>1hr) recoverable via `retry-failed --history`
+
+**New status values:** `bh_filling` (transient), `ph_extending` (transient) — added to `BackfillProduct.Status` enum.
+
+**Speed improvement:** With 4 worker nodes × concurrency 5, `bh-fill` goes from ~120/min to ~480/min (45K items in ~1.5hrs vs ~6hrs).
+
+**Changes (4 files, 1 migration):**
+
+| File | Change |
+|---|---|
+| `apps/pricing/backfill/phase2_buyhatke.py` | Replaced `_query_batch_and_listings` with `_claim_batch` + `_load_batch_and_listings` + `_release_unclaimed`; wrapped main loop in try/finally |
+| `apps/pricing/backfill/phase3_extend.py` | Same pattern: claim → process → release for parallel safety |
+| `apps/pricing/models.py` | Added `BH_FILLING` and `PH_EXTENDING` to `BackfillProduct.Status` enum |
+| `apps/pricing/management/commands/backfill_prices.py` | Added stale claim recovery to `retry-failed --history` |
+| `apps/pricing/migrations/0011_backfillproduct_parallel_worker_statuses.py` | Migration for new status choices |
+
+---
+
+### Concurrent Discovery + Celery Worker Dispatch + Filter Removal — 2026-03-08
+
+**Concurrent Discovery (Phase 1):**
+- Rewrote `phase1_discover.py` to use `asyncio.gather()` for both sitemap parsing and HTML fetching (was sequential)
+- Switched to `bulk_create(ignore_conflicts=True)` for batch DB inserts (1000 per batch)
+- Tuned PH defaults: `html_delay` 1.5→0.5s, `api_delay` 4.0→1.5s, `concurrency` 3→5
+- ~45K products from 1 sitemap now takes ~2 hours (was much longer with sequential fetches)
+
+**Concurrent Phase 2-3:**
+- Rewrote `phase2_buyhatke.py` and `phase3_extend.py` main loops from sequential `for` + `await` to `asyncio.gather()` for true parallel HTTP requests
+- The old sequential loop made the concurrency semaphore useless (only 1 in-flight at a time)
+- Tuned BH defaults: `delay` 2.0→0.5s, `concurrency` 1→5 (~300 products/min per node)
+- Relaxed BH burst pauses: interval 10-15→40-60 requests, duration 3-4s→1.5-2.5s
+
+**Celery Worker Dispatch:**
+- Added `--celery` and `--workers N` flags to `bh-fill` and `ph-extend` management commands
+- `--celery` dispatches N independent Celery tasks to the `scraping` queue instead of running in-process
+- Each task claims its own batch via SKIP LOCKED — safe for distributed execution
+- Added `delay` parameter to `run_phase2_buyhatke` and `run_phase3_extend` Celery tasks
+- Monitor via Flower dashboard or `celery -A whydud inspect active`
+
+**Electronics Filter Removed:**
+- Discovery now processes all product categories by default (was electronics-only)
+- Old `--no-filter` flag replaced with opt-in `--filter-electronics`
+
+**Changes (6 files):**
+
+| File | Change |
+|---|---|
+| `apps/pricing/backfill/phase1_discover.py` | `asyncio.gather()` for sitemaps + HTML, `bulk_create`, `filter_electronics` default→False |
+| `apps/pricing/backfill/phase2_buyhatke.py` | Sequential loop → `asyncio.gather()` for true concurrency |
+| `apps/pricing/backfill/phase3_extend.py` | Sequential loop → `asyncio.gather()` for true concurrency |
+| `apps/pricing/backfill/config.py` | Tuned BH/PH defaults (delay, concurrency) |
+| `apps/pricing/tasks.py` | Added `delay` param to `run_phase2_buyhatke` and `run_phase3_extend` |
+| `apps/pricing/management/commands/backfill_prices.py` | Added `--celery`/`--workers` flags, replaced `--no-filter` with `--filter-electronics` |
+| `docs/OPERATIONS_GUIDE.md` | Celery dispatch examples added to parallel workers section |

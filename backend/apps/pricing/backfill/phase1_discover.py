@@ -1,11 +1,11 @@
 """Phase 1: Discover products from PriceHistory.app sitemaps.
 
 Flow:
-  1. Parse sitemap XML files → get product URLs + ph_codes
+  1. Parse sitemap XML files concurrently → get product URLs + ph_codes
   2. Filter by keyword (electronics/tech only)
-  3. Fetch each product's HTML page
+  3. Fetch each product's HTML page concurrently (semaphore-limited)
   4. Extract ASIN/FSID + marketplace from JSON-LD
-  5. Create BackfillProduct records with status='discovered'
+  5. Bulk-create BackfillProduct records with status='discovered'
 
 This gives us a catalog of products with their marketplace IDs,
 ready for Phase 2 (BuyHatke bulk fill).
@@ -17,6 +17,7 @@ Usage::
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from asgiref.sync import sync_to_async
@@ -37,35 +38,41 @@ def _get_existing_codes(ph_codes: list[str]) -> set[str]:
     )
 
 
-def _create_backfill_product(code: str, product: dict, meta: dict) -> None:
-    """Synchronous ORM create for a BackfillProduct."""
+def _bulk_create_backfill_products(records: list[dict]) -> int:
+    """Bulk-create BackfillProduct records. Returns count created."""
     from apps.pricing.backfill.prioritizer import infer_category_from_title
 
-    title = meta.get("title", "")[:1000]
-    current_price = meta.get("current_price") or None
+    objects = []
+    for r in records:
+        title = r["title"][:1000]
+        objects.append(BackfillProduct(
+            ph_code=r["ph_code"],
+            ph_url=r["ph_url"],
+            marketplace_slug=r["marketplace_slug"],
+            external_id=r["external_id"],
+            title=title,
+            brand_name=r["brand_name"][:200],
+            image_url=r["image_url"][:500],
+            current_price=r["current_price"] or None,
+            category_name=infer_category_from_title(title),
+            status=BackfillProduct.Status.DISCOVERED,
+        ))
 
-    BackfillProduct.objects.create(
-        ph_code=code,
-        ph_url=product.get("ph_url", ""),
-        marketplace_slug=meta.get("marketplace_slug", ""),
-        external_id=meta.get("external_id", ""),
-        title=title,
-        brand_name=meta.get("brand_name", "")[:200],
-        image_url=meta.get("image_url", "")[:500],
-        current_price=current_price,
-        category_name=infer_category_from_title(title),
-        status=BackfillProduct.Status.DISCOVERED,
-    )
+    created = BackfillProduct.objects.bulk_create(objects, ignore_conflicts=True)
+    return len(created)
 
 
 async def discover_from_sitemaps(
     sitemap_start: int = 1,
     sitemap_end: int = 5,
-    filter_electronics: bool = True,
+    filter_electronics: bool = False,
     max_products: int | None = None,
     delay: float | None = None,
 ) -> dict:
     """Phase 1: Parse sitemaps → fetch HTML → extract ASINs.
+
+    Sitemaps are parsed concurrently, and HTML pages are fetched
+    concurrently via asyncio.gather() with semaphore-based rate limiting.
 
     Args:
         sitemap_start: First sitemap index (1-based, out of 343).
@@ -96,14 +103,21 @@ async def discover_from_sitemaps(
             len(target_sitemaps),
         )
 
-        # Step 2: Parse sitemaps → collect product URLs
+        # Step 2: Parse sitemaps concurrently → collect product URLs
         all_products: list[dict] = []
-        for sitemap_url in target_sitemaps:
+
+        async def _parse_one_sitemap(sitemap_url):
             products = await client.parse_sitemap(sitemap_url)
+            logger.info("  Parsed %s: %d products", sitemap_url, len(products))
+            return products
+
+        sitemap_results = await asyncio.gather(
+            *[_parse_one_sitemap(url) for url in target_sitemaps]
+        )
+        for products in sitemap_results:
             stats["sitemaps_parsed"] += 1
             stats["urls_found"] += len(products)
             all_products.extend(products)
-            logger.info("  Parsed %s: %d products", sitemap_url, len(products))
 
         # Step 3: Filter by keywords
         if filter_electronics:
@@ -137,10 +151,13 @@ async def discover_from_sitemaps(
             stats["skipped_dupe"],
         )
 
-        # Step 5: Fetch HTML for each new product → extract ASIN/FSID
-        for i, product in enumerate(new_products):
-            code = product["ph_code"]
+        # Step 5: Fetch HTML concurrently for each new product → extract ASIN/FSID
+        pending_records: list[dict] = []
+        _done_count = 0
 
+        async def _fetch_one(product):
+            nonlocal _done_count
+            code = product["ph_code"]
             try:
                 meta = await client.fetch_page_metadata(code)
                 stats["html_fetched"] += 1
@@ -150,26 +167,43 @@ async def discover_from_sitemaps(
 
                 if not external_id or not marketplace_slug:
                     stats["failed"] += 1
-                    continue
-
-                stats["asin_extracted"] += 1
-
-                await sync_to_async(_create_backfill_product)(code, product, meta)
-                stats["created"] += 1
-
-                if (i + 1) % 100 == 0:
-                    logger.info(
-                        "  Progress: %d/%d — %d ASINs extracted, %d failed",
-                        i + 1,
-                        len(new_products),
-                        stats["asin_extracted"],
-                        stats["failed"],
-                    )
+                else:
+                    stats["asin_extracted"] += 1
+                    pending_records.append({
+                        "ph_code": code,
+                        "ph_url": product.get("ph_url", ""),
+                        "marketplace_slug": marketplace_slug,
+                        "external_id": external_id,
+                        "title": meta.get("title", ""),
+                        "brand_name": meta.get("brand_name", ""),
+                        "image_url": meta.get("image_url", ""),
+                        "current_price": meta.get("current_price"),
+                    })
 
             except Exception as e:
                 stats["failed"] += 1
-                if (i + 1) % 100 == 0:
-                    logger.warning("  [%d] %s: %s", i + 1, code, e)
+                logger.debug("  %s: %s", code, e)
+
+            _done_count += 1
+            if _done_count % 200 == 0:
+                logger.info(
+                    "  Progress: %d/%d — %d ASINs extracted, %d failed",
+                    _done_count, len(new_products),
+                    stats["asin_extracted"], stats["failed"],
+                )
+
+        # Fire all HTML fetches concurrently — PHClient semaphore limits in-flight
+        await asyncio.gather(*[_fetch_one(p) for p in new_products])
+
+        # Step 6: Bulk-create records in batches of 1000
+        if pending_records:
+            total_created = 0
+            for i in range(0, len(pending_records), 1000):
+                batch = pending_records[i : i + 1000]
+                count = await sync_to_async(_bulk_create_backfill_products)(batch)
+                total_created += count
+            stats["created"] = total_created
+            logger.info("  Created %d BackfillProduct records", total_created)
 
     logger.info("Phase 1 complete: %s", stats)
     return stats

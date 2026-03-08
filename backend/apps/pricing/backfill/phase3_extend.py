@@ -14,6 +14,9 @@ use a slower default: 4s API delay, 3 concurrent requests.
 Products are prioritized by those with existing listings (injected first)
 and highest data point counts.
 
+Supports parallel workers: uses ``SELECT ... FOR UPDATE SKIP LOCKED`` so
+multiple nodes can run ``ph-extend`` simultaneously without overlap.
+
 Usage::
 
     python manage.py backfill_prices ph-extend --limit 5000
@@ -21,9 +24,11 @@ Usage::
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from asgiref.sync import sync_to_async
+from django.db import transaction
 from django.db.models import F
 
 from apps.pricing.backfill.config import BackfillConfig
@@ -34,31 +39,52 @@ from apps.pricing.models import BackfillProduct
 logger = logging.getLogger(__name__)
 
 
-def _query_batch_and_listings(
+def _claim_batch(
     limit: int, marketplace_slug: str | None
-) -> tuple[list, dict]:
-    """Synchronous ORM queries for batch + listing map."""
+) -> list[str]:
+    """Atomically claim a batch of BH_FILLED products for this worker.
+
+    Uses SELECT ... FOR UPDATE SKIP LOCKED to prevent overlap between
+    parallel workers. Claimed items get status='ph_extending' so they
+    won't appear in other workers' queries.
+
+    Returns list of claimed BackfillProduct IDs.
+    """
+    with transaction.atomic():
+        qs = BackfillProduct.objects.filter(
+            status=BackfillProduct.Status.BH_FILLED,
+        ).exclude(
+            ph_code="",
+        )
+
+        if marketplace_slug:
+            qs = qs.filter(marketplace_slug=marketplace_slug)
+
+        # Prioritize: products with existing listings first, then by data point count
+        claimed_ids = list(
+            qs.order_by(
+                F("product_listing_id").asc(nulls_last=True),
+                "-price_data_points",
+                "created_at",
+            )
+            .select_for_update(skip_locked=True)
+            .values_list("id", flat=True)[:limit]
+        )
+
+        if claimed_ids:
+            BackfillProduct.objects.filter(id__in=claimed_ids).update(
+                status=BackfillProduct.Status.PH_EXTENDING
+            )
+
+    return claimed_ids
+
+
+def _load_batch_and_listings(claimed_ids: list[str]) -> tuple[list, dict]:
+    """Load claimed BackfillProducts and pre-fetch matching listings."""
     from apps.products.models import ProductListing
 
-    qs = BackfillProduct.objects.filter(
-        status=BackfillProduct.Status.BH_FILLED,
-    ).exclude(
-        ph_code="",
-    )
+    batch = list(BackfillProduct.objects.filter(id__in=claimed_ids))
 
-    if marketplace_slug:
-        qs = qs.filter(marketplace_slug=marketplace_slug)
-
-    # Prioritize: products with existing listings first, then by data point count
-    batch = list(
-        qs.order_by(
-            F("product_listing_id").asc(nulls_last=True),
-            "-price_data_points",
-            "created_at",
-        )[:limit]
-    )
-
-    # Pre-fetch existing listings for products in this batch
     listing_map: dict[tuple[str, str], dict] = {}
     if batch:
         external_pairs = [
@@ -148,10 +174,14 @@ def _save_bp_empty(bp):
 
 
 def _save_bp_token_failed(bp, error_msg):
-    """Synchronous save for token extraction failure."""
+    """Synchronous save for token extraction failure.
+
+    Reverts status to BH_FILLED so the product can be retried.
+    """
+    bp.status = BackfillProduct.Status.BH_FILLED
     bp.error_message = error_msg[:500]
     bp.retry_count += 1
-    bp.save(update_fields=["error_message", "retry_count", "updated_at"])
+    bp.save(update_fields=["status", "error_message", "retry_count", "updated_at"])
 
 
 def _save_bp_failed(bp, error_msg):
@@ -162,12 +192,29 @@ def _save_bp_failed(bp, error_msg):
     bp.save(update_fields=["status", "error_message", "retry_count", "updated_at"])
 
 
+def _release_unclaimed(claimed_ids: list[str], processed_ids: set[str]) -> int:
+    """Release any claimed items that weren't processed back to BH_FILLED."""
+    unprocessed = set(claimed_ids) - processed_ids
+    if unprocessed:
+        count = BackfillProduct.objects.filter(
+            id__in=list(unprocessed), status=BackfillProduct.Status.PH_EXTENDING
+        ).update(status=BackfillProduct.Status.BH_FILLED)
+        if count:
+            logger.warning("Released %d unclaimed ph_extending items back to bh_filled", count)
+        return count
+    return 0
+
+
 async def extend_with_pricehistory(
     limit: int | None = None,
     marketplace_slug: str | None = None,
     delay: float | None = None,
 ) -> dict:
     """Phase 3: Extend BH-filled products with PH deep history.
+
+    Uses SELECT ... FOR UPDATE SKIP LOCKED for safe parallel execution
+    across multiple worker nodes. Processes products concurrently via
+    asyncio.gather() with semaphore-based rate limiting.
 
     Args:
         limit: Max products to process in this run.
@@ -179,84 +226,102 @@ async def extend_with_pricehistory(
     """
     limit = limit or BackfillConfig.phase3_limit()
 
-    batch, listing_map = await sync_to_async(_query_batch_and_listings)(
-        limit, marketplace_slug
-    )
-    total = len(batch)
+    # Atomically claim a batch — other workers will skip these rows
+    claimed_ids = await sync_to_async(_claim_batch)(limit, marketplace_slug)
 
-    if total == 0:
-        logger.info("Phase 3: no BH-filled products to extend")
+    if not claimed_ids:
+        logger.info("Phase 3: no BH-filled products to extend (or all claimed by other workers)")
         return {
             "total": 0, "extended": 0, "injected": 0,
             "token_failed": 0, "api_failed": 0, "points": 0,
         }
 
-    logger.info("Phase 3: PH deep extend for %d products", total)
+    # Load full objects + listings for claimed batch
+    batch, listing_map = await sync_to_async(_load_batch_and_listings)(claimed_ids)
+    total = len(batch)
+
+    logger.info("Phase 3: PH deep extend for %d products (claimed from pool)", total)
     stats = {
         "total": total, "extended": 0, "injected": 0,
         "token_failed": 0, "api_failed": 0, "points": 0,
     }
+    processed_ids: set[str] = set()
+    _done_count = 0
 
-    async with PHClient(delay=delay) as client:
-        for i, bp in enumerate(batch):
-            try:
-                # Step 1: Fetch HTML page for token
-                meta = await client.fetch_page_metadata(bp.ph_code)
-                token = meta.get("token", "")
+    async def _process_one(bp, client):
+        """Fetch token + history for one product. Semaphore inside PHClient limits concurrency."""
+        nonlocal _done_count
+        try:
+            # Step 1: Fetch HTML page for token
+            meta = await client.fetch_page_metadata(bp.ph_code)
+            token = meta.get("token", "")
 
-                if not token:
-                    await sync_to_async(_save_bp_token_failed)(
-                        bp, "No token extracted from HTML"
-                    )
-                    stats["token_failed"] += 1
-                    continue
-
-                # Step 2: Fetch full price history via API
-                result = await client.fetch_price_history(bp.ph_code, token)
-
-                if not result.get("price_points"):
-                    await sync_to_async(_save_bp_empty)(bp)
-                    stats["extended"] += 1
-                    continue
-
-                # Resolve listing info
-                listing_key = (bp.marketplace_slug, bp.external_id)
-                listing_info = listing_map.get(listing_key)
-
-                # Also check product_listing_id set by Phase 2
-                if not listing_info and bp.product_listing_id:
-                    listing_info = await sync_to_async(_get_listing_by_id)(
-                        bp.product_listing_id
-                    )
-
-                injected_count = await sync_to_async(_save_bp_extended)(
-                    bp, result, listing_info
+            if not token:
+                await sync_to_async(_save_bp_token_failed)(
+                    bp, "No token extracted from HTML"
                 )
-                stats["points"] += injected_count
-                if listing_info:
-                    stats["injected"] += 1
-                stats["extended"] += 1
-
-                if (i + 1) % 100 == 0:
-                    logger.info(
-                        "  Phase 3: %d/%d — %d extended (%s points), %d injected, "
-                        "%d token_failed, %d api_failed",
-                        i + 1,
-                        total,
-                        stats["extended"],
-                        f"{stats['points']:,}",
-                        stats["injected"],
-                        stats["token_failed"],
-                        stats["api_failed"],
-                    )
-
-            except AuthError as e:
-                await sync_to_async(_save_bp_token_failed)(bp, f"Auth: {e}")
                 stats["token_failed"] += 1
+                processed_ids.add(bp.id)
+                _done_count += 1
+                return
 
-            except Exception as e:
-                await sync_to_async(_save_bp_failed)(bp, str(e))
-                stats["api_failed"] += 1
+            # Step 2: Fetch full price history via API
+            result = await client.fetch_price_history(bp.ph_code, token)
+
+            if not result.get("price_points"):
+                await sync_to_async(_save_bp_empty)(bp)
+                stats["extended"] += 1
+                processed_ids.add(bp.id)
+                _done_count += 1
+                return
+
+            # Resolve listing info
+            listing_key = (bp.marketplace_slug, bp.external_id)
+            listing_info = listing_map.get(listing_key)
+
+            # Also check product_listing_id set by Phase 2
+            if not listing_info and bp.product_listing_id:
+                listing_info = await sync_to_async(_get_listing_by_id)(
+                    bp.product_listing_id
+                )
+
+            injected_count = await sync_to_async(_save_bp_extended)(
+                bp, result, listing_info
+            )
+            stats["points"] += injected_count
+            if listing_info:
+                stats["injected"] += 1
+            stats["extended"] += 1
+            processed_ids.add(bp.id)
+
+        except AuthError as e:
+            await sync_to_async(_save_bp_token_failed)(bp, f"Auth: {e}")
+            stats["token_failed"] += 1
+            processed_ids.add(bp.id)
+
+        except Exception as e:
+            await sync_to_async(_save_bp_failed)(bp, str(e))
+            stats["api_failed"] += 1
+            processed_ids.add(bp.id)
+
+        _done_count += 1
+        if _done_count % 100 == 0:
+            logger.info(
+                "  Phase 3: %d/%d — %d extended (%s points), %d injected, "
+                "%d token_failed, %d api_failed",
+                _done_count, total,
+                stats["extended"], f"{stats['points']:,}",
+                stats["injected"], stats["token_failed"], stats["api_failed"],
+            )
+
+    try:
+        async with PHClient(delay=delay) as client:
+            # Fire all tasks concurrently — PHClient semaphore limits to N in-flight
+            tasks = [_process_one(bp, client) for bp in batch]
+            await asyncio.gather(*tasks)
+    finally:
+        # Release any items we claimed but didn't process (e.g. crash/interrupt)
+        await sync_to_async(_release_unclaimed)(claimed_ids, processed_ids)
 
     logger.info("Phase 3 complete: %s", stats)
     return stats
