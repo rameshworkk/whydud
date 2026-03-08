@@ -39,6 +39,13 @@ export function ProductCard({ product }: ProductCardProps) {
             {formatDudScore(product.dudScore)}
           </span>
         )}
+
+        {/* Lightweight badge */}
+        {product.isLightweight && product.dudScore == null && (
+          <span className="absolute top-1 right-1 rounded-full bg-slate-600/80 px-1.5 py-0.5 text-[10px] font-medium text-white">
+            Price tracked
+          </span>
+        )}
       </div>
 
       {/* Info */}

@@ -131,6 +131,7 @@ class ProductListSerializer(serializers.ModelSerializer):
             "dud_score", "dud_score_confidence",
             "images",
             "is_refurbished",
+            "is_lightweight",
             "status",
         ]
 
@@ -165,7 +166,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "avg_rating", "total_reviews",
             "current_best_price", "current_best_marketplace",
             "lowest_price_ever", "lowest_price_date",
-            "status", "is_refurbished",
+            "status", "is_refurbished", "is_lightweight",
             "listings",
             "review_summary",
             "filtered_best_price", "marketplace_filter_active",

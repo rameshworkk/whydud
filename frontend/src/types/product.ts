@@ -152,6 +152,7 @@ export interface ProductSummary {
   lowestPriceEver: number | null;
   images: string[] | null;
   isRefurbished: boolean;
+  isLightweight: boolean;
   status: string;
 }
 
@@ -185,6 +186,7 @@ export interface ProductDetail {
   lowestPriceDate: string | null;
   status: string;
   isRefurbished: boolean;
+  isLightweight: boolean;
   listings: ProductListing[];
   reviewSummary: ReviewSummary;
   filteredBestPrice: number | null;

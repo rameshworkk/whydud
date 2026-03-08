@@ -93,6 +93,13 @@ export function ProductCard({ product }: ProductCardProps) {
           </span>
         )}
 
+        {/* Lightweight badge — shown when product has price data but no full details yet */}
+        {product.isLightweight && product.dudScore == null && (
+          <span className="absolute top-2 left-2 rounded-sm bg-slate-600/80 px-1.5 py-0.5 text-[10px] font-medium text-white leading-tight">
+            Price tracked
+          </span>
+        )}
+
         {/* Compare button overlay */}
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <AddToCompareButton product={product} className="shadow-sm" />

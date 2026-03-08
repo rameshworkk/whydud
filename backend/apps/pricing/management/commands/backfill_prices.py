@@ -125,7 +125,9 @@ class Command(BaseCommand):
         )
 
         # ── Utilities ────────────────────────────────────────────
-        sub.add_parser("status", help="Show backfill pipeline status dashboard")
+        pst = sub.add_parser("status", help="Show backfill pipeline status dashboard")
+        pst.add_argument("--watch", action="store_true", help="Refresh every 30s (Ctrl+C to stop)")
+        pst.add_argument("--json", action="store_true", dest="json_output", help="Machine-readable JSON output")
         sub.add_parser("reset-failed", help="Reset failed BackfillProducts for retry")
         sub.add_parser("refresh-aggregate", help="Refresh price_daily continuous aggregate")
 
@@ -320,46 +322,136 @@ class Command(BaseCommand):
     # ── Status ───────────────────────────────────────────────────
 
     def _handle_status(self, **options):
+        import json as json_mod
+        import time as time_mod
+
+        watch = options.get("watch", False)
+        json_output = options.get("json_output", False)
+
+        if watch and json_output:
+            self.stderr.write("--watch and --json cannot be combined.")
+            sys.exit(1)
+
+        while True:
+            data = self._collect_status_data()
+            if json_output:
+                self.stdout.write(json_mod.dumps(data, indent=2, default=str))
+                return
+            self._print_status_dashboard(data)
+            if not watch:
+                return
+            try:
+                self.stdout.write("\n  Refreshing in 30s... (Ctrl+C to stop)")
+                time_mod.sleep(30)
+                # Clear screen
+                self.stdout.write("\033[2J\033[H", ending="")
+            except KeyboardInterrupt:
+                self.stdout.write("\n")
+                return
+
+    def _collect_status_data(self) -> dict:
+        """Gather all pipeline metrics into a single dict."""
+        from apps.pricing.backfill.config import BackfillConfig
         from apps.pricing.backfill.injector import count_snapshots_by_source
         from apps.pricing.models import BackfillProduct
+        from apps.products.models import Product, ProductListing
 
-        self.stdout.write(self.style.MIGRATE_HEADING("BACKFILL STATUS"))
-        self.stdout.write("")
+        data: dict = {}
 
-        # BackfillProduct counts by status
+        # -- BackfillProduct total + by status --
         total = BackfillProduct.objects.count()
-        self.stdout.write(f"  BackfillProduct total: {total:,}")
-        if total > 0:
-            self.stdout.write("  BY STATUS:")
-            for status in BackfillProduct.Status:
-                count = BackfillProduct.objects.filter(status=status.value).count()
-                if count > 0:
-                    bar = "#" * min(count * 40 // total, 40) if total > 0 else ""
-                    self.stdout.write(f"    {status.label:<20} {count:>8,}  {bar}")
+        data["total"] = total
 
-            self.stdout.write("")
-            self.stdout.write("  BY MARKETPLACE:")
-            for row in (
-                BackfillProduct.objects
-                .values("marketplace_slug")
-                .annotate(cnt=Count("id"))
-                .order_by("-cnt")
-            ):
-                self.stdout.write(f"    {row['marketplace_slug']:<20} {row['cnt']:>8,}")
+        by_status = {}
+        for status in BackfillProduct.Status:
+            cnt = BackfillProduct.objects.filter(status=status.value).count()
+            if cnt > 0:
+                by_status[status.label] = cnt
+        data["by_status"] = by_status
 
-        # price_snapshots counts by source
-        self.stdout.write("")
-        self.stdout.write("  PRICE_SNAPSHOTS BY SOURCE:")
+        # -- By marketplace --
+        by_marketplace = {}
+        for row in (
+            BackfillProduct.objects
+            .values("marketplace_slug")
+            .annotate(cnt=Count("id"))
+            .order_by("-cnt")
+        ):
+            by_marketplace[row["marketplace_slug"]] = row["cnt"]
+        data["by_marketplace"] = by_marketplace
+
+        # -- Scrape status --
+        max_retries = BackfillConfig.scrape_max_retries()
+        scrape_status = {}
+        for ss in BackfillProduct.ScrapeStatus:
+            cnt = BackfillProduct.objects.filter(scrape_status=ss.value).count()
+            if cnt > 0:
+                scrape_status[ss.label] = cnt
+        # Split failed into retryable vs exhausted
+        failed_retryable = BackfillProduct.objects.filter(
+            scrape_status="failed", retry_count__lt=max_retries,
+        ).count()
+        failed_exhausted = BackfillProduct.objects.filter(
+            scrape_status="failed", retry_count__gte=max_retries,
+        ).count()
+        scrape_status["Failed (retryable)"] = failed_retryable
+        scrape_status["Failed (exhausted)"] = failed_exhausted
+        data["scrape_status"] = scrape_status
+
+        # -- Enrichment priority (pending scrape_status only) --
+        priority_labels = {
+            0: "P0 (on-demand)", 1: "P1 (Playwright)",
+            2: "P2 (curl_cffi)", 3: "P3 (curl_cffi-low)",
+        }
+        by_priority = {}
+        for row in (
+            BackfillProduct.objects.filter(scrape_status="pending")
+            .values("enrichment_priority")
+            .annotate(cnt=Count("id"))
+            .order_by("enrichment_priority")
+        ):
+            label = priority_labels.get(row["enrichment_priority"], f"P{row['enrichment_priority']}")
+            by_priority[label] = row["cnt"]
+        data["enrichment_priority"] = by_priority
+
+        # -- Enrichment method distribution (completed) --
+        by_method = {}
+        for row in (
+            BackfillProduct.objects.filter(scrape_status="scraped")
+            .values("enrichment_method")
+            .annotate(cnt=Count("id"))
+            .order_by("-cnt")
+        ):
+            by_method[row["enrichment_method"]] = row["cnt"]
+        data["enrichment_method"] = by_method
+
+        # -- Review status --
+        by_review = {}
+        for rs in BackfillProduct.ReviewStatus:
+            cnt = BackfillProduct.objects.filter(review_status=rs.value).count()
+            if cnt > 0:
+                by_review[rs.label] = cnt
+        data["review_status"] = by_review
+
+        # -- Products summary --
+        product_total = Product.objects.count()
+        lightweight = Product.objects.filter(is_lightweight=True).count()
+        with_reviews = Product.objects.filter(total_reviews__gt=0).count()
+        with_dudscore = Product.objects.filter(dud_score__isnull=False).count()
+        data["products"] = {
+            "total": product_total,
+            "lightweight": lightweight,
+            "enriched": product_total - lightweight,
+            "with_reviews": with_reviews,
+            "with_dudscore": with_dudscore,
+        }
+
+        # -- Price snapshots by source --
         source_counts = count_snapshots_by_source()
-        snapshot_total = sum(source_counts.values())
-        for source, count in sorted(source_counts.items(), key=lambda x: -x[1]):
-            self.stdout.write(f"    {source:<22} {count:>12,}")
-        self.stdout.write(f"    {'TOTAL':<22} {snapshot_total:>12,}")
+        data["snapshots_by_source"] = source_counts
+        data["snapshots_total"] = sum(source_counts.values())
 
-        # Existing ProductListing coverage
-        from apps.products.models import ProductListing
-        from apps.pricing.backfill.config import BackfillConfig
-
+        # -- Existing listing coverage --
         supported = list(BackfillConfig.bh_pos_map().keys())
         eligible = ProductListing.objects.filter(
             marketplace__slug__in=supported,
@@ -370,60 +462,114 @@ class Command(BaseCommand):
                 "SELECT COUNT(DISTINCT listing_id) FROM price_snapshots WHERE source = 'buyhatke'"
             )
             bh_covered = cur.fetchone()[0]
+        data["listings"] = {"eligible": eligible, "bh_covered": bh_covered}
 
-        self.stdout.write("")
-        self.stdout.write(f"  EXISTING LISTINGS: {eligible:,} eligible, {bh_covered:,} BH-covered")
+        # -- Estimated times --
+        pending_p1 = by_priority.get("P1 (Playwright)", 0)
+        pending_p2 = by_priority.get("P2 (curl_cffi)", 0) + by_priority.get("P3 (curl_cffi-low)", 0)
+        review_pending = BackfillProduct.objects.filter(review_status="pending").count()
 
-        # Phase 4 injectable candidates
-        injectable = BackfillProduct.objects.filter(
-            status__in=["bh_filled", "ph_extended"],
-            product_listing__isnull=True,
-        ).exclude(raw_price_data=[]).exclude(external_id="").count()
+        # Playwright: ~30s/product, curl_cffi: ~2s/product, reviews: ~15s/product
+        est_p1_hours = (pending_p1 * 30) / 3600
+        est_p2_hours = (pending_p2 * 2) / 3600
+        est_review_hours = (review_pending * 15) / 3600
+        data["estimates"] = {
+            "p1_playwright_hours": round(est_p1_hours, 1),
+            "p2_curlffi_hours": round(est_p2_hours, 1),
+            "review_hours": round(est_review_hours, 1),
+            "total_hours": round(est_p1_hours + est_p2_hours + est_review_hours, 1),
+        }
 
-        with_cache = BackfillProduct.objects.exclude(raw_price_data=[]).count()
-        self.stdout.write("")
-        self.stdout.write(f"  CACHED DATA: {with_cache:,} products with raw_price_data")
-        self.stdout.write(f"  INJECTABLE: {injectable:,} candidates for Phase 4 inject")
+        return data
 
-        # Scrape status
-        from apps.pricing.backfill.config import BackfillConfig as BConfig
-        max_retries = BConfig.scrape_max_retries()
-        pending = BackfillProduct.objects.filter(scrape_status="pending").exclude(external_id="").count()
-        scraped = BackfillProduct.objects.filter(scrape_status="scraped").count()
-        failed_retryable = BackfillProduct.objects.filter(
-            scrape_status="failed", retry_count__lt=max_retries,
-        ).count()
-        failed_exhausted = BackfillProduct.objects.filter(
-            scrape_status="failed", retry_count__gte=max_retries,
-        ).count()
+    def _print_status_dashboard(self, data: dict) -> None:
+        """Pretty-print the comprehensive status dashboard."""
+        from datetime import datetime
 
-        self.stdout.write("")
-        self.stdout.write("  SCRAPE STATUS:")
-        self.stdout.write(f"    {'pending':<25} {pending:>8,}  (never attempted)")
-        self.stdout.write(f"    {'scraped':<25} {scraped:>8,}  (ProductListing created)")
-        self.stdout.write(f"    {'failed (retry < {0})':<25} {failed_retryable:>8,}  (eligible for retry)".format(max_retries))
-        self.stdout.write(f"    {'failed (retry >= {0})':<25} {failed_exhausted:>8,}  (deprioritized)".format(max_retries))
+        w = self.stdout.write
+        heading = self.style.MIGRATE_HEADING
+        success = self.style.SUCCESS
 
-        # Enrichment priority distribution
-        self.stdout.write("")
-        self.stdout.write("  ENRICHMENT PRIORITY (pending only):")
-        priority_labels = {0: "P0 (on-demand)", 1: "P1 (Playwright)", 2: "P2 (curl_cffi)", 3: "P3 (curl_cffi-low)"}
-        for row in (
-            BackfillProduct.objects.filter(scrape_status="pending")
-            .values("enrichment_priority")
-            .annotate(cnt=Count("id"))
-            .order_by("enrichment_priority")
-        ):
-            label = priority_labels.get(row["enrichment_priority"], f"P{row['enrichment_priority']}")
-            self.stdout.write(f"    {label:<25} {row['cnt']:>8,}")
+        w(heading(f"BACKFILL PIPELINE STATUS — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"))
+        w("")
 
-        # Review status
-        self.stdout.write("")
-        self.stdout.write("  REVIEW STATUS:")
-        for rs in BackfillProduct.ReviewStatus:
-            cnt = BackfillProduct.objects.filter(review_status=rs.value).count()
-            if cnt > 0:
-                self.stdout.write(f"    {rs.label:<25} {cnt:>8,}")
+        total = data["total"]
+        w(f"  BackfillProduct total: {total:,}")
+        w("")
+
+        # -- BY STATUS --
+        if data["by_status"]:
+            w("  BY STATUS:")
+            for label, cnt in data["by_status"].items():
+                bar = "#" * min(cnt * 40 // max(total, 1), 40)
+                w(f"    {label:<20} {cnt:>8,}  {bar}")
+            w("")
+
+        # -- BY MARKETPLACE --
+        if data["by_marketplace"]:
+            w("  BY MARKETPLACE:")
+            for slug, cnt in data["by_marketplace"].items():
+                w(f"    {slug:<20} {cnt:>8,}")
+            w("")
+
+        # -- SCRAPE STATUS --
+        if data["scrape_status"]:
+            w("  SCRAPE STATUS:")
+            for label, cnt in data["scrape_status"].items():
+                if cnt > 0:
+                    w(f"    {label:<25} {cnt:>8,}")
+            w("")
+
+        # -- ENRICHMENT PRIORITY --
+        if data["enrichment_priority"]:
+            w("  ENRICHMENT PRIORITY (pending):")
+            for label, cnt in data["enrichment_priority"].items():
+                w(f"    {label:<25} {cnt:>8,}")
+            w("")
+
+        # -- ENRICHMENT METHOD (completed) --
+        if data["enrichment_method"]:
+            w("  ENRICHMENT METHOD (scraped):")
+            for method, cnt in data["enrichment_method"].items():
+                w(f"    {method:<25} {cnt:>8,}")
+            w("")
+
+        # -- REVIEW STATUS --
+        if data["review_status"]:
+            w("  REVIEW STATUS:")
+            for label, cnt in data["review_status"].items():
+                w(f"    {label:<25} {cnt:>8,}")
+            w("")
+
+        # -- PRODUCTS --
+        p = data["products"]
+        w("  PRODUCTS:")
+        w(f"    {'Total':<25} {p['total']:>8,}")
+        w(f"    {'Lightweight':<25} {p['lightweight']:>8,}")
+        w(f"    {'Enriched':<25} {p['enriched']:>8,}")
+        w(f"    {'With reviews':<25} {p['with_reviews']:>8,}")
+        w(f"    {'With DudScore':<25} {p['with_dudscore']:>8,}")
+        w("")
+
+        # -- PRICE SNAPSHOTS --
+        w("  PRICE SNAPSHOTS BY SOURCE:")
+        for source, cnt in sorted(data["snapshots_by_source"].items(), key=lambda x: -x[1]):
+            w(f"    {source:<22} {cnt:>12,}")
+        w(f"    {'TOTAL':<22} {data['snapshots_total']:>12,}")
+        w("")
+
+        # -- LISTINGS --
+        l = data["listings"]
+        w(f"  EXISTING LISTINGS: {l['eligible']:,} eligible, {l['bh_covered']:,} BH-covered")
+        w("")
+
+        # -- ESTIMATED TIMES --
+        e = data["estimates"]
+        w("  ESTIMATED TIME REMAINING:")
+        w(f"    P1 Playwright:       {e['p1_playwright_hours']:>8.1f} hrs")
+        w(f"    P2/P3 curl_cffi:     {e['p2_curlffi_hours']:>8.1f} hrs")
+        w(f"    Reviews:             {e['review_hours']:>8.1f} hrs")
+        w(success(f"    Total (sequential):  {e['total_hours']:>8.1f} hrs"))
 
     # ── Reset Failed ─────────────────────────────────────────────
 

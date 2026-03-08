@@ -3915,3 +3915,31 @@ Added DataImpulse sticky session routing for multi-worker enrichment. Each Celer
 |---|---|
 | `common/app_settings.py` | Added `ScrapingConfig.worker_id()` (reads `CELERY_WORKER_ID` env) and `sticky_session_rotation_interval()` |
 | `apps/scraping/middlewares.py` | Added `ProxyPool.get_sticky_proxy(session_key)` for Playwright, `SessionManager` class (rotates IP every N products), `get_curlffi_proxy_url(session_key)` helper for curl_cffi |
+
+---
+
+### BF-17: Frontend Lightweight Products + Status Dashboard (2026-03-08)
+
+**Status: DONE**
+
+**Part A — Frontend lightweight handling:**
+- Added `is_lightweight` to both `ProductListSerializer` and `ProductDetailSerializer`
+- Added `isLightweight` to frontend `ProductSummary` and `ProductDetail` TypeScript types
+- Product detail page: shows orange info banner ("Price history available. Full product details being fetched.") for lightweight products; hides empty Key Specs sidebar, DudScore section (when null), and Reviews sidebar (when 0 reviews)
+- Product cards: shows subtle "Price tracked" badge (slate-600/80 bg) on lightweight products that don't have a DudScore yet
+
+**Part B — Comprehensive status dashboard:**
+- Rewrote `backfill_prices status` with full pipeline visibility: BY STATUS, BY MARKETPLACE, SCRAPE STATUS (with retryable/exhausted split), ENRICHMENT PRIORITY, ENRICHMENT METHOD, REVIEW STATUS, PRODUCTS summary (total/lightweight/enriched/with_reviews/with_dudscore), PRICE SNAPSHOTS BY SOURCE, ESTIMATED TIME REMAINING
+- Added `--watch` flag (refreshes every 30s, clears screen)
+- Added `--json` flag for machine-readable output (full metrics dict)
+
+**Changes (7 files):**
+
+| File | Change |
+|---|---|
+| `apps/products/serializers.py` | Added `is_lightweight` to `ProductListSerializer` and `ProductDetailSerializer` fields |
+| `frontend/src/types/product.ts` | Added `isLightweight: boolean` to `ProductSummary` and `ProductDetail` interfaces |
+| `frontend/src/app/(public)/product/[slug]/page.tsx` | Lightweight info banner, conditional hide of specs/DudScore/reviews sections |
+| `frontend/src/components/product/product-card.tsx` | "Price tracked" badge for lightweight products |
+| `frontend/src/components/product/ProductCard.tsx` | "Price tracked" badge for lightweight products |
+| `apps/pricing/management/commands/backfill_prices.py` | Comprehensive status dashboard with `--watch` and `--json` flags |

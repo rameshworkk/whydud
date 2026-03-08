@@ -30,6 +30,7 @@ import {
   Weight,
   MemoryStick,
   Info,
+  Clock,
 } from "lucide-react";
 import type { ProductDetail, ProductSummary, PricePoint, Review, DudScoreLabel, BrandTrustScore } from "@/types";
 import { Suspense } from "react";
@@ -317,6 +318,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     lowestPriceEver: p.lowestPriceEver,
     images: p.images,
     isRefurbished: p.isRefurbished,
+    isLightweight: p.isLightweight,
     status: p.status,
   };
 
@@ -340,7 +342,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             title={p.title}
           />
 
-          {/* Key Specs */}
+          {/* Key Specs — hidden for lightweight products with no specs */}
+          {!(p.isLightweight && specs.length === 0) && (
           <div className="p-4 flex flex-col gap-0.5 flex-1">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">
               Key Specs
@@ -370,6 +373,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </button>
             )}
           </div>
+          )}
         </aside>
 
         {/* -- Center: Title, price, DudScore, marketplace prices, chart -- */}
@@ -389,6 +393,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </span>
             ))}
           </nav>
+
+          {/* Lightweight product banner */}
+          {p.isLightweight && (
+            <div className="flex items-center gap-2 rounded-lg border border-[#F97316]/20 bg-[#FFF7ED] px-3 py-2 mb-4">
+              <Clock className="w-4 h-4 text-[#F97316] shrink-0" />
+              <p className="text-xs text-[#9A3412]">
+                <span className="font-semibold">Price history available.</span>{" "}
+                Full product details, specs, and reviews are being fetched and will appear shortly.
+              </p>
+            </div>
+          )}
 
           {/* Brand + category + actions */}
           <div className="flex items-center justify-between mb-1">
@@ -502,7 +517,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </>
           )}
 
-          {/* -- DudScore section -- */}
+          {/* -- DudScore section (hidden for lightweight products without a score) -- */}
+          {!(p.isLightweight && p.dudScore == null) && (
           <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
             <div className="flex items-start gap-3">
               {/* Gauge */}
@@ -527,6 +543,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </div>
             </div>
           </div>
+
+          )}
 
           {/* -- Compare all available options -- */}
           {p.listings.length > 0 && (
@@ -569,14 +587,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <DiscussionSection productSlug={slug} />
         </main>
 
-        {/* -- Right Sidebar: Reviews -- */}
-        <ReviewSidebar
-          slug={slug}
-          totalReviews={p.totalReviews}
-          avgRating={p.avgRating ?? 0}
-          ratingDistribution={ratingDistribution}
-          initialReviews={reviews}
-        />
+        {/* -- Right Sidebar: Reviews (hidden for lightweight products with no reviews) -- */}
+        {!(p.isLightweight && p.totalReviews === 0) && (
+          <ReviewSidebar
+            slug={slug}
+            totalReviews={p.totalReviews}
+            avgRating={p.avgRating ?? 0}
+            ratingDistribution={ratingDistribution}
+            initialReviews={reviews}
+          />
+        )}
       </div>
     </>
   );
