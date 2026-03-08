@@ -271,19 +271,13 @@ services:
     networks:
       - whydud
 
-  # ── Backup cron (runs pg_dump every 6 hours) ──────────────────────────────
+  # ── Backup sidecar (runs pg_dump every 6 hours via sleep loop) ────────────
   backup:
     image: timescale/timescaledb:latest-pg16
     container_name: whydud-backup
     restart: unless-stopped
     entrypoint: /bin/bash
-    command: >
-      -c "
-        apt-get update -qq && apt-get install -y -qq curl rclone cron > /dev/null 2>&1;
-        chmod +x /scripts/backup.sh;
-        echo '0 */6 * * * POSTGRES_DB=${POSTGRES_DB:-whydud} POSTGRES_USER=${POSTGRES_USER:-whydud} POSTGRES_PASSWORD=${POSTGRES_PASSWORD} POSTGRES_HOST=postgres POSTGRES_PORT=5432 DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL} NODE_ROLE=primary RCLONE_S3_ENDPOINT=${RCLONE_S3_ENDPOINT:-} RCLONE_S3_ACCESS_KEY=${RCLONE_S3_ACCESS_KEY:-} RCLONE_S3_SECRET_KEY=${RCLONE_S3_SECRET_KEY:-} BACKUP_S3_BUCKET=${BACKUP_S3_BUCKET:-whydud-backups} /scripts/backup.sh >> /var/log/backup.log 2>&1' | crontab -;
-        cron -f
-      "
+    command: ["/scripts/backup-entrypoint.sh"]
     env_file: ../.env
     environment:
       POSTGRES_HOST: postgres
@@ -296,10 +290,12 @@ services:
       RCLONE_S3_ACCESS_KEY: ${RCLONE_S3_ACCESS_KEY:-}
       RCLONE_S3_SECRET_KEY: ${RCLONE_S3_SECRET_KEY:-}
       BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-whydud-backups}
+      BACKUP_INTERVAL_SECONDS: "21600"
       NODE_ROLE: primary
     volumes:
       - backup_data:/backups
       - ./backend/scripts/backup.sh:/scripts/backup.sh:ro
+      - ./backend/scripts/backup-entrypoint.sh:/scripts/backup-entrypoint.sh:ro
     depends_on:
       postgres:
         condition: service_healthy
