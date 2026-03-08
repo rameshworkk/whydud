@@ -26,6 +26,9 @@ Usage::
     python manage.py backfill_prices inject --batch 5000
     python manage.py backfill_prices inject --marketplace amazon-in --dry-run
 
+    # Lightweight records: Product+Listing from tracker data (no scraping)
+    python manage.py backfill_prices create-lightweight --batch 1000
+
     # Utilities
     python manage.py backfill_prices status
     python manage.py backfill_prices reset-failed
@@ -89,6 +92,37 @@ class Command(BaseCommand):
         p4.add_argument("--batch", type=int, default=5000, help="Batch size")
         p4.add_argument("--marketplace", type=str, default=None, help="Filter by marketplace slug")
         p4.add_argument("--dry-run", action="store_true", help="Find matches but don't inject")
+
+        # ── Lightweight record creator ─────────────────────────────
+        plw = sub.add_parser(
+            "create-lightweight",
+            help="Create Product+Listing from tracker data (no scraping)",
+        )
+        plw.add_argument("--batch", type=int, default=1000, help="Batch size per loop iteration")
+
+        # ── Priority + review target assignment ────────────────────
+        pap = sub.add_parser(
+            "assign-priorities",
+            help="Assign enrichment priorities (P1/P2/P3) and review targets",
+        )
+        pap.add_argument(
+            "--max-review", type=int, default=100_000,
+            help="Max products to mark for review scraping (default: 100000)",
+        )
+
+        # ── Enrichment ────────────────────────────────────────────
+        pen = sub.add_parser(
+            "enrich",
+            help="Run tiered enrichment (Playwright for P0-P1, curl_cffi for P2-P3)",
+        )
+        pen.add_argument(
+            "--batch", type=int, default=100,
+            help="Number of products per batch (default: 100)",
+        )
+        pen.add_argument(
+            "--id", type=str, default=None, dest="product_id",
+            help="Enrich a single BackfillProduct by UUID",
+        )
 
         # ── Utilities ────────────────────────────────────────────
         sub.add_parser("status", help="Show backfill pipeline status dashboard")
@@ -194,6 +228,95 @@ class Command(BaseCommand):
         )
         self._print_result("Phase 4", result)
 
+    # ── Lightweight record creator ────────────────────────────────
+
+    def _handle_create_lightweight(self, **options):
+        from apps.pricing.backfill.lightweight_creator import create_lightweight_records
+
+        batch_size = options.get("batch", 1000)
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"Lightweight record creator (batch={batch_size})"
+        ))
+
+        total_stats = {
+            "created": 0, "linked": 0, "skipped": 0,
+            "errors": 0, "snapshots_injected": 0,
+        }
+        iteration = 0
+
+        while True:
+            iteration += 1
+            self.stdout.write(f"\n  Iteration {iteration}...")
+            result = create_lightweight_records(batch_size=batch_size)
+
+            for key in total_stats:
+                total_stats[key] += result.get(key, 0)
+
+            processed = result["created"] + result["linked"] + result["skipped"] + result["errors"]
+            if processed == 0:
+                self.stdout.write("  No more candidates — done.")
+                break
+
+            self.stdout.write(
+                f"  Batch: {result['created']} created, {result['linked']} linked, "
+                f"{result['skipped']} skipped, {result['errors']} errors, "
+                f"{result['snapshots_injected']:,} snapshots"
+            )
+
+        self._print_result("Lightweight creator", total_stats)
+
+    # ── Assign Priorities ────────────────────────────────────────
+
+    def _handle_assign_priorities(self, **options):
+        from apps.pricing.backfill.prioritizer import (
+            assign_enrichment_priorities,
+            assign_review_targets,
+            populate_derived_fields,
+        )
+
+        self.stdout.write(self.style.MIGRATE_HEADING("Populating derived fields"))
+        pop_result = populate_derived_fields()
+        self.stdout.write(
+            f"  Prices filled: {pop_result['price_filled']:,}  |  "
+            f"Categories inferred: {pop_result['category_filled']:,}"
+        )
+
+        self.stdout.write(self.style.MIGRATE_HEADING("Assigning enrichment priorities"))
+        result = assign_enrichment_priorities()
+        self.stdout.write(
+            f"  P1 (Playwright): {result['p1']:,}  |  P2 (curl_cffi): {result['p2']:,}"
+        )
+
+        max_review = options.get("max_review", 100_000)
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"Assigning review targets (max={max_review:,})"
+        ))
+        review_total = assign_review_targets(max_review_products=max_review)
+        self.stdout.write(f"  Review targets assigned: {review_total:,}")
+        self.stdout.write(self.style.SUCCESS("Priority assignment complete."))
+
+    # ── Enrichment ─────────────────────────────────────────────
+
+    def _handle_enrich(self, **options):
+        from apps.pricing.backfill.enrichment import (
+            enrich_batch,
+            enrich_single_product,
+        )
+
+        product_id = options.get("product_id")
+        if product_id:
+            self.stdout.write(f"Enriching single product: {product_id}")
+            result = enrich_single_product(product_id)
+            self._print_result("Enrich single", result)
+            return
+
+        batch_size = options.get("batch", 100)
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"Enrichment batch (size={batch_size})"
+        ))
+        result = enrich_batch(batch_size=batch_size)
+        self._print_result("Enrichment batch", result)
+
     # ── Status ───────────────────────────────────────────────────
 
     def _handle_status(self, **options):
@@ -280,6 +403,27 @@ class Command(BaseCommand):
         self.stdout.write(f"    {'scraped':<25} {scraped:>8,}  (ProductListing created)")
         self.stdout.write(f"    {'failed (retry < {0})':<25} {failed_retryable:>8,}  (eligible for retry)".format(max_retries))
         self.stdout.write(f"    {'failed (retry >= {0})':<25} {failed_exhausted:>8,}  (deprioritized)".format(max_retries))
+
+        # Enrichment priority distribution
+        self.stdout.write("")
+        self.stdout.write("  ENRICHMENT PRIORITY (pending only):")
+        priority_labels = {0: "P0 (on-demand)", 1: "P1 (Playwright)", 2: "P2 (curl_cffi)", 3: "P3 (curl_cffi-low)"}
+        for row in (
+            BackfillProduct.objects.filter(scrape_status="pending")
+            .values("enrichment_priority")
+            .annotate(cnt=Count("id"))
+            .order_by("enrichment_priority")
+        ):
+            label = priority_labels.get(row["enrichment_priority"], f"P{row['enrichment_priority']}")
+            self.stdout.write(f"    {label:<25} {row['cnt']:>8,}")
+
+        # Review status
+        self.stdout.write("")
+        self.stdout.write("  REVIEW STATUS:")
+        for rs in BackfillProduct.ReviewStatus:
+            cnt = BackfillProduct.objects.filter(review_status=rs.value).count()
+            if cnt > 0:
+                self.stdout.write(f"    {rs.label:<25} {cnt:>8,}")
 
     # ── Reset Failed ─────────────────────────────────────────────
 

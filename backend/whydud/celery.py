@@ -167,6 +167,17 @@ app.conf.beat_schedule = {
         "args": ["firstcry"],
         "options": {"queue": "scraping"},
     },
+    # --- Backfill enrichment ---
+    "backfill-enrich-batch": {
+        "task": "apps.pricing.backfill.enrichment.enrich_batch",
+        "schedule": crontab(minute="*/15"),
+        "kwargs": {"batch_size": 100},
+        "options": {"queue": "scraping"},
+    },
+    "backfill-cleanup-stale": {
+        "task": "apps.pricing.backfill.enrichment.cleanup_stale_enrichments",
+        "schedule": crontab(minute=30, hour="*/1"),
+    },
     # --- Missing periodic tasks ---
     "expire-reward-points-monthly": {
         "task": "apps.rewards.tasks.expire_points",

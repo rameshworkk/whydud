@@ -133,6 +133,22 @@ class ProductDetailView(APIView):
             .prefetch_related("listings__marketplace", "listings__seller"),
             slug=slug,
         )
+
+        # Trigger on-demand enrichment for lightweight products
+        if product.is_lightweight:
+            try:
+                from apps.pricing.backfill.enrichment import (
+                    trigger_on_demand_enrichment,
+                )
+
+                listing = product.listings.first()
+                if listing:
+                    trigger_on_demand_enrichment(
+                        listing.external_id, listing.marketplace.slug
+                    )
+            except ImportError:
+                pass  # backfill module not available
+
         preferred = _get_preferred_marketplace_ids(request)
         return success_response(
             ProductDetailSerializer(

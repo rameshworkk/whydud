@@ -3767,3 +3767,29 @@ python manage.py backfill_prices create-lightweight --batch 5  # small test
 - For normal (non-backfill) scrapes: finds 0 matches, returns instantly
 
 **`source='scraper'` in price_snapshots INSERT** — already present in existing code, no change needed
+
+---
+
+### BF-11: Tiered Enrichment Worker ✅
+**Date:** 2026-03-08
+
+**Created `apps/pricing/backfill/enrichment.py`** — 6 tasks/functions:
+
+1. **`enrich_single_product(id)`** — routes to Playwright (P0-P1) or curl_cffi (P2-P3) based on `enrichment_priority`. Marks `scrape_status='enriching'`, sets `enrichment_method`, dispatches appropriate task.
+2. **`enrich_via_http(id)`** — curl_cffi path. Calls `curlffi_extractor.extract_product_data()` (BF-12). Updates ProductListing + Product directly, sets `is_lightweight=False`, chains review scraping if `review_status='pending'`. Handles retries (3 max). Gracefully returns if `curlffi_extractor` not built yet.
+3. **`enrich_batch(batch_size=100)`** — Celery Beat entry point (every 15 min). Dispatches `enrich_single_product` for N products ordered by `enrichment_priority` then `created_at`.
+4. **`trigger_on_demand_enrichment(external_id, marketplace_slug)`** — called from ProductDetailView when user visits lightweight product. Promotes to P0, fires with Celery priority 9.
+5. **`queue_review_scraping(listing_id, marketplace_slug, external_id)`** — chains review spider after enrichment. Updates `review_status` to 'scraping', dispatches `run_review_spider` for amazon-in/flipkart, skips others.
+6. **`cleanup_stale_enrichments()`** — hourly cleanup. Resets stuck 'enriching' records (2+ hours old) to pending (retry_count < 3) or failed (retry_count >= 3).
+
+**Celery Beat schedules added** (`whydud/celery.py`):
+- `backfill-enrich-batch`: every 15 min, batch_size=100
+- `backfill-cleanup-stale`: hourly at :30
+
+**On-demand enrichment wired into ProductDetailView** (`apps/products/views.py`):
+- When `product.is_lightweight`, triggers `trigger_on_demand_enrichment()` with first listing's external_id + marketplace_slug
+- Wrapped in `try/except ImportError` for safety
+
+**`enrich` subcommand added to `backfill_prices` management command**:
+- `python manage.py backfill_prices enrich --batch 100` — batch mode
+- `python manage.py backfill_prices enrich --id <uuid>` — single product
