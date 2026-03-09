@@ -45,7 +45,7 @@
    │  PRIMARY NODE    │         │  REPLICA NODE    │
    │  95.111.232.70   │         │  46.250.237.93   │
    │  12GB / 6 vCPU   │ WG VPN │  8GB / 4 vCPU    │
-   │  10.0.0.1        │◄──────►│  10.0.0.2        │
+   │  10.8.0.1        │◄──────►│  10.8.0.2        │
    └──────────────────┘ :51820 └──────────────────┘
 ```
 
@@ -56,8 +56,8 @@
 | Caddy | whydud-caddy | 80, 443 | 80, 443 | Reverse proxy + TLS |
 | Backend (Gunicorn) | whydud-backend | — | 8000 | Internal only |
 | Frontend (Next.js) | whydud-frontend | — | 3000 | Internal only |
-| PostgreSQL | whydud-postgres | 127.0.0.1:5432, 10.0.0.1:5432 | 5432 | Primary exposes on WG IP |
-| Redis | whydud-redis | 127.0.0.1:6379, 10.0.0.1:6379 | 6379 | Primary exposes on WG IP |
+| PostgreSQL | whydud-postgres | 127.0.0.1:5432, 10.8.0.1:5432 | 5432 | Primary exposes on WG IP |
+| Redis | whydud-redis | 127.0.0.1:6379, 10.8.0.1:6379 | 6379 | Primary exposes on WG IP |
 | Meilisearch | whydud-meilisearch | 127.0.0.1:7700 | 7700 | Localhost only |
 | Celery Worker | whydud-celery-worker | — | 8000 (unused) | Primary: default,scoring,alerts,email |
 | Celery Beat | whydud-celery-beat | — | 8000 (unused) | Primary only (scheduler) |
@@ -345,13 +345,13 @@ sudo ufw status
 **Primary (95.111.232.70) — `/etc/wireguard/wg0.conf`:**
 ```ini
 [Interface]
-Address = 10.0.0.1/24
+Address = 10.8.0.1/24
 ListenPort = 51820
 PrivateKey = <PRIMARY_PRIVATE_KEY>
 
 [Peer]
 PublicKey = <REPLICA_PUBLIC_KEY>
-AllowedIPs = 10.0.0.2/32
+AllowedIPs = 10.8.0.2/32
 Endpoint = 46.250.237.93:51820
 PersistentKeepalive = 25
 ```
@@ -359,13 +359,13 @@ PersistentKeepalive = 25
 **Replica (46.250.237.93) — `/etc/wireguard/wg0.conf`:**
 ```ini
 [Interface]
-Address = 10.0.0.2/24
+Address = 10.8.0.2/24
 ListenPort = 51820
 PrivateKey = <REPLICA_PRIVATE_KEY>
 
 [Peer]
 PublicKey = <PRIMARY_PUBLIC_KEY>
-AllowedIPs = 10.0.0.1/32
+AllowedIPs = 10.8.0.1/32
 Endpoint = 95.111.232.70:51820
 PersistentKeepalive = 25
 ```
@@ -379,8 +379,8 @@ sudo systemctl enable wg-quick@wg0
 sudo systemctl start wg-quick@wg0
 
 # Verify tunnel
-ping 10.0.0.2  # from primary
-ping 10.0.0.1  # from replica
+ping 10.8.0.2  # from primary
+ping 10.8.0.1  # from replica
 ```
 
 ### Directory Structure (both nodes)
@@ -535,7 +535,7 @@ DISCORD_WEBHOOK_URL=               # Discord webhook for Celery task notificatio
 | REDIS_PASSWORD | SAME | SAME | Replica connects to primary Redis |
 | DATABASE_URL | Set by compose | Set by compose | Points to local postgres |
 | DATABASE_WRITE_URL | NOT SET | Set by compose | Replica → primary WG IP |
-| CELERY_BROKER_URL | Set by compose (local) | Set by compose (10.0.0.1) | Replica uses primary Redis |
+| CELERY_BROKER_URL | Set by compose (local) | Set by compose (10.8.0.1) | Replica uses primary Redis |
 | NODE_ROLE | primary | replica | Set by compose |
 | SCRAPING_PROXY_* | Optional | YES | Scraping runs on replica |
 | DISCORD_WEBHOOK_URL | YES | YES | Celery task notifications to Discord |
@@ -697,13 +697,13 @@ Clone repo, create .env (with replica-specific values), create certs.
 
 ```bash
 # From replica, can you reach primary?
-ping 10.0.0.1
+ping 10.8.0.1
 
 # Can you reach primary PostgreSQL?
-nc -zv 10.0.0.1 5432
+nc -zv 10.8.0.1 5432
 
 # Can you reach primary Redis?
-nc -zv 10.0.0.1 6379
+nc -zv 10.8.0.1 6379
 ```
 
 ### Step 3: Bootstrap PostgreSQL Replica
@@ -722,9 +722,9 @@ docker volume rm whydud_postgres_data 2>/dev/null || true
 # Bootstrap from primary via pg_basebackup
 docker run --rm \
   -v whydud_postgres_data:/var/lib/postgresql/data \
-  --add-host=primary:10.0.0.1 \
+  --add-host=primary:10.8.0.1 \
   timescale/timescaledb:latest-pg16 \
-  pg_basebackup -h 10.0.0.1 -U replicator -D /var/lib/postgresql/data \
+  pg_basebackup -h 10.8.0.1 -U replicator -D /var/lib/postgresql/data \
   -Fp -Xs -P -R -S replica_slot
 ```
 
@@ -896,24 +896,24 @@ The project currently has no `.dockerignore` file. This means Docker sends the e
 |---|---|---|
 | **Compose file** | `docker-compose.primary.yml` | `docker-compose.replica.yml` |
 | **Server** | 95.111.232.70 (12GB/6CPU) | 46.250.237.93 (8GB/4CPU) |
-| **WireGuard IP** | 10.0.0.1 | 10.0.0.2 |
+| **WireGuard IP** | 10.8.0.1 | 10.8.0.2 |
 | **PostgreSQL role** | PRIMARY (read/write) | REPLICA (read-only) |
-| **PostgreSQL ports** | 127.0.0.1:5432 + 10.0.0.1:5432 | 127.0.0.1:5432 only |
-| **Redis ports** | 127.0.0.1:6379 + 10.0.0.1:6379 | 127.0.0.1:6379 only |
+| **PostgreSQL ports** | 127.0.0.1:5432 + 10.8.0.1:5432 | 127.0.0.1:5432 only |
+| **Redis ports** | 127.0.0.1:6379 + 10.8.0.1:6379 | 127.0.0.1:6379 only |
 | **PostgreSQL memory** | 3 GB | 2 GB |
 | **Redis memory** | 768 MB (maxmemory 512mb) | 512 MB (maxmemory 384mb) |
 | **Backend workers** | 3 workers × 2 threads | 2 workers × 2 threads |
 | **Backend memory** | 2 GB | 1.5 GB |
 | **NODE_ROLE** | `primary` | `replica` |
 | **DATABASE_URL** | postgres://whydud:pass@postgres:5432/whydud | Same (local replica) |
-| **DATABASE_WRITE_URL** | NOT SET | postgres://whydud:pass@10.0.0.1:5432/whydud |
-| **CELERY_BROKER_URL** | redis://:pass@redis:6379/0 (local) | redis://:pass@10.0.0.1:6379/0 (primary) |
+| **DATABASE_WRITE_URL** | NOT SET | postgres://whydud:pass@10.8.0.1:5432/whydud |
+| **CELERY_BROKER_URL** | redis://:pass@redis:6379/0 (local) | redis://:pass@10.8.0.1:6379/0 (primary) |
 | **Celery worker** | celery-worker: default,scoring,alerts,email | celery-scraping: scraping only |
 | **Celery beat** | YES (scheduler) | NO |
 | **Migrations** | YES (on every deploy) | NEVER (replicated from primary) |
 | **init-replication.sh** | YES (creates replicator user) | NO |
 | **primary.conf** | YES (WAL, replication settings) | NO (uses default config) |
-| **pg_hba.conf** | YES (allows 10.0.0.2 replication) | NO |
+| **pg_hba.conf** | YES (allows 10.8.0.2 replication) | NO |
 | **SCRAPING_PROXY_*** | Optional | Required |
 
 ---
@@ -1005,8 +1005,8 @@ local   all       all                            trust           # Unix socket (
 host    all       all         127.0.0.1/32       scram-sha-256   # Loopback IPv4
 host    all       all         ::1/128            scram-sha-256   # Loopback IPv6
 host    all       all         172.16.0.0/12      scram-sha-256   # Docker bridge networks
-host    replication replicator 10.0.0.2/32       scram-sha-256   # Replica replication user via WG
-host    all       whydud      10.0.0.2/32        scram-sha-256   # Replica app reads via WG
+host    replication replicator 10.8.0.2/32       scram-sha-256   # Replica replication user via WG
+host    all       whydud      10.8.0.2/32        scram-sha-256   # Replica app reads via WG
 ```
 
 ### init.sql (runs once on first volume init)
@@ -1290,8 +1290,8 @@ WhiteNoiseMiddleware is inserted directly after SecurityMiddleware in the middle
 
 ### Issue 20: Running Wrong Compose File on Wrong Node
 
-**Symptom:** Redis fails to bind `10.0.0.1:6379` on replica, containers can't resolve `postgres` hostname, networking chaos.
-**Cause:** Accidentally ran `docker compose -f docker-compose.primary.yml` on the replica server. Primary compose binds Redis to `10.0.0.1` (WireGuard IP only available on primary).
+**Symptom:** Redis fails to bind `10.8.0.1:6379` on replica, containers can't resolve `postgres` hostname, networking chaos.
+**Cause:** Accidentally ran `docker compose -f docker-compose.primary.yml` on the replica server. Primary compose binds Redis to `10.8.0.1` (WireGuard IP only available on primary).
 **Fix:** Stop all containers, remove orphans (`docker compose down --remove-orphans`), use correct compose file (`docker-compose.replica.yml` on replica).
 **Prevention:** Always verify which server you're on before running compose commands. Consider aliasing: `alias dc-primary='docker compose -f docker-compose.primary.yml'` and `alias dc-replica='docker compose -f docker-compose.replica.yml'`.
 
@@ -1363,7 +1363,7 @@ docs
 
 ### 9. ~~WireGuard Tunnel Unverified~~ RESOLVED
 
-**Status:** Verified 2026-03-03. Bidirectional connectivity confirmed (10.0.0.1 ↔ 10.0.0.2). Replica connects to primary PostgreSQL and Redis over WireGuard.
+**Status:** Verified 2026-03-03. Bidirectional connectivity confirmed (10.8.0.1 ↔ 10.8.0.2). Replica connects to primary PostgreSQL and Redis over WireGuard.
 
 ### 10. No Rollback Strategy
 

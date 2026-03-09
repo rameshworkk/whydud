@@ -77,6 +77,7 @@ function loadPersistedItems(): ProductSummary[] {
       lowestPriceEver: null,
       images: item.image ? [item.image] : null,
       isRefurbished: false,
+      isLightweight: false,
       status: "active",
     }));
   } catch {

@@ -256,6 +256,7 @@ print(f'Task 1: {r1.id}')
 print(f'Task 2: {r2.id}')
 "
 
+docker compose -f docker-compose.primary.yml logs -f celery-worker --tail 50 | grep -i "phase 1\|progress\|created\|parsed"
 
 **Safe to re-run:** Products are upserted by ASIN — duplicates silently skipped.
 
@@ -418,6 +419,8 @@ python manage.py backfill_prices scrape-reviews --batch 100
 # Step 1: Create lightweight records from existing ~44K products
 python manage.py backfill_prices create-lightweight --batch 2000
 # Repeat until status shows 0 candidates
+python manage.py backfill_prices bh-fill --batch 5000 --celery --workers 2 --repeat
+
 
 # Step 2: Assign priorities + review targets
 python manage.py backfill_prices assign-priorities

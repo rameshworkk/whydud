@@ -42,6 +42,9 @@ frontend/yarn-error.log*
 # ---- Docker ----
 docker/caddy_data/
 docker/certs/
+docker/setup-worker.sh
+docker/.env.worker
+*.env.worker
 
 # ---- IDEs ----
 .vscode/settings.json

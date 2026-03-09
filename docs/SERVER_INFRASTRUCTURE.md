@@ -13,7 +13,7 @@ Whydud runs on a **two-node active-active** architecture with PostgreSQL streami
 ### Node 1: PRIMARY (whydud-primary)
 - **Provider:** Contabo VPS
 - **Public IP:** 95.111.232.70
-- **WireGuard IP:** 10.0.0.1
+- **WireGuard IP:** 10.8.0.1
 - **Specs:** 12 GB RAM / 6 vCPU
 - **OS:** Ubuntu 24
 - **Hostname:** whydud-primary
@@ -23,7 +23,7 @@ Whydud runs on a **two-node active-active** architecture with PostgreSQL streami
 ### Node 2: REPLICA (whydud-replica)
 - **Provider:** Contabo VPS
 - **Public IP:** 46.250.237.93
-- **WireGuard IP:** 10.0.0.2
+- **WireGuard IP:** 10.8.0.2
 - **Specs:** 8 GB RAM / 4 vCPU
 - **OS:** Ubuntu 24
 - **Hostname:** whydud-replica
@@ -59,7 +59,7 @@ Whydud runs on a **two-node active-active** architecture with PostgreSQL streami
     └─────────────┘    └────────────────┘
           │                    │
           └──── WireGuard ─────┘
-               10.0.0.1 ↔ 10.0.0.2
+               10.8.0.1 ↔ 10.8.0.2
                UDP 51820
 ```
 
@@ -75,8 +75,8 @@ Whydud runs on a **two-node active-active** architecture with PostgreSQL streami
 - **Load Balancing:** Round-robin via dual A records (free, automatic)
 
 ### WireGuard VPN
-- **Primary:** 10.0.0.1/24 (ListenPort 51820)
-- **Replica:** 10.0.0.2/24 (ListenPort 51820)
+- **Primary:** 10.8.0.1/24 (ListenPort 51820)
+- **Replica:** 10.8.0.2/24 (ListenPort 51820)
 - **Config location:** /etc/wireguard/wg0.conf
 - **Monitor:** /opt/scripts/wg-monitor.sh (cron every 5 min)
 - **Purpose:** Secure inter-node communication for PostgreSQL replication, Redis shared broker, database write routing
@@ -132,8 +132,8 @@ Whydud runs on a **two-node active-active** architecture with PostgreSQL streami
 
 | Service | Image/Build | Port | Memory Limit | Notes |
 |---------|------------|------|-------------|-------|
-| postgres | timescale/timescaledb:latest-pg16 | 127.0.0.1:5432, 10.0.0.1:5432 | 3G | PRIMARY with streaming replication |
-| redis | redis:7-alpine | 127.0.0.1:6379, 10.0.0.1:6379 | 768M | Shared broker (replica connects via WireGuard) |
+| postgres | timescale/timescaledb:latest-pg16 | 127.0.0.1:5432, 10.8.0.1:5432 | 3G | PRIMARY with streaming replication |
+| redis | redis:7-alpine | 127.0.0.1:6379, 10.8.0.1:6379 | 768M | Shared broker (replica connects via WireGuard) |
 | meilisearch | getmeili/meilisearch:v1.7 | 127.0.0.1:7700 | 1G | Product search engine |
 | caddy | caddy:2-alpine | 80, 443 | 128M | Reverse proxy (HTTP only behind Cloudflare) |
 | backend | backend.Dockerfile (production) | internal:8000 | 2G | Django + Gunicorn (3 workers, gthread) |
@@ -158,14 +158,14 @@ Whydud runs on a **two-node active-active** architecture with PostgreSQL streami
 ## Database Architecture
 
 ### PostgreSQL Streaming Replication
-- **Primary (10.0.0.1:5432):** Accepts all reads and writes
-- **Replica (10.0.0.2:5432):** Read-only replica, streams WAL from primary
+- **Primary (10.8.0.1:5432):** Accepts all reads and writes
+- **Replica (10.8.0.2:5432):** Read-only replica, streams WAL from primary
 - **Replication user:** `replicator` (created by init-replication.sql)
 - **Replication slot:** `replica_slot`
 
 ### Write Routing (Django)
 - PRIMARY node: All reads/writes go to local postgres (DATABASE_URL)
-- REPLICA node: Reads go to local postgres (DATABASE_URL), writes routed to primary via WireGuard (DATABASE_WRITE_URL = postgres://...@10.0.0.1:5432/whydud)
+- REPLICA node: Reads go to local postgres (DATABASE_URL), writes routed to primary via WireGuard (DATABASE_WRITE_URL = postgres://...@10.8.0.1:5432/whydud)
 - Implemented via Django database router class
 
 ### Primary PostgreSQL Config (primary.conf)
@@ -187,8 +187,8 @@ local   all             all                                     trust
 host    all             all             127.0.0.1/32            scram-sha-256
 host    all             all             ::1/128                 scram-sha-256
 host    all             all             172.16.0.0/12           scram-sha-256
-host    replication     replicator      10.0.0.2/32             scram-sha-256
-host    all             whydud          10.0.0.2/32             scram-sha-256
+host    replication     replicator      10.8.0.2/32             scram-sha-256
+host    all             whydud          10.8.0.2/32             scram-sha-256
 ```
 
 ### Database Extensions
@@ -201,9 +201,9 @@ host    all             whydud          10.0.0.2/32             scram-sha-256
 ---
 
 ## Redis Architecture
-- **Primary (10.0.0.1:6379):** Shared Celery broker + cache + sessions
+- **Primary (10.8.0.1:6379):** Shared Celery broker + cache + sessions
 - **Replica (local 6379):** Local cache only
-- **Replica's Celery broker:** Points to primary Redis via WireGuard (10.0.0.1:6379)
+- **Replica's Celery broker:** Points to primary Redis via WireGuard (10.8.0.1:6379)
 - **Auth:** Password protected (REDIS_PASSWORD env var)
 
 ---
@@ -251,10 +251,10 @@ CELERY_BROKER_URL=redis://:<pass>@redis:6379/0
 ```
 NODE_ROLE=replica
 DATABASE_URL=postgres://whydud:<pass>@postgres:5432/whydud          # local replica (reads)
-DATABASE_WRITE_URL=postgres://whydud:<pass>@10.0.0.1:5432/whydud    # primary via WireGuard (writes)
+DATABASE_WRITE_URL=postgres://whydud:<pass>@10.8.0.1:5432/whydud    # primary via WireGuard (writes)
 REDIS_URL=redis://:<pass>@redis:6379/0                              # local redis
-CELERY_BROKER_URL=redis://:<pass>@10.0.0.1:6379/0                  # primary redis via WireGuard
-CELERY_RESULT_BACKEND=redis://:<pass>@10.0.0.1:6379/1
+CELERY_BROKER_URL=redis://:<pass>@10.8.0.1:6379/0                  # primary redis via WireGuard
+CELERY_RESULT_BACKEND=redis://:<pass>@10.8.0.1:6379/1
 SCRAPING_PROXY_LIST=http://<dataimpulse_credentials>@gw.dataimpulse.com:823
 SCRAPING_PROXY_TYPE=rotating
 ```
@@ -337,7 +337,7 @@ docker volume rm whydud_postgres_data
 # Run pg_basebackup from primary via WireGuard
 docker run --rm -v whydud_postgres_data:/var/lib/postgresql/data \
   timescale/timescaledb:latest-pg16 \
-  pg_basebackup -h 10.0.0.1 -U replicator -D /var/lib/postgresql/data \
+  pg_basebackup -h 10.8.0.1 -U replicator -D /var/lib/postgresql/data \
   -Fp -Xs -P -R -S replica_slot
 
 # Start replica
@@ -380,7 +380,7 @@ docker compose -f docker-compose.replica.yml up -d backend
 - **SSH:** Key-only auth (ed25519), password auth disabled, root login disabled
 - **SSH key:** `C:\Users\rames\Downloads\whydud-key` (private), user: `deploy`
 - **Fail2ban:** SSH brute force protection, 24h ban after 3 failures
-- **PostgreSQL:** Binds to WireGuard IP only (10.0.0.x), never public internet
+- **PostgreSQL:** Binds to WireGuard IP only (10.8.0.x), never public internet
 - **Redis:** Password auth required
 - **UFW:** Only ports 22, 80, 443, 51820 open
 - **Docker:** Log rotation (10MB max, 3 files)

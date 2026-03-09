@@ -4049,3 +4049,51 @@ Added four new subcommands to `backfill_prices` management command for pipeline 
 | `apps/pricing/tasks.py` | Added `delay` param to `run_phase2_buyhatke` and `run_phase3_extend` |
 | `apps/pricing/management/commands/backfill_prices.py` | Added `--celery`/`--workers` flags, replaced `--no-filter` with `--filter-electronics` |
 | `docs/OPERATIONS_GUIDE.md` | Celery dispatch examples added to parallel workers section |
+
+---
+
+### OCI Worker Node Setup + BuyHatke Rate Limiting — 2026-03-09
+
+**Worker Node Infrastructure:**
+- Created `docker/Dockerfiles/worker-light.Dockerfile` — lightweight Celery image (~200MB vs ~1.2GB full backend), no Playwright/Chromium/spaCy
+- Created `docker/docker-compose.worker.yml` — worker-only compose with `network_mode: host` for WireGuard tunnel access
+- Created `docker/setup-worker.sh` — one-click OCI provisioning (WireGuard, Docker, repo clone, env setup, systemd, health cron)
+- Created `docker/cloud-init-worker.yml` — cloud-init variant for OCI instance creation
+
+**WireGuard VPN Mesh (4 nodes):**
+- Primary (10.0.0.1, 95.111.232.70) — full stack
+- Replica (10.0.0.2, 46.250.237.93) — read replica
+- whyd1 (10.0.0.3, 80.225.201.209) — OCI Always Free worker
+- whyd2 (10.0.0.4, 80.225.206.18) — OCI Always Free worker
+
+**Bug Fix — Redis auth missing (root cause of worker connection failure):**
+- `docker-compose.worker.yml` had `redis://10.0.0.1:6379/0` — no password
+- Primary Redis requires `--requirepass`, so connections silently timed out
+- Fixed: `redis://:${REDIS_PASSWORD}@${WG_PRIMARY_IP}:6379/0`
+- Added `REDIS_PASSWORD` to `.env.worker` template in setup-worker.sh
+
+**Bug Fix — OCI iptables blocking WireGuard:**
+- OCI Ubuntu instances have `INPUT DROP` policy with `REJECT all` rule before UFW chains
+- WireGuard return UDP traffic was rejected despite tunnel being "up"
+- Fixed: `iptables -I INPUT 5 -p udp --dport 51820 -j ACCEPT` + `-s 10.0.0.0/24 -j ACCEPT`
+- Added `iptables-persistent` to setup script for reboot survival
+
+**BuyHatke Rate Limiting (slowed down):**
+- Concurrency: 5→2→1 (single sequential requests)
+- Burst pause: random 1.5-2.5s every 40-60 requests → deterministic 2.0s every 15 requests
+- Effective rate: ~300/min → ~53/min per worker (gentler on BuyHatke API)
+
+**Celery `--repeat` flag:**
+- `bh-fill` and `ph-extend` dispatch functions now pass `repeat` parameter to Celery tasks
+- With `--repeat`, each worker keeps claiming new batches until queue is empty
+
+**Changes (6 files):**
+
+| File | Change |
+|---|---|
+| `docker/docker-compose.worker.yml` | Added `network_mode: host`, Redis password in URLs |
+| `docker/Dockerfiles/worker-light.Dockerfile` | New lightweight worker image |
+| `docker/setup-worker.sh` | Added `REDIS_PASSWORD`, OCI iptables fix, `iptables-persistent` |
+| `docker/cloud-init-worker.yml` | Same fixes as setup-worker.sh |
+| `apps/pricing/backfill/config.py` | BH concurrency 2→1, added `bh_burst_size=15`, `bh_burst_pause=2.0` |
+| `apps/pricing/backfill/bh_client.py` | Deterministic burst pause every 15 requests, removed random burst logic |

@@ -94,8 +94,8 @@ docker compose -f docker-compose.<node>.yml up -d --build celery-worker
 ```bash
 docker compose -f docker-compose.primary.yml exec backend python -c "
 from apps.pricing.tasks import run_phase1_discover
-r1 = run_phase1_discover.delay(sitemap_start=1, sitemap_end=1, filter_electronics=False)
-r2 = run_phase1_discover.delay(sitemap_start=2, sitemap_end=2, filter_electronics=False)
+r1 = run_phase1_discover.delay(sitemap_start=2, sitemap_end=2, filter_electronics=False)
+r2 = run_phase1_discover.delay(sitemap_start=3, sitemap_end=3, filter_electronics=False)
 print(f'Task 1: {r1.id}')
 print(f'Task 2: {r2.id}')
 "
@@ -303,3 +303,5 @@ print(f'Task ID: {result.id}')
 docker compose -f docker-compose.primary.yml exec backend python manage.py backfill_prices status
 
 docker compose -f docker-compose.primary.yml logs -f celery-worker
+
+docker compose -f docker-compose.primary.yml logs -f celery-worker --tail 50 | grep -i "phase 1\|progress\|created\|parsed"

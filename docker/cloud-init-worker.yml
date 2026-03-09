@@ -1,43 +1,27 @@
 #cloud-config
 # ============================================================
-# Whydud — Worker Node Cloud-Init
+# Whydud — OCI Worker Node Cloud-Init
 #
-# Provisions a fresh Ubuntu 22.04/24.04 VPS as a Celery worker.
-# Installs WireGuard + Docker, clones repo, starts worker.
+# Provisions an OCI Always Free Ubuntu instance as a Celery worker.
+# 1GB RAM — runs single-process Celery on 'scraping' queue.
 #
-# Usage (OCI / Contabo / any provider):
-#   1. Replace ALL <PLACEHOLDER> values below
-#   2. Paste into "User Data" / "Cloud-Init" field when creating VPS
-#   3. After boot, add the worker's WireGuard public key to primary
+# ┌─────────────────────────────────────────────────────────┐
+# │  YOU MUST CHANGE 10 values marked ← CHANGE THIS        │
+# │                                                         │
+# │  For whyd1 vs whyd2, only 2 lines differ:              │
+# │    - WireGuard Address (10.8.0.3 vs 10.8.0.4)          │
+# │    - CELERY_WORKER_ID (oci-w1 vs oci-w2)               │
+# │    - WG_PRIVATE_KEY (unique per worker)                 │
+# └─────────────────────────────────────────────────────────┘
 #
-# After provisioning, on PRIMARY:
-#   1. Add worker peer to /etc/wireguard/wg0.conf
-#   2. Add pg_hba.conf entry for worker IP
-#   3. Reload: wg syncconf wg0 <(wg-quick strip wg0)
-#   4. Restart postgres if pg_hba changed
+# AFTER this runs, do these steps on PRIMARY (95.111.232.70):
+#   1. Add worker's WG public key to /etc/wireguard/wg0.conf
+#   2. Add pg_hba.conf entry: host all all 10.8.0.X/32 md5
+#   3. Reload WG: wg syncconf wg0 <(wg-quick strip wg0)
+#   4. Reload PG: docker exec whydud-postgres pg_ctl reload -D /var/lib/postgresql/data
+#   5. Open Redis port on firewall: ufw allow from 10.8.0.X to any port 6379
+#   6. Open Postgres port: ufw allow from 10.8.0.X to any port 5432
 # ============================================================
-
-# ── VARIABLES — REPLACE THESE ──────────────────────────────
-# Tip: Generate WireGuard keys first:
-#   wg genkey | tee private.key | wg pubkey > public.key
-
-# WireGuard
-# WG_PRIVATE_KEY:     This worker's private key (wg genkey)
-# WG_ADDRESS:         This worker's VPN IP (10.0.0.3/24 for worker1, 10.0.0.4/24 for worker2, etc.)
-# PRIMARY_PUBLIC_KEY:  Primary server's WireGuard public key
-# PRIMARY_PUBLIC_IP:   Primary server's public IP (95.111.232.70)
-# PRIMARY_WG_IP:       Primary's WireGuard IP (10.0.0.1)
-
-# Secrets (copy from primary's .env)
-# POSTGRES_PASSWORD, REDIS_PASSWORD, DJANGO_SECRET_KEY,
-# MEILISEARCH_MASTER_KEY, EMAIL_ENCRYPTION_KEY, OAUTH_ENCRYPTION_KEY
-
-# Worker identity
-# CELERY_WORKER_ID:   Unique per worker (oci-w1, oci-w2, ctb-w1, ctb-w2)
-
-# Git (for private repo)
-# GH_PAT:             GitHub Personal Access Token with repo read access
-# ────────────────────────────────────────────────────────────
 
 package_update: true
 
@@ -47,6 +31,8 @@ packages:
   - git
   - ufw
   - jq
+  - iptables-persistent
+  - netfilter-persistent
 
 write_files:
   # ── WireGuard config ──────────────────────────────────────
@@ -54,46 +40,29 @@ write_files:
     permissions: "0600"
     content: |
       [Interface]
-      PrivateKey = <>
-      Address = <WG_ADDRESS>
+      PrivateKey = PASTE_WORKER_PRIVATE_KEY_HERE              # ← CHANGE THIS: from wg genkey (unique per worker)
+      Address = 10.8.0.3/24                                   # ← CHANGE THIS: whyd1=10.8.0.3/24, whyd2=10.8.0.4/24
 
       [Peer]
-      PublicKey = <PRIMARY_PUBLIC_KEY>
-      Endpoint = <PRIMARY_PUBLIC_IP>:51820
-      AllowedIPs = 10.0.0.1/32
+      PublicKey = PASTE_PRIMARY_WG_PUBLIC_KEY_HERE             # ← CHANGE THIS: from primary's /etc/wireguard/public.key
+      Endpoint = 95.111.232.70:51820
+      AllowedIPs = 10.8.0.0/24
       PersistentKeepalive = 25
 
   # ── Worker environment file ───────────────────────────────
   - path: /opt/whydud/.env.worker
     permissions: "0600"
     content: |
-      # Connection to primary (via WireGuard)
-      WG_PRIMARY_IP=<PRIMARY_WG_IP>
-      POSTGRES_HOST=<PRIMARY_WG_IP>
+      WG_PRIMARY_IP=10.8.0.1
       POSTGRES_DB=whydud
       POSTGRES_USER=whydud
-      POSTGRES_PASSWORD=<POSTGRES_PASSWORD>
-      REDIS_URL=redis://:<REDIS_PASSWORD>@<PRIMARY_WG_IP>:6379/0
-      CELERY_BROKER_URL=redis://:<REDIS_PASSWORD>@<PRIMARY_WG_IP>:6379/0
-
-      # Django
-      DJANGO_SETTINGS_MODULE=whydud.settings.prod
-      DJANGO_SECRET_KEY=<DJANGO_SECRET_KEY>
-
-      # Services
-      MEILISEARCH_URL=http://<PRIMARY_WG_IP>:7700
-      MEILISEARCH_MASTER_KEY=<MEILISEARCH_MASTER_KEY>
-
-      # Encryption keys
-      EMAIL_ENCRYPTION_KEY=<EMAIL_ENCRYPTION_KEY>
-      OAUTH_ENCRYPTION_KEY=<OAUTH_ENCRYPTION_KEY>
-
-      # Worker identity (MUST be unique per worker)
-      CELERY_WORKER_ID=<CELERY_WORKER_ID>
-
-      # Proxy (optional — only needed for enrichment/scraping)
-      SCRAPING_PROXY_LIST=
-      SCRAPING_PROXY_TYPE=rotating
+      POSTGRES_PASSWORD=PASTE_HERE                            # ← CHANGE THIS: from primary's POSTGRES_PASSWORD
+      REDIS_PASSWORD=PASTE_HERE                               # ← CHANGE THIS: from primary's REDIS_PASSWORD
+      DJANGO_SECRET_KEY=PASTE_HERE                            # ← CHANGE THIS: from primary's DJANGO_SECRET_KEY
+      MEILISEARCH_MASTER_KEY=PASTE_HERE                       # ← CHANGE THIS: from primary's MEILISEARCH_MASTER_KEY
+      EMAIL_ENCRYPTION_KEY=PASTE_HERE                         # ← CHANGE THIS: from primary's EMAIL_ENCRYPTION_KEY
+      OAUTH_ENCRYPTION_KEY=PASTE_HERE                         # ← CHANGE THIS: from primary's OAUTH_ENCRYPTION_KEY
+      CELERY_WORKER_ID=oci-w1                                 # ← CHANGE THIS: whyd1=oci-w1, whyd2=oci-w2
 
   # ── Systemd service for auto-start on reboot ──────────────
   - path: /etc/systemd/system/whydud-worker.service
@@ -114,7 +83,7 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  # ── Update script (git pull + rebuild) ────────────────────
+  # ── Update script (run to deploy new code) ────────────────
   - path: /opt/scripts/update-worker.sh
     permissions: "0755"
     content: |
@@ -128,28 +97,23 @@ write_files:
       docker image prune -f
       echo "[$(date)] Update complete."
 
-  # ── Health check script ───────────────────────────────────
+  # ── Health check script (runs via cron every 5 min) ───────
   - path: /opt/scripts/check-worker.sh
     permissions: "0755"
     content: |
       #!/bin/bash
-      # Quick health check — run via cron every 5 min
-      WG_OK=$(ping -c 1 -W 3 10.0.0.1 2>/dev/null && echo "ok" || echo "FAIL")
-      DOCKER_OK=$(docker compose -f /opt/whydud/whydud/docker/docker-compose.worker.yml \
-        --env-file /opt/whydud/.env.worker ps --format json 2>/dev/null \
-        | jq -r '.[0].Health // "unknown"' 2>/dev/null || echo "FAIL")
+      WG_OK=$(ping -c 1 -W 3 10.8.0.1 2>/dev/null && echo "ok" || echo "FAIL")
+      DOCKER_OK=$(docker ps --filter name=worker --format '{{.Status}}' 2>/dev/null | head -1)
 
-      if [ "$WG_OK" != "ok" ] || [ "$DOCKER_OK" = "FAIL" ]; then
-        echo "[$(date)] UNHEALTHY — WireGuard: $WG_OK, Docker: $DOCKER_OK"
-        # Restart WireGuard if tunnel is down
-        if [ "$WG_OK" != "ok" ]; then
-          systemctl restart wg-quick@wg0
-        fi
-        # Restart worker if container is down
-        if [ "$DOCKER_OK" = "FAIL" ]; then
-          cd /opt/whydud/whydud/docker
-          docker compose -f docker-compose.worker.yml --env-file /opt/whydud/.env.worker up -d
-        fi
+      if [ "$WG_OK" != "ok" ]; then
+        echo "[$(date)] WireGuard DOWN — restarting"
+        systemctl restart wg-quick@wg0
+      fi
+
+      if [ -z "$DOCKER_OK" ]; then
+        echo "[$(date)] Worker container DOWN — restarting"
+        cd /opt/whydud/whydud/docker
+        docker compose -f docker-compose.worker.yml --env-file /opt/whydud/.env.worker up -d
       fi
 
 runcmd:
@@ -162,15 +126,17 @@ runcmd:
   - systemctl enable wg-quick@wg0
   - systemctl start wg-quick@wg0
 
+  # ── 2b. Fix OCI iptables (INPUT DROP blocks WireGuard return traffic) ──
+  - iptables -I INPUT 5 -p udp --dport 51820 -j ACCEPT
+  - iptables -I INPUT 6 -s 10.8.0.0/24 -j ACCEPT
+  - netfilter-persistent save
+
   # ── 3. Docker ─────────────────────────────────────────────
   - curl -fsSL https://get.docker.com | sh
 
   # ── 4. Clone repo ─────────────────────────────────────────
   - mkdir -p /opt/whydud
-  # For private repo — use GitHub PAT:
-  - git clone https://<GH_PAT>@github.com/rameshworkk/whydud.git /opt/whydud
-  # For public repo (no token needed):
-  # - git clone https://github.com/rameshworkk/whydud.git /opt/whydud
+  - git clone https://PASTE_GITHUB_PAT_HERE@github.com/rameshworkk/whydud.git /opt/whydud/whydud   # ← CHANGE THIS: your GitHub PAT
 
   # ── 5. Build & start worker ───────────────────────────────
   - cd /opt/whydud/whydud/docker && docker compose -f docker-compose.worker.yml --env-file /opt/whydud/.env.worker up -d --build
@@ -182,27 +148,8 @@ runcmd:
   # ── 7. Health check cron (every 5 min) ────────────────────
   - echo "*/5 * * * * root /opt/scripts/check-worker.sh >> /var/log/whydud-health.log 2>&1" > /etc/cron.d/whydud-health
 
-  # ── 8. Log rotation ──────────────────────────────────────
-  - |
-    cat > /etc/logrotate.d/whydud-worker << 'LOGROTATE'
-    /var/log/whydud-health.log {
-      daily
-      rotate 7
-      compress
-      missingok
-      notifempty
-    }
-    LOGROTATE
-
-  # ── 9. Print summary ─────────────────────────────────────
+  # ── 8. Print summary ─────────────────────────────────────
   - echo "============================================"
   - echo "Whydud worker provisioned!"
-  - echo "WireGuard IP:" $(ip -4 addr show wg0 | grep inet | awk '{print $2}')
-  - echo "WireGuard public key:" $(cat /etc/wireguard/wg0.conf | grep -v PrivateKey | head -1 || wg show wg0 public-key 2>/dev/null || echo "check manually")
-  - echo ""
-  - echo "NEXT STEPS on PRIMARY:"
-  - echo "  1. Add this worker's public key to /etc/wireguard/wg0.conf"
-  - echo "  2. Add pg_hba.conf entry for this worker's WG IP"
-  - echo "  3. wg syncconf wg0 <(wg-quick strip wg0)"
-  - echo "  4. docker compose restart postgres"
+  - wg show wg0 public-key || echo "WG not up yet"
   - echo "============================================"
