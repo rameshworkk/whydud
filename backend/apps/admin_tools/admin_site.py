@@ -856,14 +856,225 @@ class WhydudAdminSite(AdminSite):
             {**self.each_context(request), "title": "Analytics"},
         )
 
+    # ------------------------------------------------------------------
+    # Worker Cluster Console (AD-4)
+    # ------------------------------------------------------------------
+
+    # Known cluster nodes — matches OPERATIONS_GUIDE.md Section 7.1
+    CLUSTER_NODES = [
+        {
+            "id": "primary",
+            "label": "PRIMARY",
+            "ip": "10.8.0.1",
+            "spec": "Contabo 12GB / 6 vCPU",
+            "role": "All services + celery-worker",
+        },
+        {
+            "id": "replica",
+            "label": "REPLICA",
+            "ip": "10.8.0.2",
+            "spec": "Contabo 8GB / 4 vCPU",
+            "role": "All services + celery-scraping",
+        },
+        {
+            "id": "oci-w1",
+            "label": "whyd1 (OCI)",
+            "ip": "10.8.0.3",
+            "spec": "OCI ARM 1GB + 8GB swap",
+            "role": "celery-enrichment only",
+        },
+        {
+            "id": "oci-w2",
+            "label": "whyd2 (OCI)",
+            "ip": "10.8.0.4",
+            "spec": "OCI ARM 1GB + 8GB swap",
+            "role": "celery-enrichment only",
+        },
+    ]
+
     def cluster_view(self, request):
+        """Worker cluster monitoring — per-node status, queues, tasks."""
+        import json
+
         from django.shortcuts import render
 
-        return render(
-            request,
-            "admin/stub.html",
-            {**self.each_context(request), "title": "Worker Cluster"},
-        )
+        workers, queues, active_tasks = self._get_cluster_data()
+
+        # Build node cards: merge known topology with live data
+        online_hostnames = {w["name"] for w in workers}
+        nodes = []
+        for node_def in self.CLUSTER_NODES:
+            # Match by checking if any online worker hostname contains the node id
+            matched_worker = None
+            for w in workers:
+                if node_def["id"] in w["name"].lower():
+                    matched_worker = w
+                    break
+
+            if matched_worker:
+                nodes.append({
+                    **node_def,
+                    "status": "online",
+                    "hostname": matched_worker["name"],
+                    "active_tasks": matched_worker["active_tasks"],
+                    "reserved_tasks": matched_worker["reserved_tasks"],
+                    "queues": matched_worker["queues"],
+                    "total_completed": matched_worker["total_completed"],
+                    "prefetch_count": matched_worker.get("prefetch_count", "?"),
+                    "concurrency": matched_worker.get("concurrency", "?"),
+                    "uptime": matched_worker.get("uptime", ""),
+                })
+            else:
+                nodes.append({
+                    **node_def,
+                    "status": "offline",
+                    "hostname": "",
+                    "active_tasks": 0,
+                    "reserved_tasks": 0,
+                    "queues": [],
+                    "total_completed": 0,
+                    "prefetch_count": "?",
+                    "concurrency": "?",
+                    "uptime": "",
+                })
+
+        # Also add any unknown workers (not in CLUSTER_NODES)
+        known_ids = {n["id"] for n in self.CLUSTER_NODES}
+        for w in workers:
+            name_lower = w["name"].lower()
+            if not any(kid in name_lower for kid in known_ids):
+                nodes.append({
+                    "id": w["name"],
+                    "label": w["name"],
+                    "ip": "",
+                    "spec": "Unknown",
+                    "role": "Unknown",
+                    "status": "online",
+                    "hostname": w["name"],
+                    "active_tasks": w["active_tasks"],
+                    "reserved_tasks": w["reserved_tasks"],
+                    "queues": w["queues"],
+                    "total_completed": w["total_completed"],
+                    "prefetch_count": w.get("prefetch_count", "?"),
+                    "concurrency": w.get("concurrency", "?"),
+                    "uptime": w.get("uptime", ""),
+                })
+
+        online_count = sum(1 for n in nodes if n["status"] == "online")
+        total_active = sum(n["active_tasks"] for n in nodes)
+        total_reserved = sum(n["reserved_tasks"] for n in nodes)
+        total_completed = sum(n["total_completed"] for n in nodes)
+
+        # Queue depth chart data
+        queue_chart = json.dumps({
+            "labels": list(queues.keys()) if queues else ["(none)"],
+            "data": list(queues.values()) if queues else [0],
+        })
+
+        context = {
+            **self.each_context(request),
+            "title": "Worker Cluster",
+            "nodes": nodes,
+            "online_count": online_count,
+            "total_nodes": len(nodes),
+            "total_active": total_active,
+            "total_reserved": total_reserved,
+            "total_completed": total_completed,
+            "queues": queues,
+            "queue_chart": queue_chart,
+            "active_tasks": active_tasks,
+        }
+        return render(request, "admin/cluster_console.html", context)
+
+    @staticmethod
+    def _get_cluster_data():
+        """Fetch live Celery worker data. Returns (workers, queues, active_tasks)."""
+        workers = []
+        queues = {}
+        active_tasks = []
+        try:
+            from whydud.celery import app
+
+            inspector = app.control.inspect(timeout=5)
+            ping = inspector.ping() or {}
+            active = inspector.active() or {}
+            reserved = inspector.reserved() or {}
+            active_queues = inspector.active_queues() or {}
+            stats = inspector.stats() or {}
+
+            for worker_name in ping:
+                worker_active = active.get(worker_name, [])
+                worker_reserved = reserved.get(worker_name, [])
+                worker_queues_list = active_queues.get(worker_name, [])
+                worker_stats = stats.get(worker_name, {})
+
+                queue_names = [q.get("name", "?") for q in worker_queues_list]
+
+                total_tasks = (
+                    sum(worker_stats.get("total", {}).values())
+                    if isinstance(worker_stats.get("total"), dict)
+                    else 0
+                )
+
+                # Uptime from stats
+                uptime_secs = worker_stats.get("clock", 0)
+                if isinstance(uptime_secs, (int, float)) and uptime_secs > 0:
+                    hours = int(uptime_secs // 3600)
+                    mins = int((uptime_secs % 3600) // 60)
+                    uptime_str = f"{hours}h {mins}m"
+                else:
+                    uptime_str = ""
+
+                # Prefetch and concurrency
+                prefetch = worker_stats.get("prefetch_count", "?")
+                pool = worker_stats.get("pool", {})
+                concurrency = (
+                    pool.get("max-concurrency", "?")
+                    if isinstance(pool, dict)
+                    else "?"
+                )
+
+                workers.append({
+                    "name": worker_name,
+                    "active_tasks": len(worker_active),
+                    "reserved_tasks": len(worker_reserved),
+                    "queues": queue_names,
+                    "total_completed": total_tasks,
+                    "prefetch_count": prefetch,
+                    "concurrency": concurrency,
+                    "uptime": uptime_str,
+                })
+
+                # Collect active task details
+                for task in worker_active:
+                    active_tasks.append({
+                        "worker": worker_name,
+                        "name": task.get("name", "?").split(".")[-1],
+                        "full_name": task.get("name", "?"),
+                        "id": task.get("id", "?")[:12],
+                        "runtime": round(task.get("time_start", 0) or 0, 1),
+                        "args": str(task.get("args", []))[:80],
+                        "kwargs": str(task.get("kwargs", {}))[:80],
+                    })
+
+            # Aggregate queue depths
+            for worker_name, tasks in reserved.items():
+                for task in tasks:
+                    q = task.get("delivery_info", {}).get(
+                        "routing_key", "default"
+                    )
+                    queues[q] = queues.get(q, 0) + 1
+            for worker_name, tasks in active.items():
+                for task in tasks:
+                    q = task.get("delivery_info", {}).get(
+                        "routing_key", "default"
+                    )
+                    queues.setdefault(q, 0)
+
+        except Exception:
+            pass
+
+        return workers, queues, active_tasks
 
     # ------------------------------------------------------------------
     # AJAX API endpoints
