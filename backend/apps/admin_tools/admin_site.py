@@ -37,6 +37,11 @@ class WhydudAdminSite(AdminSite):
                 name="enrichment-console",
             ),
             path(
+                "enrichment/action/<str:action>/",
+                self.admin_view(self.enrichment_action),
+                name="enrichment-action",
+            ),
+            path(
                 "price-intel/",
                 self.admin_view(self.price_intel_view),
                 name="price-intel",
@@ -829,14 +834,319 @@ class WhydudAdminSite(AdminSite):
         except Exception:
             return []
 
-    def enrichment_view(self, request):
-        from django.shortcuts import render
+    # ------------------------------------------------------------------
+    # Enrichment Management Console (AD-5)
+    # ------------------------------------------------------------------
 
-        return render(
-            request,
-            "admin/stub.html",
-            {**self.each_context(request), "title": "Enrichment Queue"},
+    def enrichment_view(self, request):
+        """Enrichment queue management — priority breakdown, throughput, bandwidth."""
+        import json
+        from datetime import timedelta
+
+        from django.db.models import Count, Q
+        from django.shortcuts import render
+        from django.utils import timezone
+
+        from apps.pricing.models import BackfillProduct
+
+        now = timezone.now()
+        day_ago = now - timedelta(hours=24)
+
+        total = BackfillProduct.objects.count()
+
+        # --- By scrape_status ---
+        by_scrape = dict(
+            BackfillProduct.objects.values_list("scrape_status")
+            .annotate(c=Count("id"))
+            .values_list("scrape_status", "c")
         )
+
+        # --- Queue depth by enrichment_priority (pending only) ---
+        queue_by_priority = dict(
+            BackfillProduct.objects.filter(scrape_status="pending")
+            .values_list("enrichment_priority")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_priority", "c")
+        )
+        p0_queue = queue_by_priority.get(0, 0)
+        p1_queue = queue_by_priority.get(1, 0)
+        p2_queue = queue_by_priority.get(2, 0)
+        p3_queue = queue_by_priority.get(3, 0)
+
+        # --- Currently enriching by method ---
+        enriching_qs = BackfillProduct.objects.filter(scrape_status="enriching")
+        enriching_total = enriching_qs.count()
+        enriching_by_method = dict(
+            enriching_qs.values_list("enrichment_method")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_method", "c")
+        )
+
+        # --- Completed by method ---
+        completed_by_method = dict(
+            BackfillProduct.objects.filter(scrape_status="scraped")
+            .values_list("enrichment_method")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_method", "c")
+        )
+
+        # --- Failed breakdown ---
+        failed_retryable = BackfillProduct.objects.filter(
+            scrape_status="failed", retry_count__lt=3
+        ).count()
+        failed_exhausted = BackfillProduct.objects.filter(
+            scrape_status="failed", retry_count__gte=3
+        ).count()
+
+        # --- Throughput: enriched in last 24h ---
+        enriched_24h = BackfillProduct.objects.filter(
+            scrape_status="scraped", updated_at__gte=day_ago
+        ).count()
+
+        # --- Review status ---
+        by_review = dict(
+            BackfillProduct.objects.values_list("review_status")
+            .annotate(c=Count("id"))
+            .values_list("review_status", "c")
+        )
+
+        # --- By marketplace (pending enrichment only) ---
+        pending_by_marketplace = list(
+            BackfillProduct.objects.filter(scrape_status="pending")
+            .values("marketplace_slug")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        # --- Estimated time remaining ---
+        # P0/P1: ~30s/product (Playwright), P2/P3: ~2s/product (curl_cffi)
+        est_p0_hrs = round(p0_queue * 30 / 3600, 1)
+        est_p1_hrs = round(p1_queue * 30 / 3600, 1)
+        est_p2p3_hrs = round((p2_queue + p3_queue) * 2 / 3600, 1)
+
+        # --- Bandwidth estimates ---
+        # P1 Playwright: ~625KB/product, P2/P3 curl_cffi: ~85KB/product
+        bw_p1_gb = round(p1_queue * 625 / (1024 * 1024), 2)
+        bw_p2p3_gb = round((p2_queue + p3_queue) * 85 / (1024 * 1024), 2)
+        bw_total_gb = round(bw_p1_gb + bw_p2p3_gb, 2)
+
+        # --- Stale enrichments (enriching for > 2 hours) ---
+        stale_threshold = now - timedelta(hours=2)
+        stale_products = list(
+            BackfillProduct.objects.filter(
+                scrape_status="enriching",
+                enrichment_queued_at__lt=stale_threshold,
+            )
+            .order_by("-enrichment_queued_at")
+            .values(
+                "id",
+                "external_id",
+                "marketplace_slug",
+                "enrichment_method",
+                "error_message",
+                "retry_count",
+                "enrichment_queued_at",
+                "updated_at",
+            )[:50]
+        )
+        for sp in stale_products:
+            if sp["enrichment_queued_at"]:
+                sp["enrichment_queued_at"] = sp["enrichment_queued_at"].strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+            sp["updated_at"] = sp["updated_at"].strftime("%Y-%m-%d %H:%M")
+
+        # --- Recent failures (last 50) ---
+        recent_failures = list(
+            BackfillProduct.objects.filter(scrape_status="failed")
+            .order_by("-updated_at")
+            .values(
+                "id",
+                "external_id",
+                "marketplace_slug",
+                "enrichment_method",
+                "error_message",
+                "retry_count",
+                "updated_at",
+            )[:50]
+        )
+        for rf in recent_failures:
+            rf["updated_at"] = rf["updated_at"].strftime("%Y-%m-%d %H:%M")
+
+        # --- Chart data ---
+        queue_chart = json.dumps(
+            {
+                "labels": [
+                    "P0 On-demand",
+                    "P1 Playwright",
+                    "P2 curl_cffi",
+                    "P3 curl_cffi-low",
+                ],
+                "data": [p0_queue, p1_queue, p2_queue, p3_queue],
+            }
+        )
+
+        method_chart = json.dumps(
+            {
+                "labels": list(completed_by_method.keys()),
+                "data": list(completed_by_method.values()),
+            }
+        )
+
+        review_chart = json.dumps(
+            {
+                "labels": ["Skip", "Pending", "Scraping", "Scraped", "Failed"],
+                "data": [
+                    by_review.get("skip", 0),
+                    by_review.get("pending", 0),
+                    by_review.get("scraping", 0),
+                    by_review.get("scraped", 0),
+                    by_review.get("failed", 0),
+                ],
+            }
+        )
+
+        context = {
+            **self.each_context(request),
+            "title": "Enrichment Queue",
+            "total": total,
+            "by_scrape": by_scrape,
+            # Queue depths
+            "p0_queue": p0_queue,
+            "p1_queue": p1_queue,
+            "p2_queue": p2_queue,
+            "p3_queue": p3_queue,
+            "total_queue": p0_queue + p1_queue + p2_queue + p3_queue,
+            # Currently enriching
+            "enriching_total": enriching_total,
+            "enriching_by_method": enriching_by_method,
+            # Completed
+            "completed_by_method": completed_by_method,
+            "completed_total": by_scrape.get("scraped", 0),
+            # Failed
+            "failed_total": by_scrape.get("failed", 0),
+            "failed_retryable": failed_retryable,
+            "failed_exhausted": failed_exhausted,
+            # Throughput
+            "enriched_24h": enriched_24h,
+            # Reviews
+            "by_review": by_review,
+            # Marketplace
+            "pending_by_marketplace": pending_by_marketplace,
+            # Time estimates
+            "est_p0_hrs": est_p0_hrs,
+            "est_p1_hrs": est_p1_hrs,
+            "est_p2p3_hrs": est_p2p3_hrs,
+            # Bandwidth
+            "bw_p1_gb": bw_p1_gb,
+            "bw_p2p3_gb": bw_p2p3_gb,
+            "bw_total_gb": bw_total_gb,
+            # Tables
+            "stale_products": stale_products,
+            "recent_failures": recent_failures,
+            # Charts
+            "queue_chart": queue_chart,
+            "method_chart": method_chart,
+            "review_chart": review_chart,
+        }
+        return render(request, "admin/enrichment_console.html", context)
+
+    def enrichment_action(self, request, action):
+        """Handle POST actions from the enrichment console."""
+        from django.contrib import messages
+        from django.shortcuts import redirect
+
+        if request.method != "POST":
+            messages.error(request, "Actions require POST.")
+            return redirect("admin:enrichment-console")
+
+        result_msg = self._dispatch_enrichment_action(action, request.POST)
+        if result_msg.startswith("Error"):
+            messages.error(request, result_msg)
+        else:
+            messages.success(request, result_msg)
+
+        return redirect("admin:enrichment-console")
+
+    @staticmethod
+    def _dispatch_enrichment_action(action, post_data):
+        """Dispatch an enrichment action and return a status message."""
+        try:
+            if action == "enrich-batch":
+                from whydud.celery import app as celery_app
+
+                batch = int(post_data.get("batch_size", 100))
+                result = celery_app.send_task(
+                    "apps.pricing.backfill.enrichment.enrich_batch",
+                    kwargs={"batch_size": batch},
+                )
+                return f"Enrichment batch queued ({batch} products). Task: {result.id}"
+
+            elif action == "assign-priorities":
+                from apps.pricing.backfill.prioritizer import (
+                    assign_enrichment_priorities,
+                    populate_derived_fields,
+                )
+
+                d = populate_derived_fields()
+                p = assign_enrichment_priorities()
+                return (
+                    f"Priorities assigned. Derived: {d}, "
+                    f"P1: {p.get('p1', 0)}, P2: {p.get('p2', 0)}"
+                )
+
+            elif action == "assign-review-targets":
+                from apps.pricing.backfill.prioritizer import assign_review_targets
+
+                max_targets = int(post_data.get("max_targets", 100000))
+                count = assign_review_targets(max_review_products=max_targets)
+                return f"Marked {count} products for review scraping."
+
+            elif action == "cleanup-stale":
+                from whydud.celery import app as celery_app
+
+                result = celery_app.send_task(
+                    "apps.pricing.backfill.enrichment.cleanup_stale_enrichments",
+                )
+                return f"Stale cleanup queued. Task: {result.id}"
+
+            elif action == "reset-failed-enrichments":
+                from apps.pricing.models import BackfillProduct
+
+                count = BackfillProduct.objects.filter(
+                    scrape_status="failed"
+                ).update(scrape_status="pending", retry_count=0, error_message="")
+                return f"Reset {count} failed enrichments to pending."
+
+            elif action == "retry-retryable":
+                from apps.pricing.models import BackfillProduct
+
+                count = BackfillProduct.objects.filter(
+                    scrape_status="failed", retry_count__lt=3
+                ).update(scrape_status="pending", error_message="")
+                return f"Retried {count} failed enrichments (retry_count < 3)."
+
+            elif action == "reset-failed-reviews":
+                from apps.pricing.models import BackfillProduct
+
+                count = BackfillProduct.objects.filter(
+                    review_status="failed"
+                ).update(review_status="pending", error_message="")
+                return f"Reset {count} failed reviews to pending."
+
+            elif action == "check-review-completion":
+                from whydud.celery import app as celery_app
+
+                result = celery_app.send_task(
+                    "apps.pricing.backfill.enrichment.check_review_completion",
+                )
+                return f"Review completion check queued. Task: {result.id}"
+
+            else:
+                return f"Error: Unknown action '{action}'."
+
+        except Exception as e:
+            return f"Error: {e}"
 
     def price_intel_view(self, request):
         from django.shortcuts import render

@@ -4199,3 +4199,46 @@ Added four new subcommands to `backfill_prices` management command for pipeline 
 | File | Purpose |
 |---|---|
 | `backend/templates/admin/system_health.html` | Color-coded health dashboard (green/yellow/red cards, tables, queue bars) |
+
+---
+
+### AD-5: Enrichment Management Console — COMPLETE
+
+**Commit:** `feat(admin): enrichment management console with queue + progress`
+
+**What:** Implemented `/admin/enrichment/` with full enrichment queue management — priority-based queue depths, throughput tracking, bandwidth estimates, review status tracking, stale detection, and 8 action buttons.
+
+**Stats displayed:**
+| Section | Data |
+|---|---|
+| Top-level cards | Total queue, currently enriching (by method), completed (by method), failed (retryable/exhausted), 24h throughput |
+| Queue depth bars | P0 on-demand, P1 Playwright, P2 curl_cffi, P3 curl_cffi-low — with progress bars |
+| Scrape status bars | Pending, Enriching, Scraped, Failed — with progress bars |
+| Time estimates | P0, P1 (30s/product), P2/P3 (2s/product) estimated hours remaining |
+| Bandwidth estimates | P1 (625KB/product), P2/P3 (85KB/product), total GB remaining |
+| Charts | Queue by priority (doughnut), completed by method (doughnut), review status (doughnut) |
+| Breakdown tables | Review status, pending by marketplace |
+| Stale enrichments | Products stuck in "enriching" for 2+ hours |
+| Recent failures | Last 50 failed enrichments with error messages |
+
+**Action buttons (8 total):**
+| Action | What it does |
+|---|---|
+| Enrich Batch | Dispatches `enrich_batch` Celery task with configurable batch size |
+| Assign Priorities | Runs `populate_derived_fields` + `assign_enrichment_priorities` |
+| Assign Review Targets | Marks top N products for review scraping |
+| Cleanup Stale | Runs `cleanup_stale_enrichments` task |
+| Reset Failed Enrichments | Resets all `scrape_status=failed` to pending |
+| Retry Retryable | Resets failed with `retry_count < 3` to pending |
+| Reset Failed Reviews | Resets `review_status=failed` to pending |
+| Check Review Completion | Runs `check_review_completion` task |
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Added enrichment action URL, replaced `enrichment_view` stub with full implementation, added `enrichment_action` + `_dispatch_enrichment_action` |
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/templates/admin/enrichment_console.html` | Full enrichment console with stat cards, progress bars, charts, action buttons, error tables |
