@@ -4242,3 +4242,47 @@ Added four new subcommands to `backfill_prices` management command for pipeline 
 | File | Purpose |
 |---|---|
 | `backend/templates/admin/enrichment_console.html` | Full enrichment console with stat cards, progress bars, charts, action buttons, error tables |
+
+---
+
+### AD-6: Enhanced Scraping Console — COMPLETE
+
+**Commit:** `feat(admin): enhanced scraping console with run buttons + stats`
+
+**What:** Rewrote `ScraperJobAdmin` with rich display columns, spider trigger actions, stats header, and ad-hoc scrape form.
+
+**Enhanced list_display:**
+| Column | Implementation |
+|---|---|
+| status_badge | Color-coded HTML badge (green completed, red failed, blue running, grey queued, amber partial) |
+| duration_display | Human-readable elapsed time (e.g. "3m 42s", "1h 15m") |
+| triggered_by | Shows "scheduled" or "adhoc" |
+
+**Admin actions (4 total):**
+| Action | Task triggered |
+|---|---|
+| Run Amazon.in product spider | `run_marketplace_spider.delay("amazon-in")` |
+| Run Flipkart product spider | `run_marketplace_spider.delay("flipkart")` |
+| Run Amazon.in review spider | `run_review_spider.delay("amazon-in")` |
+| Run Flipkart review spider | `run_review_spider.delay("flipkart")` |
+
+**Stats header (changelist_view override):**
+- Jobs today: total / success / failed
+- Items scraped today
+- Success rate (7 days)
+- Currently running count
+- Last successful scrape per marketplace table (marketplace, spider, finished time, time ago, items)
+
+**Scrape Single URL form:**
+- URL input + marketplace dropdown + submit button
+- Triggers `scrape_product_adhoc.delay(url, marketplace_slug)`
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/scraping/admin.py` | Complete rewrite — status badges, duration, actions, stats header, scrape form |
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/templates/admin/scraping/scraperjob/change_list.html` | Changelist override with stats cards, last-scrape table, ad-hoc scrape form |

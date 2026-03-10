@@ -1,0 +1,202 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block content %}
+{% if stats_header %}
+<style>
+  .scrape-stats {
+    margin-bottom: 20px;
+    padding: 0;
+  }
+  .scrape-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .scrape-stat-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .scrape-stat-card .label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
+  .scrape-stat-card .value {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1a1a2e;
+    margin-top: 2px;
+  }
+  .scrape-stat-card .sub {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+  }
+  .scrape-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 16px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #F97316;
+    color: #1a1a2e;
+  }
+  .last-scrapes-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 16px;
+    max-width: 700px;
+  }
+  .last-scrapes-table th {
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  .last-scrapes-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .last-scrapes-table tr:hover td { background: #f8fafc; }
+  .scrape-form-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    max-width: 600px;
+  }
+  .scrape-form-card h4 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    color: #1a1a2e;
+  }
+  .scrape-form-card .desc {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 12px;
+  }
+  .scrape-form-card form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .scrape-form-card label {
+    font-size: 11px;
+    color: #555;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .scrape-form-card input[type="url"],
+  .scrape-form-card select {
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .scrape-form-card input[type="url"] {
+    width: 280px;
+  }
+  .scrape-form-card select {
+    width: 130px;
+  }
+  .btn-scrape {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: #F97316;
+    color: white;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .btn-scrape:hover { background: #ea6c0e; transform: translateY(-1px); }
+  .btn-scrape:active { transform: translateY(0); }
+</style>
+
+<div class="scrape-stats">
+  <!-- Top-level stats -->
+  <div class="scrape-stat-grid">
+    <div class="scrape-stat-card">
+      <div class="label">Jobs Today</div>
+      <div class="value">{{ jobs_today_total|default:"0" }}</div>
+      <div class="sub">{{ jobs_today_success }} success / {{ jobs_today_failed }} failed</div>
+    </div>
+    <div class="scrape-stat-card">
+      <div class="label">Items Scraped Today</div>
+      <div class="value">{{ items_scraped_today|default:"0" }}</div>
+    </div>
+    <div class="scrape-stat-card">
+      <div class="label">Success Rate (7d)</div>
+      <div class="value">{{ success_rate_7d }}%</div>
+      <div class="sub">{{ jobs_7d_total }} jobs in 7 days</div>
+    </div>
+    <div class="scrape-stat-card">
+      <div class="label">Currently Running</div>
+      <div class="value">{{ running_count|default:"0" }}</div>
+    </div>
+  </div>
+
+  <!-- Last successful scrape per marketplace -->
+  {% if last_scrapes %}
+  <div class="scrape-section-title">Last Successful Scrape</div>
+  <table class="last-scrapes-table">
+    <tr>
+      <th>Marketplace</th>
+      <th>Spider</th>
+      <th>Finished</th>
+      <th>Ago</th>
+      <th style="text-align:right">Items</th>
+    </tr>
+    {% for ls in last_scrapes %}
+    <tr>
+      <td><strong>{{ ls.marketplace }}</strong></td>
+      <td>{{ ls.spider }}</td>
+      <td>{{ ls.finished }}</td>
+      <td>{{ ls.ago }}</td>
+      <td style="text-align:right;font-weight:600;">{{ ls.items }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <!-- Scrape Single URL -->
+  <div class="scrape-section-title">Scrape Single URL</div>
+  <div class="scrape-form-card">
+    <h4>Ad-hoc Product Scrape</h4>
+    <div class="desc">Scrape a single product URL on-demand (does not create a ScraperJob)</div>
+    <form method="post" action="{{ scrape_single_url }}">
+      {% csrf_token %}
+      <div>
+        <label>Product URL</label>
+        <input type="url" name="url" placeholder="https://www.amazon.in/dp/B0..." required>
+      </div>
+      <div>
+        <label>Marketplace</label>
+        <select name="marketplace" required>
+          {% for mp in marketplace_choices %}
+          <option value="{{ mp }}">{{ mp }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn-scrape">Scrape</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{{ block.super }}
+{% endblock %}
