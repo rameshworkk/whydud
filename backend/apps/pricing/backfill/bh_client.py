@@ -30,6 +30,15 @@ from apps.pricing.backfill.utils import inr_to_paisa, ist_to_utc, validate_price
 
 logger = logging.getLogger(__name__)
 
+
+class BHRateLimited(Exception):
+    """Raised when BuyHatke returns 403/429 after all retries.
+
+    Distinct from other errors so callers can release products
+    back to the pool instead of marking them as permanently failed.
+    """
+
+
 # Rotating User-Agents for politeness
 _USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -85,7 +94,8 @@ class BHClient:
         concurrency: int | None = None,
         timeout: float | None = None,
     ) -> None:
-        self._delay = delay if delay is not None else BackfillConfig.bh_delay()
+        self._base_delay = delay if delay is not None else BackfillConfig.bh_delay()
+        self._delay = self._base_delay
         self._concurrency = concurrency or BackfillConfig.bh_concurrency()
         self._timeout = timeout or BackfillConfig.bh_timeout()
         self._burst_size = BackfillConfig.bh_burst_size()
@@ -94,7 +104,9 @@ class BHClient:
         self._client: httpx.AsyncClient | None = None
         self._request_count = 0
         self._error_count = 0
+        self._consecutive_403s = 0
         self._ua_idx = 0
+        self._cooldown_until: float = 0  # monotonic timestamp
 
     async def __aenter__(self) -> BHClient:
         self._semaphore = asyncio.Semaphore(self._concurrency)
@@ -153,7 +165,14 @@ class BHClient:
         assert self._client is not None
 
         async with self._semaphore:
-            # Minimum delay between every request
+            # Respect cooldown from previous 403 bursts
+            now = asyncio.get_event_loop().time()
+            if self._cooldown_until > now:
+                wait = self._cooldown_until - now
+                logger.info("BH cooldown: waiting %.0fs before next request", wait)
+                await asyncio.sleep(wait)
+
+            # Adaptive delay between requests
             await asyncio.sleep(self._delay)
             self._request_count += 1
 
@@ -174,21 +193,44 @@ class BHClient:
                         headers={"User-Agent": self._next_ua()},
                     )
                     resp.raise_for_status()
+
+                    # Success — decay delay back toward base
+                    self._consecutive_403s = 0
+                    if self._delay > self._base_delay:
+                        self._delay = max(self._base_delay, self._delay * 0.9)
+
                     return self._parse_price_history(resp.text)
 
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code in (429, 403) and attempt < max_retries - 1:
-                        wait = (attempt + 1) * 10
-                        logger.warning(
-                            "BH rate limited (%d), waiting %ds (attempt %d/%d)",
-                            e.response.status_code, wait, attempt + 1, max_retries,
-                        )
-                        await asyncio.sleep(wait)
-                        continue
                     if e.response.status_code in (429, 403):
-                        # All retries exhausted — pause longer before next product
-                        logger.warning("BH blocked, pausing 60s before continuing")
-                        await asyncio.sleep(60)
+                        self._consecutive_403s += 1
+                        self._error_count += 1
+
+                        # Adaptive: increase delay based on consecutive 403s
+                        self._delay = min(self._base_delay * (2 ** self._consecutive_403s), 30.0)
+
+                        if attempt < max_retries - 1:
+                            wait = (attempt + 1) * 15
+                            logger.warning(
+                                "BH rate limited (%d), waiting %ds, delay now %.1fs (attempt %d/%d, streak %d)",
+                                e.response.status_code, wait, self._delay,
+                                attempt + 1, max_retries, self._consecutive_403s,
+                            )
+                            await asyncio.sleep(wait)
+                            continue
+
+                        # All retries exhausted — enter cooldown
+                        cooldown = min(60 * self._consecutive_403s, 300)
+                        self._cooldown_until = asyncio.get_event_loop().time() + cooldown
+                        logger.warning(
+                            "BH blocked after %d consecutive 403s, cooldown %ds, delay %.1fs",
+                            self._consecutive_403s, cooldown, self._delay,
+                        )
+                        # Raise RateLimited so caller can distinguish from real failures
+                        raise BHRateLimited(
+                            f"403 after {self._consecutive_403s} consecutive rate limits"
+                        ) from e
+
                     self._error_count += 1
                     raise
 

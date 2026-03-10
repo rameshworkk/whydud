@@ -27,7 +27,7 @@ from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import transaction
 
-from apps.pricing.backfill.bh_client import BHClient
+from apps.pricing.backfill.bh_client import BHClient, BHRateLimited
 from apps.pricing.backfill.config import BackfillConfig
 from apps.pricing.backfill.injector import inject_price_points
 from apps.pricing.models import BackfillProduct
@@ -157,6 +157,14 @@ def _save_bp_failed(bp, error_msg):
     bp.save(update_fields=["status", "error_message", "retry_count", "updated_at"])
 
 
+def _release_bp_rate_limited(bp):
+    """Release a rate-limited product back to DISCOVERED for another node to pick up."""
+    db = _write_db()
+    BackfillProduct.objects.using(db).filter(
+        id=bp.id, status=BackfillProduct.Status.BH_FILLING
+    ).update(status=BackfillProduct.Status.DISCOVERED)
+
+
 def _release_unclaimed(claimed_ids: list[str], processed_ids: set[str]) -> int:
     """Release any claimed items that weren't processed (e.g. worker crash recovery).
 
@@ -207,7 +215,7 @@ async def buyhatke_bulk_fill(
     total = len(batch)
 
     logger.info("Phase 2: BuyHatke bulk fill for %d products (claimed from pool)", total)
-    stats = {"total": total, "filled": 0, "injected": 0, "empty": 0, "failed": 0, "points": 0}
+    stats = {"total": total, "filled": 0, "injected": 0, "empty": 0, "failed": 0, "rate_limited": 0, "points": 0}
     processed_ids: set[str] = set()
     _done_count = 0
 
@@ -237,6 +245,12 @@ async def buyhatke_bulk_fill(
                 stats["filled"] += 1
                 processed_ids.add(bp.id)
 
+        except BHRateLimited:
+            # Rate limited — release back to pool for another node/retry
+            await sync_to_async(_release_bp_rate_limited)(bp)
+            stats["rate_limited"] += 1
+            processed_ids.add(bp.id)
+
         except Exception as e:
             await sync_to_async(_save_bp_failed)(bp, str(e))
             stats["failed"] += 1
@@ -245,10 +259,10 @@ async def buyhatke_bulk_fill(
         _done_count += 1
         if _done_count % 200 == 0:
             logger.info(
-                "  Phase 2: %d/%d — %d filled (%s points), %d injected, %d empty, %d failed",
+                "  Phase 2: %d/%d — %d filled (%s points), %d injected, %d empty, %d failed, %d rate_limited",
                 _done_count, total,
                 stats["filled"], f"{stats['points']:,}",
-                stats["injected"], stats["empty"], stats["failed"],
+                stats["injected"], stats["empty"], stats["failed"], stats["rate_limited"],
             )
 
     try:

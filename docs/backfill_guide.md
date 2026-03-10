@@ -296,7 +296,7 @@ docker compose -f docker-compose.primary.yml exec backend \
 
 docker compose -f docker-compose.primary.yml exec backend python -c "
 from apps.pricing.tasks import run_phase1_discover
-result = run_phase1_discover.delay(sitemap_start=1, sitemap_end=1, filter_electronics=False)
+result = run_phase1_discover.delay(sitemap_start=4, sitemap_end=5, filter_electronics=False)
 print(f'Task ID: {result.id}')
 "
 ## Monitor progress

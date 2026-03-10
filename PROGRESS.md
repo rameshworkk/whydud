@@ -4097,3 +4097,50 @@ Added four new subcommands to `backfill_prices` management command for pipeline 
 | `docker/cloud-init-worker.yml` | Same fixes as setup-worker.sh |
 | `apps/pricing/backfill/config.py` | BH concurrency 2→1, added `bh_burst_size=15`, `bh_burst_pause=2.0` |
 | `apps/pricing/backfill/bh_client.py` | Deterministic burst pause every 15 requests, removed random burst logic |
+
+---
+
+### 2026-03-09 — WireGuard Subnet Fix + 4-Node Cluster Online
+
+**Problem:** OCI worker nodes (whyd1, whyd2) could not connect to primary's Redis/PostgreSQL over WireGuard. `nc -zv 10.0.0.1 6379` timed out despite WireGuard tunnel showing handshakes.
+
+**Root Cause:** OCI Always Free instances use `10.0.0.0/24` as their VCN subnet. WireGuard was also configured on `10.0.0.0/24`. The `ip route show` on workers revealed a host route `10.0.0.1 dev ens3` (OCI gateway) taking priority over `10.0.0.0/24 dev wg0` (WireGuard). Pings to "10.0.0.1" were hitting OCI's local gateway (0.161ms latency), not the primary server through WireGuard.
+
+**Fix:** Changed entire WireGuard subnet from `10.0.0.0/24` → `10.8.0.0/24` across all nodes and config files.
+
+| Node | WireGuard IP | Public IP | Role |
+|---|---|---|---|
+| Primary | 10.8.0.1 | 95.111.232.70 | Celery default/scoring/alerts/email/scraping |
+| Replica | 10.8.0.2 | 46.250.237.93 | Frontend + backend + scraping worker |
+| whyd1 (oci-w1) | 10.8.0.3 | 80.225.201.209 | Scraping worker |
+| whyd2 (oci-w2) | 10.8.0.4 | 80.225.206.18 | Scraping worker |
+
+**Result:** All 4 Celery nodes online — `celery inspect active_queues` shows:
+- `primary@f3b0bb392431` — queues: default, scoring, alerts, email, scraping
+- `scraping@99e3a34c0881` — queue: scraping (replica)
+- `oci-w1@whyd1` — queue: scraping
+- `oci-w2@whyd-worker-node` — queue: scraping
+
+**Other Bugs Fixed:**
+- `wg syncconf` doesn't work on OCI — use `wg-quick down/up` instead
+- `pg_ctl reload` fails as root — must use `docker exec -u postgres`
+- setup-worker.sh: `mkdir -p /opt/scripts` was after heredoc writing to that dir
+- cloud-init-worker.yml: git clone path was `/opt/whydud` instead of `/opt/whydud/whydud`
+- .env.worker must use individual vars (`REDIS_PASSWORD=xxx`), not full URLs (`REDIS_URL=redis://...`), because docker-compose.worker.yml constructs URLs via `${}` substitution
+- Frontend build: `isLightweight` missing from `compare-context.tsx` ProductSummary reconstruction
+- Secrets removed from setup-worker.sh (replaced with PASTE_HERE placeholders)
+
+**Changes (10 files):**
+
+| File | Change |
+|---|---|
+| `docker-compose.primary.yml` | Port bindings: `10.0.0.1` → `10.8.0.1` for postgres + redis |
+| `docker-compose.replica.yml` | All env vars: `10.0.0.1` → `10.8.0.1` |
+| `docker/docker-compose.worker.yml` | Comment update: `10.0.0.x` → `10.8.0.x` |
+| `docker/postgres/pg_hba.conf` | Replica + worker entries: `10.0.0.x` → `10.8.0.x` |
+| `docker/setup-worker.sh` | Full rewrite: secrets → placeholders, fixed bugs, improved instructions |
+| `docker/cloud-init-worker.yml` | Same fixes as setup-worker.sh, added .env.worker format warning |
+| `docs/SERVER_INFRASTRUCTURE.md` | All `10.0.0` → `10.8.0` |
+| `docs/DEPLOYMENT.md` | All `10.0.0` → `10.8.0` |
+| `.gitignore` | Added `docker/setup-worker.sh`, `docker/.env.worker`, `*.env.worker` |
+| `frontend/src/contexts/compare-context.tsx` | Added missing `isLightweight: false` |

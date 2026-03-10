@@ -8,19 +8,24 @@
 # ┌─────────────────────────────────────────────────────────┐
 # │  YOU MUST CHANGE 10 values marked ← CHANGE THIS        │
 # │                                                         │
-# │  For whyd1 vs whyd2, only 2 lines differ:              │
+# │  For whyd1 vs whyd2, only 3 lines differ:              │
 # │    - WireGuard Address (10.8.0.3 vs 10.8.0.4)          │
 # │    - CELERY_WORKER_ID (oci-w1 vs oci-w2)               │
 # │    - WG_PRIVATE_KEY (unique per worker)                 │
 # └─────────────────────────────────────────────────────────┘
 #
+# IMPORTANT:
+#   - WireGuard subnet is 10.8.0.0/24 (NOT 10.0.0.0/24 — OCI VCN uses that)
+#   - .env.worker must have INDIVIDUAL vars (REDIS_PASSWORD=xxx),
+#     NOT full URLs. docker-compose.worker.yml builds URLs from them.
+#
 # AFTER this runs, do these steps on PRIMARY (95.111.232.70):
 #   1. Add worker's WG public key to /etc/wireguard/wg0.conf
-#   2. Add pg_hba.conf entry: host all all 10.8.0.X/32 md5
-#   3. Reload WG: wg syncconf wg0 <(wg-quick strip wg0)
-#   4. Reload PG: docker exec whydud-postgres pg_ctl reload -D /var/lib/postgresql/data
-#   5. Open Redis port on firewall: ufw allow from 10.8.0.X to any port 6379
-#   6. Open Postgres port: ufw allow from 10.8.0.X to any port 5432
+#   2. Restart WG: sudo wg-quick down wg0 && sudo wg-quick up wg0
+#   3. Open Redis port: ufw allow from 10.8.0.X to any port 6379
+#   4. Open Postgres port: ufw allow from 10.8.0.X to any port 5432
+#   5. Verify: nc -zv 10.8.0.1 6379 (from worker)
+#   6. Verify cluster: docker exec whydud-celery-default celery -A whydud inspect active_queues
 # ============================================================
 
 package_update: true
@@ -50,6 +55,9 @@ write_files:
       PersistentKeepalive = 25
 
   # ── Worker environment file ───────────────────────────────
+  # IMPORTANT: Individual vars only — docker-compose.worker.yml
+  # constructs URLs from these via ${} substitution.
+  # Do NOT put REDIS_URL or CELERY_BROKER_URL here.
   - path: /opt/whydud/.env.worker
     permissions: "0600"
     content: |
@@ -103,7 +111,7 @@ write_files:
     content: |
       #!/bin/bash
       WG_OK=$(ping -c 1 -W 3 10.8.0.1 2>/dev/null && echo "ok" || echo "FAIL")
-      DOCKER_OK=$(docker ps --filter name=worker --format '{{.Status}}' 2>/dev/null | head -1)
+      DOCKER_OK=$(docker ps --filter name=celery-enrichment --format '{{.Status}}' 2>/dev/null | head -1)
 
       if [ "$WG_OK" != "ok" ]; then
         echo "[$(date)] WireGuard DOWN — restarting"
@@ -130,6 +138,15 @@ runcmd:
   - iptables -I INPUT 5 -p udp --dport 51820 -j ACCEPT
   - iptables -I INPUT 6 -s 10.8.0.0/24 -j ACCEPT
   - netfilter-persistent save
+
+  # ── 2c. Swap (8GB — critical for 1GB OCI instances) ───────
+  - fallocate -l 8G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  - sysctl vm.swappiness=10
+  - echo 'vm.swappiness=10' >> /etc/sysctl.conf
 
   # ── 3. Docker ─────────────────────────────────────────────
   - curl -fsSL https://get.docker.com | sh

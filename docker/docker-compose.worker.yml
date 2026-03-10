@@ -23,7 +23,7 @@ services:
     command: >
       celery -A whydud worker
       --loglevel=info
-      --concurrency=2
+      --concurrency=1
       --queues=scraping
       --hostname=${CELERY_WORKER_ID:-remote-w1}@%h
     environment:
@@ -48,7 +48,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 1.5g
     # No healthcheck dependencies — primary node services are external
     healthcheck:
       test: ["CMD-SHELL", "celery -A whydud inspect ping --destination=${CELERY_WORKER_ID:-remote-w1}@$$HOSTNAME 2>/dev/null | grep -q pong || exit 1"]
