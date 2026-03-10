@@ -4579,3 +4579,16 @@ Added reusable AuditLogMixin for automatic admin action logging, enhanced SiteCo
 | `backend/apps/accounts/admin.py` | Added AuditLogMixin to UserAdmin |
 | `backend/apps/pricing/admin.py` | Added AuditLogMixin to BackfillProductAdmin |
 | `backend/apps/scoring/admin.py` | Added AuditLogMixin to DudScoreConfigAdmin |
+
+---
+
+### Bugfix: FieldError on admin dashboard — `date_joined` → `created_at`
+
+**Date:** 2026-03-11
+
+Custom User model uses `created_at` (not Django's default `date_joined`). Fixed reference in `dashboard_view` that caused FieldError on `/admin/dashboard/`.
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Changed `date_joined__date=today` → `created_at__date=today` in `user_new_today` query |

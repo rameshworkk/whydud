@@ -137,7 +137,7 @@ class WhydudAdminSite(AdminSite):
             # User stats
             "user_count": User.objects.count(),
             "user_new_today": User.objects.filter(
-                date_joined__date=today
+                created_at__date=today
             ).count(),
             "user_active_7d": User.objects.filter(
                 last_login__gte=week_ago
