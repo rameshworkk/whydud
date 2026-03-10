@@ -4493,3 +4493,45 @@ Enhanced `ReviewAdmin` with moderation stats, credibility badges, star ratings, 
 | File | Purpose |
 |---|---|
 | `backend/templates/admin/price_intel.html` | Full console template with stat cards, Chart.js donuts, anomaly tables, action buttons |
+
+---
+
+### AD-11: Analytics / BI Dashboard + Search Console ✅
+**Date:** 2026-03-11
+
+Replaced the analytics_view stub with a comprehensive BI dashboard and Meilisearch search console.
+
+**Dashboard sections:**
+
+| Section | Details |
+|---|---|
+| Growth Metrics (30d) | 4 line charts: Products per day (total/lightweight/enriched), Price snapshots per day, Users per day, Reviews per day |
+| Distribution & Pipeline | Marketplace distribution (doughnut chart), Enrichment funnel (horizontal bar: Discovered → BH Filled → PH Extended → Lightweight → Enriched → With Reviews → With DudScore) |
+| Backfill Velocity | Stat cards (pending enrichment, avg daily rate, est. days to complete), grouped bar chart (discovered vs enriched per day, 30d) |
+| Top Content | Top 10 products by reviews (table), Top 10 products by snapshots (table), Top 10 categories (horizontal bar), Top 10 brands (horizontal bar) |
+| Search Console | Meilisearch health status, documents indexed, indexing state, connection error display |
+
+**Data queries:**
+- TruncDate + Count for all 30-day time-series (products, users, reviews)
+- Raw SQL for price_snapshots daily counts (TimescaleDB hypertable)
+- Raw SQL for top products by snapshot count (JOIN price_snapshots + products)
+- BackfillProduct status aggregations for enrichment funnel
+- httpx GET to Meilisearch /health and /indexes/products/stats
+
+**Search console actions:**
+| Action | Celery Task |
+|---|---|
+| Full Reindex | `full_reindex.delay()` (scoring queue) |
+| Selective Sync | `sync_products_to_meilisearch.delay()` (scoring queue) |
+
+**URL routes added:** `analytics/action/<str:action>/` → `analytics_action` handler
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Replaced analytics_view stub with full implementation (~260 lines), added analytics_action handler, added URL route |
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/templates/admin/analytics.html` | Full BI dashboard template with 8 Chart.js canvases, stat cards, top content tables, Meilisearch console |

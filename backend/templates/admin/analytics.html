@@ -1,0 +1,596 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Analytics & BI Dashboard{% endblock %}
+{% block content_title %}<h1>Analytics & BI Dashboard</h1>{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .stat-card .label {
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
+  .stat-card .value {
+    font-size: 28px;
+    font-weight: bold;
+    color: #1a1a2e;
+    margin-top: 4px;
+  }
+  .stat-card .sub {
+    font-size: 12px;
+    color: #999;
+    margin-top: 4px;
+  }
+  .stat-card .value.warn { color: #d97706; }
+  .stat-card .value.danger { color: #DC2626; }
+  .stat-card .value.ok { color: #16A34A; }
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 24px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #F97316;
+    color: #1a1a2e;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  .three-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) {
+    .two-col, .three-col { grid-template-columns: 1fr; }
+  }
+  .chart-box {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .chart-box h3 {
+    font-size: 14px;
+    color: #333;
+    margin: 0 0 12px;
+  }
+  .top-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .top-table th {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 2px solid #e2e8f0;
+    font-weight: 600;
+    color: #333;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .top-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #555;
+  }
+  .top-table tr:hover { background: #fafbfc; }
+  .top-table .rank {
+    color: #999;
+    font-weight: 600;
+    width: 30px;
+  }
+  .top-table .count {
+    font-weight: 600;
+    color: #1a1a2e;
+    text-align: right;
+  }
+  /* Search console */
+  .meili-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .meili-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+  .meili-item .mi-value {
+    font-weight: 700;
+    font-size: 18px;
+    color: #1a1a2e;
+    min-width: 40px;
+  }
+  .meili-item .mi-label {
+    font-size: 12px;
+    color: #666;
+  }
+  .action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .action-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .action-card h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: #1a1a2e;
+  }
+  .action-card .desc {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 12px;
+  }
+  .btn-action {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: opacity 0.2s;
+  }
+  .btn-action:hover { opacity: 0.85; }
+  .btn-primary { background: #F97316; color: white; }
+  .btn-secondary { background: #64748B; color: white; }
+  .status-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .status-dot.ok { background: #16A34A; }
+  .status-dot.warn { background: #d97706; }
+  .status-dot.err { background: #DC2626; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================ -->
+<!-- GROWTH METRICS -->
+<!-- ============================================================ -->
+<div class="section-title">Growth Metrics (30 Days)</div>
+
+<div class="two-col">
+  <div class="chart-box">
+    <h3>Products Added per Day</h3>
+    <canvas id="productsChart" height="200"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Price Snapshots per Day</h3>
+    <canvas id="snapshotsChart" height="200"></canvas>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="chart-box">
+    <h3>Users per Day</h3>
+    <canvas id="usersChart" height="200"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Reviews per Day</h3>
+    <canvas id="reviewsChart" height="200"></canvas>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- MARKETPLACE DISTRIBUTION + ENRICHMENT FUNNEL -->
+<!-- ============================================================ -->
+<div class="section-title">Distribution & Pipeline</div>
+
+<div class="two-col">
+  <div class="chart-box">
+    <h3>Marketplace Distribution (Listings)</h3>
+    <canvas id="mpChart" height="250"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Enrichment Funnel</h3>
+    <canvas id="funnelChart" height="250"></canvas>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- BACKFILL VELOCITY -->
+<!-- ============================================================ -->
+<div class="section-title">Backfill Velocity</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Pending Enrichment</div>
+    <div class="value{% if pending_enrichment > 100000 %} warn{% endif %}">{{ pending_enrichment|default:"0" }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Avg Daily Rate</div>
+    <div class="value">{{ avg_daily_rate|default:"0" }}</div>
+    <div class="sub">products/day (30d avg)</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Est. Days to Complete</div>
+    <div class="value{% if est_days and est_days > 365 %} warn{% elif est_days %} ok{% endif %}">
+      {% if est_days %}{{ est_days }}{% else %}—{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="chart-box" style="margin-bottom:24px;">
+  <h3>Discovery vs Enrichment Rate (30 Days)</h3>
+  <canvas id="velocityChart" height="180"></canvas>
+</div>
+
+<!-- ============================================================ -->
+<!-- TOP CONTENT -->
+<!-- ============================================================ -->
+<div class="section-title">Top Content</div>
+
+<div class="two-col">
+  <div class="chart-box">
+    <h3>Top 10 Products by Reviews</h3>
+    {% if top_by_reviews %}
+    <table class="top-table">
+      <thead><tr><th>#</th><th>Product</th><th style="text-align:right">Reviews</th></tr></thead>
+      <tbody>
+        {% for p in top_by_reviews %}
+        <tr>
+          <td class="rank">{{ forloop.counter }}</td>
+          <td title="{{ p.title }}">{{ p.title|truncatechars:50 }}</td>
+          <td class="count">{{ p.total_reviews }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:#999;font-size:13px;">No products with reviews yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="chart-box">
+    <h3>Top 10 Products by Snapshots</h3>
+    {% if top_by_snapshots %}
+    <table class="top-table">
+      <thead><tr><th>#</th><th>Product</th><th style="text-align:right">Snapshots</th></tr></thead>
+      <tbody>
+        {% for p in top_by_snapshots %}
+        <tr>
+          <td class="rank">{{ forloop.counter }}</td>
+          <td title="{{ p.title }}">{{ p.title|truncatechars:50 }}</td>
+          <td class="count">{{ p.count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:#999;font-size:13px;">No snapshot data yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="chart-box">
+    <h3>Top 10 Categories</h3>
+    <canvas id="categoriesChart" height="250"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Top 10 Brands</h3>
+    <canvas id="brandsChart" height="250"></canvas>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SEARCH CONSOLE -->
+<!-- ============================================================ -->
+<div class="section-title">Search Console (Meilisearch)</div>
+
+<div class="meili-grid">
+  <div class="meili-item">
+    <span class="status-dot {% if meili_health.status == 'available' %}ok{% elif meili_health.status == 'error' %}err{% else %}warn{% endif %}"></span>
+    <div>
+      <div class="mi-value" style="font-size:14px;">{{ meili_health.status|default:"unknown" }}</div>
+      <div class="mi-label">Health</div>
+    </div>
+  </div>
+  {% if meili_stats.numberOfDocuments is not None %}
+  <div class="meili-item">
+    <div class="mi-value">{{ meili_stats.numberOfDocuments|default:"0" }}</div>
+    <div class="mi-label">Documents Indexed</div>
+  </div>
+  {% endif %}
+  {% if meili_stats.isIndexing is not None %}
+  <div class="meili-item">
+    <span class="status-dot {% if meili_stats.isIndexing %}warn{% else %}ok{% endif %}"></span>
+    <div>
+      <div class="mi-value" style="font-size:14px;">{% if meili_stats.isIndexing %}Yes{% else %}Idle{% endif %}</div>
+      <div class="mi-label">Indexing</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if meili_health.error %}
+<div class="stat-card" style="margin-bottom:16px;">
+  <div class="label">Connection Error</div>
+  <div class="sub" style="color:#DC2626;">{{ meili_health.error }}</div>
+</div>
+{% endif %}
+
+<div class="action-grid">
+  <div class="action-card">
+    <h4>Full Reindex</h4>
+    <div class="desc">Reconfigure index settings and reindex all active products</div>
+    <form method="post" action="{% url 'admin:analytics-action' action='full-reindex' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn-action btn-primary">Full Reindex</button>
+    </form>
+  </div>
+
+  <div class="action-card">
+    <h4>Selective Sync</h4>
+    <div class="desc">Sync all active products to Meilisearch without reconfiguring settings</div>
+    <form method="post" action="{% url 'admin:analytics-action' action='selective-sync' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn-action btn-secondary">Selective Sync</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- CHARTS JS -->
+<!-- ============================================================ -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const COLORS = ['#F97316', '#4DB6AC', '#FBBF24', '#16A34A', '#DC2626', '#64748B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+  const LINE_OPTS = {
+    responsive: true,
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
+      y: { beginAtZero: true, ticks: { font: { size: 10 } } }
+    }
+  };
+
+  // --- Products per day ---
+  const prodData = {{ products_chart|safe }};
+  new Chart(document.getElementById('productsChart'), {
+    type: 'line',
+    data: {
+      labels: prodData.labels,
+      datasets: [
+        { label: 'Total', data: prodData.total, borderColor: '#F97316', backgroundColor: 'rgba(249,115,22,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+        { label: 'Lightweight', data: prodData.lightweight, borderColor: '#4DB6AC', backgroundColor: 'transparent', borderDash: [5,3], tension: 0.3, pointRadius: 2 },
+        { label: 'Enriched', data: prodData.enriched, borderColor: '#16A34A', backgroundColor: 'transparent', borderDash: [2,2], tension: 0.3, pointRadius: 2 },
+      ]
+    },
+    options: LINE_OPTS
+  });
+
+  // --- Snapshots per day ---
+  const snapData = {{ snapshots_chart|safe }};
+  new Chart(document.getElementById('snapshotsChart'), {
+    type: 'line',
+    data: {
+      labels: snapData.labels,
+      datasets: [{
+        label: 'Snapshots',
+        data: snapData.data,
+        borderColor: '#4DB6AC',
+        backgroundColor: 'rgba(77,182,172,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2
+      }]
+    },
+    options: LINE_OPTS
+  });
+
+  // --- Users per day ---
+  const userData = {{ users_chart|safe }};
+  new Chart(document.getElementById('usersChart'), {
+    type: 'line',
+    data: {
+      labels: userData.labels,
+      datasets: [{
+        label: 'New Users',
+        data: userData.data,
+        borderColor: '#8B5CF6',
+        backgroundColor: 'rgba(139,92,246,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2
+      }]
+    },
+    options: LINE_OPTS
+  });
+
+  // --- Reviews per day ---
+  const revData = {{ reviews_chart|safe }};
+  new Chart(document.getElementById('reviewsChart'), {
+    type: 'line',
+    data: {
+      labels: revData.labels,
+      datasets: [{
+        label: 'Reviews',
+        data: revData.data,
+        borderColor: '#FBBF24',
+        backgroundColor: 'rgba(251,191,36,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2
+      }]
+    },
+    options: LINE_OPTS
+  });
+
+  // --- Marketplace distribution (pie) ---
+  const mpData = {{ mp_dist|safe }};
+  new Chart(document.getElementById('mpChart'), {
+    type: 'doughnut',
+    data: {
+      labels: mpData.labels,
+      datasets: [{
+        data: mpData.data,
+        backgroundColor: COLORS.slice(0, mpData.labels.length),
+        borderWidth: 2,
+        borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } }
+      }
+    }
+  });
+
+  // --- Enrichment funnel (horizontal bar) ---
+  const funnelData = {{ funnel|safe }};
+  new Chart(document.getElementById('funnelChart'), {
+    type: 'bar',
+    data: {
+      labels: funnelData.labels,
+      datasets: [{
+        data: funnelData.data,
+        backgroundColor: ['#64748B', '#4DB6AC', '#06B6D4', '#FBBF24', '#F97316', '#16A34A', '#8B5CF6'],
+        borderRadius: 4,
+        barThickness: 24
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const total = funnelData.data[0] || 1;
+              const pct = ((ctx.raw / total) * 100).toFixed(1);
+              return ctx.raw.toLocaleString() + ' (' + pct + '%)';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { font: { size: 10 } } },
+        y: { ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+
+  // --- Backfill velocity ---
+  const velData = {{ velocity_chart|safe }};
+  const velLabels = velData.labels;
+  const velDiscovered = velLabels.map(l => velData.discovered[l] || 0);
+  const velEnriched = velLabels.map(l => velData.enriched[l] || 0);
+
+  new Chart(document.getElementById('velocityChart'), {
+    type: 'bar',
+    data: {
+      labels: velLabels,
+      datasets: [
+        { label: 'Discovered', data: velDiscovered, backgroundColor: 'rgba(249,115,22,0.7)', borderRadius: 3 },
+        { label: 'Enriched', data: velEnriched, backgroundColor: 'rgba(22,163,74,0.7)', borderRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+
+  // --- Top Categories (horizontal bar) ---
+  const catLabels = [{% for c in top_categories %}"{{ c.category__name|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+  const catData = [{% for c in top_categories %}{{ c.count }}{% if not forloop.last %},{% endif %}{% endfor %}];
+  if (catLabels.length) {
+    new Chart(document.getElementById('categoriesChart'), {
+      type: 'bar',
+      data: {
+        labels: catLabels,
+        datasets: [{
+          data: catData,
+          backgroundColor: '#F97316',
+          borderRadius: 4,
+          barThickness: 20
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, ticks: { font: { size: 10 } } },
+          y: { ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  // --- Top Brands (horizontal bar) ---
+  const brandLabels = [{% for b in top_brands %}"{{ b.brand__name|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+  const brandData = [{% for b in top_brands %}{{ b.count }}{% if not forloop.last %},{% endif %}{% endfor %}];
+  if (brandLabels.length) {
+    new Chart(document.getElementById('brandsChart'), {
+      type: 'bar',
+      data: {
+        labels: brandLabels,
+        datasets: [{
+          data: brandData,
+          backgroundColor: '#4DB6AC',
+          borderRadius: 4,
+          barThickness: 20
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, ticks: { font: { size: 10 } } },
+          y: { ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+});
+</script>
+
+{% endblock %}

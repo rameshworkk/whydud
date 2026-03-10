@@ -57,6 +57,11 @@ class WhydudAdminSite(AdminSite):
                 name="analytics",
             ),
             path(
+                "analytics/action/<str:action>/",
+                self.admin_view(self.analytics_action),
+                name="analytics-action",
+            ),
+            path(
                 "cluster/",
                 self.admin_view(self.cluster_view),
                 name="cluster-console",
@@ -1415,13 +1420,301 @@ class WhydudAdminSite(AdminSite):
         return redirect("admin:price-intel")
 
     def analytics_view(self, request):
-        from django.shortcuts import render
+        """Analytics / BI dashboard + Search console (AD-11)."""
+        import json
+        from datetime import timedelta
 
-        return render(
-            request,
-            "admin/stub.html",
-            {**self.each_context(request), "title": "Analytics"},
+        from django.conf import settings
+        from django.db import connection
+        from django.db.models import Count, Q
+        from django.db.models.functions import TruncDate
+        from django.shortcuts import render
+        from django.utils import timezone
+
+        from apps.pricing.models import BackfillProduct, PriceSnapshot
+        from apps.products.models import Product, ProductListing
+        from apps.reviews.models import Review
+
+        User = self._get_user_model()
+        now = timezone.now()
+        thirty_days_ago = now - timedelta(days=30)
+
+        # ---- GROWTH METRICS (30-day daily counts) ----
+        products_daily = list(
+            Product.objects
+            .filter(created_at__gte=thirty_days_ago)
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(
+                total=Count("id"),
+                lightweight=Count("id", filter=Q(is_lightweight=True)),
+                enriched=Count("id", filter=Q(is_lightweight=False)),
+            )
+            .order_by("day")
         )
+
+        users_daily = list(
+            User.objects
+            .filter(created_at__gte=thirty_days_ago)
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .order_by("day")
+        )
+
+        reviews_daily = list(
+            Review.objects
+            .filter(created_at__gte=thirty_days_ago)
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .order_by("day")
+        )
+
+        # Snapshots per day via raw SQL (TimescaleDB hypertable)
+        snapshots_daily = []
+        try:
+            with connection.cursor() as cur:
+                cur.execute("""
+                    SELECT DATE(time) AS day, COUNT(*)
+                    FROM price_snapshots
+                    WHERE time >= %s
+                    GROUP BY DATE(time)
+                    ORDER BY day
+                """, [thirty_days_ago])
+                snapshots_daily = [
+                    {"day": row[0].isoformat(), "count": row[1]}
+                    for row in cur.fetchall()
+                ]
+        except Exception:
+            pass
+
+        # Format for Chart.js
+        products_chart = {
+            "labels": [d["day"].isoformat() for d in products_daily],
+            "total": [d["total"] for d in products_daily],
+            "lightweight": [d["lightweight"] for d in products_daily],
+            "enriched": [d["enriched"] for d in products_daily],
+        }
+        users_chart = {
+            "labels": [d["day"].isoformat() for d in users_daily],
+            "data": [d["count"] for d in users_daily],
+        }
+        reviews_chart = {
+            "labels": [d["day"].isoformat() for d in reviews_daily],
+            "data": [d["count"] for d in reviews_daily],
+        }
+        snapshots_chart = {
+            "labels": [d["day"] for d in snapshots_daily],
+            "data": [d["count"] for d in snapshots_daily],
+        }
+
+        # ---- MARKETPLACE DISTRIBUTION ----
+        products_by_mp = list(
+            ProductListing.objects
+            .values("marketplace__name")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+        mp_dist = {
+            "labels": [m["marketplace__name"] for m in products_by_mp],
+            "data": [m["count"] for m in products_by_mp],
+        }
+
+        # ---- ENRICHMENT FUNNEL ----
+        bf_total = BackfillProduct.objects.count()
+        bf_bh_filled = BackfillProduct.objects.filter(
+            status__in=["bh_filled", "ph_extending", "ph_extended", "done"]
+        ).count()
+        bf_ph_extended = BackfillProduct.objects.filter(
+            status__in=["ph_extended", "done"]
+        ).count()
+        lightweight_count = Product.objects.filter(is_lightweight=True).count()
+        enriched_count = Product.objects.filter(is_lightweight=False).count()
+        with_reviews = Product.objects.filter(total_reviews__gt=0).count()
+        with_dudscore = Product.objects.filter(dud_score__isnull=False).count()
+
+        funnel = {
+            "labels": [
+                "Discovered", "BH Filled", "PH Extended",
+                "Lightweight", "Enriched", "With Reviews", "With DudScore",
+            ],
+            "data": [
+                bf_total, bf_bh_filled, bf_ph_extended,
+                lightweight_count, enriched_count, with_reviews, with_dudscore,
+            ],
+        }
+
+        # ---- TOP CONTENT ----
+        top_by_reviews = list(
+            Product.objects
+            .filter(total_reviews__gt=0)
+            .order_by("-total_reviews")
+            .values("title", "total_reviews")[:10]
+        )
+
+        top_by_snapshots = []
+        try:
+            with connection.cursor() as cur:
+                cur.execute("""
+                    SELECT p.title, COUNT(ps.*) AS cnt
+                    FROM price_snapshots ps
+                    JOIN products p ON p.id = ps.product_id
+                    GROUP BY p.id, p.title
+                    ORDER BY cnt DESC
+                    LIMIT 10
+                """)
+                top_by_snapshots = [
+                    {"title": row[0], "count": row[1]}
+                    for row in cur.fetchall()
+                ]
+        except Exception:
+            pass
+
+        top_categories = list(
+            Product.objects
+            .filter(category__isnull=False)
+            .values("category__name")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:10]
+        )
+        top_brands = list(
+            Product.objects
+            .filter(brand__isnull=False)
+            .values("brand__name")
+            .annotate(count=Count("id"))
+            .order_by("-count")[:10]
+        )
+
+        # ---- BACKFILL VELOCITY ----
+        discovered_daily = list(
+            BackfillProduct.objects
+            .filter(created_at__gte=thirty_days_ago)
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .order_by("day")
+        )
+        enriched_daily = list(
+            BackfillProduct.objects
+            .filter(
+                scrape_status="scraped",
+                updated_at__gte=thirty_days_ago,
+            )
+            .annotate(day=TruncDate("updated_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .order_by("day")
+        )
+
+        # Estimated days to complete enrichment
+        pending_enrichment = BackfillProduct.objects.filter(
+            scrape_status="pending"
+        ).count()
+        recent_enriched = sum(d["count"] for d in enriched_daily)
+        avg_daily_rate = recent_enriched / 30 if recent_enriched else 0
+        est_days = (
+            round(pending_enrichment / avg_daily_rate)
+            if avg_daily_rate > 0
+            else None
+        )
+
+        velocity_chart = {
+            "labels": sorted(set(
+                [d["day"].isoformat() for d in discovered_daily]
+                + [d["day"].isoformat() for d in enriched_daily]
+            )),
+            "discovered": {
+                d["day"].isoformat(): d["count"] for d in discovered_daily
+            },
+            "enriched": {
+                d["day"].isoformat(): d["count"] for d in enriched_daily
+            },
+        }
+
+        # ---- MEILISEARCH HEALTH ----
+        meili_health = {"status": "unknown"}
+        meili_stats = {}
+        try:
+            import httpx
+
+            meili_url = getattr(settings, "MEILISEARCH_URL", "http://localhost:7700")
+            meili_key = getattr(settings, "MEILISEARCH_MASTER_KEY", "")
+            headers = {"Authorization": f"Bearer {meili_key}"} if meili_key else {}
+
+            resp = httpx.get(f"{meili_url}/health", headers=headers, timeout=5)
+            meili_health = resp.json() if resp.status_code == 200 else {"status": "unhealthy"}
+
+            resp = httpx.get(f"{meili_url}/indexes/products/stats", headers=headers, timeout=5)
+            if resp.status_code == 200:
+                meili_stats = resp.json()
+        except Exception as exc:
+            meili_health = {"status": "error", "error": str(exc)}
+
+        context = {
+            **self.each_context(request),
+            "title": "Analytics & BI Dashboard",
+            # Growth charts
+            "products_chart": json.dumps(products_chart),
+            "users_chart": json.dumps(users_chart),
+            "reviews_chart": json.dumps(reviews_chart),
+            "snapshots_chart": json.dumps(snapshots_chart),
+            # Marketplace distribution
+            "mp_dist": json.dumps(mp_dist),
+            # Enrichment funnel
+            "funnel": json.dumps(funnel),
+            # Top content
+            "top_by_reviews": top_by_reviews,
+            "top_by_snapshots": top_by_snapshots,
+            "top_categories": top_categories,
+            "top_brands": top_brands,
+            # Backfill velocity
+            "velocity_chart": json.dumps(velocity_chart),
+            "pending_enrichment": pending_enrichment,
+            "avg_daily_rate": round(avg_daily_rate, 1),
+            "est_days": est_days,
+            # Meilisearch
+            "meili_health": meili_health,
+            "meili_stats": meili_stats,
+        }
+        return render(request, "admin/analytics.html", context)
+
+    def analytics_action(self, request, action):
+        """Handle search console actions (reindex, selective sync)."""
+        from django.contrib import messages
+        from django.shortcuts import redirect
+
+        if request.method != "POST":
+            return redirect("admin:analytics")
+
+        try:
+            if action == "full-reindex":
+                from apps.search.tasks import full_reindex
+
+                result = full_reindex.delay()
+                messages.success(
+                    request,
+                    f"Full Meilisearch reindex queued. Task: {result.id}",
+                )
+
+            elif action == "selective-sync":
+                from apps.search.tasks import sync_products_to_meilisearch
+
+                result = sync_products_to_meilisearch.delay()
+                messages.success(
+                    request,
+                    f"Selective Meilisearch sync queued. Task: {result.id}",
+                )
+
+            else:
+                messages.error(request, f"Unknown action: {action}")
+
+        except ImportError as e:
+            messages.warning(request, f"Task not available: {e}")
+        except Exception as e:
+            messages.error(request, f"Failed: {e}")
+
+        return redirect("admin:analytics")
 
     # ------------------------------------------------------------------
     # Worker Cluster Console (AD-4)
