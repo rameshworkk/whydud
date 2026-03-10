@@ -1,0 +1,43 @@
+{% comment %}
+Data Table — card-wrapped table.
+Usage:
+  {% with table_title="Listings by Marketplace" %}
+    {% include "admin/includes/data_table.html" %}
+  {% endwith %}
+
+  Or inline the table pattern directly in each page for more control.
+{% endcomment %}
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+            rounded-2xl overflow-hidden shadow-xs">
+  {% if table_title %}
+  <div class="px-5 py-4 flex justify-between items-center border-b border-slate-200 dark:border-slate-700">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">
+      {{ table_title }}
+    </div>
+    {% if table_action_url %}
+    <a href="{{ table_action_url }}"
+       class="text-[12px] text-emerald-500 hover:text-emerald-600 font-medium transition-colors">
+      {{ table_action_text|default:"View all" }}
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
+  <table class="w-full">
+    {% if table_headers %}
+    <thead>
+      <tr>
+        {% for header in table_headers %}
+        <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                   px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700
+                   {% if forloop.last %}text-right{% endif %}">
+          {{ header }}
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    {% endif %}
+    <tbody>
+      {% block table_body %}{% endblock %}
+    </tbody>
+  </table>
+</div>

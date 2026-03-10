@@ -7,6 +7,34 @@ class WhydudAdminSite(AdminSite):
     site_title = "WHYDUD Platform"
     index_title = "Platform Management"
 
+    def each_context(self, request):
+        ctx = super().each_context(request)
+        ctx['active_page'] = ''
+        try:
+            from apps.pricing.models import BackfillProduct
+            pending = BackfillProduct.objects.filter(scrape_status='pending').count()
+            ctx['sidebar_backfill_badge'] = self._format_count(pending)
+            enrichment = BackfillProduct.objects.filter(
+                scrape_status='pending', enrichment_priority__lte=2).count()
+            ctx['sidebar_enrichment_badge'] = self._format_count(enrichment)
+        except Exception:
+            ctx['sidebar_backfill_badge'] = ''
+            ctx['sidebar_enrichment_badge'] = ''
+        try:
+            from apps.reviews.models import Review
+            ctx['sidebar_flagged_reviews'] = Review.objects.filter(is_flagged=True).count()
+        except Exception:
+            ctx['sidebar_flagged_reviews'] = 0
+        return ctx
+
+    @staticmethod
+    def _format_count(n):
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.1f}M"
+        if n >= 1_000:
+            return f"{n / 1_000:.0f}K"
+        return str(n) if n > 0 else ''
+
     def get_urls(self):
         from django.urls import path
 
@@ -103,6 +131,7 @@ class WhydudAdminSite(AdminSite):
 
         context = {
             **self.each_context(request),
+            "active_page": "dashboard",
             "title": "Platform Dashboard",
             # Product stats
             "product_count": Product.objects.count(),
@@ -191,6 +220,7 @@ class WhydudAdminSite(AdminSite):
 
         context = {
             **self.each_context(request),
+            "active_page": "system_health",
             "title": "System Health",
             "services": services,
             "db_stats": db_stats,
@@ -665,6 +695,7 @@ class WhydudAdminSite(AdminSite):
 
         context = {
             **self.each_context(request),
+            "active_page": "backfill",
             "title": "Backfill Pipeline",
             "total": total,
             "by_status": by_status,
@@ -1018,6 +1049,7 @@ class WhydudAdminSite(AdminSite):
 
         context = {
             **self.each_context(request),
+            "active_page": "enrichment",
             "title": "Enrichment Queue",
             "total": total,
             "by_scrape": by_scrape,
@@ -1361,6 +1393,7 @@ class WhydudAdminSite(AdminSite):
 
         ctx = {
             **self.each_context(request),
+            "active_page": "price_intel",
             "title": "Price Intelligence",
             # Snapshots
             "total_snapshots": total_snapshots,
@@ -1653,6 +1686,7 @@ class WhydudAdminSite(AdminSite):
 
         context = {
             **self.each_context(request),
+            "active_page": "analytics",
             "title": "Analytics & BI Dashboard",
             # Growth charts
             "products_chart": json.dumps(products_chart),
@@ -1833,6 +1867,7 @@ class WhydudAdminSite(AdminSite):
 
         context = {
             **self.each_context(request),
+            "active_page": "cluster",
             "title": "Worker Cluster",
             "nodes": nodes,
             "online_count": online_count,

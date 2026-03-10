@@ -1,0 +1,19 @@
+{% comment %}
+Chart Card — wrapper for Chart.js charts.
+Usage:
+  {% with title="Products Added per Day" subtitle="Last 30 days" chart_id="chart-products-daily" height="300" %}
+    {% include "admin/includes/chart_card.html" %}
+  {% endwith %}
+{% endcomment %}
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+            rounded-2xl p-6 shadow-xs">
+  <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">
+    {{ title }}
+  </div>
+  {% if subtitle %}
+  <div class="text-xs text-slate-400 mt-0.5">{{ subtitle }}</div>
+  {% endif %}
+  <div class="mt-4 relative" style="height: {{ height|default:'300' }}px">
+    <canvas id="{{ chart_id }}"></canvas>
+  </div>
+</div>

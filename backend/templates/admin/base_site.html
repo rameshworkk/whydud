@@ -1,22 +1,199 @@
-{% extends "admin/base.html" %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}WHYDUD Admin{% endblock %}</title>
 
-{% block title %}{{ title }} | WHYDUD Admin{% endblock %}
+  <!-- CDN Dependencies -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          sidebar: '#0c0a09',
+          'sidebar-hover': 'rgba(255,255,255,0.05)',
+          'sidebar-active': 'rgba(255,255,255,0.1)',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+        borderRadius: {
+          'xl': '12px',
+          '2xl': '16px',
+        },
+        boxShadow: {
+          'xs': '0 1px 2px rgba(0,0,0,0.04)',
+          'card': '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
+          'hover': '0 8px 16px -4px rgba(0,0,0,0.08)',
+        },
+        keyframes: {
+          fadeIn: {
+            '0%': { opacity: '0', transform: 'translateY(4px)' },
+            '100%': { opacity: '1', transform: 'translateY(0)' },
+          }
+        },
+        animation: {
+          'fade-in': 'fadeIn 0.3s ease',
+        }
+      },
+    },
+  }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <link rel="stylesheet" href="{% static 'admin/css/whydud_overrides.css' %}">
+  {% block extrahead %}{% endblock %}
+  {% block extra_css %}{% endblock %}
+</head>
 
-{% block branding %}
-<h1 id="site-name">
-  <a href="{% url 'admin:index' %}">{{ site_header|default:"WHYDUD Admin" }}</a>
-</h1>
-{% endblock %}
+<body class="font-sans bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 m-0">
+  <div class="flex min-h-screen">
 
-{% block nav-global %}
-<div style="background:#1a1a2e;padding:6px 16px;display:flex;gap:12px;flex-wrap:wrap;font-size:13px;">
-  <a href="{% url 'admin:admin-dashboard' %}" style="color:#F97316;text-decoration:none;font-weight:600;">Dashboard</a>
-  <a href="{% url 'admin:backfill-console' %}" style="color:#ccc;text-decoration:none;">Backfill</a>
-  <a href="{% url 'admin:enrichment-console' %}" style="color:#ccc;text-decoration:none;">Enrichment</a>
-  <a href="{% url 'admin:cluster-console' %}" style="color:#ccc;text-decoration:none;">Cluster</a>
-  <a href="{% url 'admin:system-health' %}" style="color:#ccc;text-decoration:none;">Health</a>
-  <a href="{% url 'admin:price-intel' %}" style="color:#ccc;text-decoration:none;">Price Intel</a>
-  <a href="{% url 'admin:analytics' %}" style="color:#ccc;text-decoration:none;">Analytics</a>
-  <a href="{% url 'admin:index' %}" style="color:#ccc;text-decoration:none;">Models</a>
-</div>
-{% endblock %}
+    <!-- Sidebar -->
+    {% include "admin/includes/sidebar.html" %}
+
+    <!-- Main area -->
+    <main class="flex-1 ml-[240px] min-h-screen transition-all" id="main-content">
+
+      <!-- Topbar -->
+      {% include "admin/includes/topbar.html" %}
+
+      <!-- Content -->
+      <div class="p-6 max-w-[1400px] animate-fade-in">
+        {% if messages %}
+        {% for message in messages %}
+        <div class="flex items-center gap-2 px-4 py-3 rounded-xl mb-4 text-[13px]
+                    {% if message.tags == 'success' %}bg-emerald-50 dark:bg-emerald-500/10 border-l-4 border-emerald-500 text-emerald-800 dark:text-emerald-300
+                    {% elif message.tags == 'error' %}bg-red-50 dark:bg-red-500/10 border-l-4 border-red-500 text-red-800 dark:text-red-300
+                    {% else %}bg-blue-50 dark:bg-blue-500/10 border-l-4 border-blue-500 text-blue-800 dark:text-blue-300{% endif %}">
+          {{ message }}
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {% block content_title %}{% endblock %}
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <!-- Command Palette Overlay -->
+  <div id="command-palette" class="fixed inset-0 bg-black/50 z-50 hidden items-start justify-center pt-[20vh]">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl w-[560px] max-h-[400px] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
+      <input type="text" id="cmd-search" placeholder="Search pages, models, actions..."
+             class="w-full px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-[15px] font-sans outline-none
+                    bg-transparent text-slate-900 dark:text-slate-100">
+      <div id="cmd-results" class="p-2 max-h-[300px] overflow-y-auto">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Lucide Icons (MUST be after DOM) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    // Initialize icons
+    lucide.createIcons();
+
+    // Theme toggle
+    const html = document.documentElement;
+    const savedTheme = localStorage.getItem('whydud-admin-theme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    function toggleTheme() {
+      html.classList.toggle('dark');
+      localStorage.setItem('whydud-admin-theme', html.classList.contains('dark') ? 'dark' : 'light');
+    }
+
+    // Sidebar collapse
+    const sidebar = document.getElementById('sidebar');
+    const mainEl = document.getElementById('main-content');
+    const sidebarCollapsed = localStorage.getItem('whydud-sidebar-collapsed') === 'true';
+    if (sidebarCollapsed) {
+      sidebar.classList.add('!w-16');
+      sidebar.querySelectorAll('.sidebar-text').forEach(el => el.classList.add('hidden'));
+      mainEl.classList.replace('ml-[240px]', 'ml-16');
+    }
+    function toggleSidebar() {
+      sidebar.classList.toggle('!w-16');
+      sidebar.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden'));
+      if (mainEl.classList.contains('ml-[240px]')) {
+        mainEl.classList.replace('ml-[240px]', 'ml-16');
+      } else {
+        mainEl.classList.replace('ml-16', 'ml-[240px]');
+      }
+      localStorage.setItem('whydud-sidebar-collapsed', sidebar.classList.contains('!w-16'));
+    }
+
+    // Command palette (Cmd+K / Ctrl+K)
+    const palette = document.getElementById('command-palette');
+    const cmdSearch = document.getElementById('cmd-search');
+    const cmdResults = document.getElementById('cmd-results');
+
+    const cmdItems = [
+      { label: 'Dashboard', url: '{% url "admin:admin-dashboard" %}', icon: 'layout-dashboard' },
+      { label: 'Analytics', url: '{% url "admin:analytics" %}', icon: 'bar-chart-3' },
+      { label: 'Backfill Console', url: '{% url "admin:backfill-console" %}', icon: 'database' },
+      { label: 'Enrichment Console', url: '{% url "admin:enrichment-console" %}', icon: 'refresh-cw' },
+      { label: 'Cluster Console', url: '{% url "admin:cluster-console" %}', icon: 'server' },
+      { label: 'Price Intelligence', url: '{% url "admin:price-intel" %}', icon: 'trending-up' },
+      { label: 'System Health', url: '{% url "admin:system-health" %}', icon: 'activity' },
+      { label: 'All Models', url: '{% url "admin:index" %}', icon: 'grid-3x3' },
+    ];
+
+    function renderCmdResults(query) {
+      const q = query.toLowerCase().trim();
+      const filtered = q ? cmdItems.filter(i => i.label.toLowerCase().includes(q)) : cmdItems;
+      cmdResults.innerHTML = filtered.map(item => `
+        <a href="${item.url}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px]
+           text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+          <i data-lucide="${item.icon}" class="w-4 h-4 text-slate-400"></i>
+          ${item.label}
+        </a>
+      `).join('');
+      lucide.createIcons();
+    }
+    renderCmdResults('');
+
+    cmdSearch.addEventListener('input', (e) => renderCmdResults(e.target.value));
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        palette.classList.toggle('hidden');
+        palette.classList.toggle('flex');
+        if (!palette.classList.contains('hidden')) {
+          cmdSearch.value = '';
+          renderCmdResults('');
+          cmdSearch.focus();
+        }
+      }
+      if (e.key === 'Escape') {
+        palette.classList.add('hidden');
+        palette.classList.remove('flex');
+      }
+    });
+    palette.addEventListener('click', (e) => {
+      if (e.target === palette) {
+        palette.classList.add('hidden');
+        palette.classList.remove('flex');
+      }
+    });
+
+    // Chart.js global defaults
+    if (typeof Chart !== 'undefined') {
+      Chart.defaults.font.family = 'Inter';
+      Chart.defaults.color = '#94a3b8';
+      Chart.defaults.plugins.legend.labels.usePointStyle = true;
+      Chart.defaults.plugins.legend.labels.padding = 16;
+    }
+  </script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

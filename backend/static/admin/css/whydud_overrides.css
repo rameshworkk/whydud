@@ -1,0 +1,94 @@
+/* backend/static/admin/css/whydud_overrides.css
+   Django admin element overrides that Tailwind can't target via class names.
+   Everything else is Tailwind utility classes inline in templates. */
+
+/* Hide Django's default header — we use our own topbar */
+#header { display: none !important; }
+
+/* Hide Django's default breadcrumbs container — we style our own */
+div.breadcrumbs { display: none; }
+
+/* Change list page */
+#changelist { padding: 0; }
+#changelist #toolbar { padding: 12px 0; }
+#changelist-search input[type="text"] {
+  border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px;
+  font-family: 'Inter', sans-serif; font-size: 13px;
+}
+#changelist-filter {
+  background: white; border-radius: 12px; border: 1px solid #e2e8f0;
+  padding: 16px; margin: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+#changelist-filter h2 {
+  font-size: 13px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 8px;
+}
+#changelist-filter h3 {
+  font-size: 13px; font-weight: 500; color: #334155; margin: 12px 0 4px;
+}
+#changelist-filter li { list-style: none; }
+#changelist-filter a {
+  color: #64748b; font-size: 13px; text-decoration: none; padding: 2px 0; display: block;
+}
+#changelist-filter a:hover { color: #10b981; }
+#changelist-filter li.selected a { color: #10b981; font-weight: 600; }
+
+/* Result table */
+#result_list th {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #94a3b8; font-weight: 500; background: #f8fafc;
+  padding: 10px 16px; border-bottom: 1px solid #e2e8f0;
+}
+#result_list td {
+  padding: 10px 16px; font-size: 13px; color: #475569;
+  border-bottom: 1px solid #f1f5f9;
+}
+#result_list tr:hover td { background: rgba(241,245,249,0.5); }
+
+/* Pagination */
+.paginator {
+  padding: 12px 16px; font-size: 13px; color: #64748b;
+}
+.paginator a {
+  color: #10b981; text-decoration: none; padding: 4px 8px;
+  border-radius: 6px;
+}
+.paginator a:hover { background: #ecfdf5; }
+
+/* Change form */
+fieldset {
+  border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;
+  background: white; margin-bottom: 16px;
+}
+fieldset h2 {
+  font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 12px;
+}
+.submit-row {
+  background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 20px;
+  border-radius: 0 0 12px 12px;
+}
+.submit-row input[type="submit"] {
+  background: #10b981; color: white; border: none; border-radius: 8px;
+  padding: 8px 20px; font-family: 'Inter', sans-serif; font-size: 13px;
+  font-weight: 500; cursor: pointer;
+}
+.submit-row input[type="submit"]:hover { background: #059669; }
+
+/* All form inputs */
+.aligned label { font-size: 13px; font-weight: 500; color: #334155; }
+input[type="text"], input[type="url"], input[type="email"],
+input[type="password"], input[type="number"], select, textarea {
+  border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px;
+  font-family: 'Inter', sans-serif; font-size: 13px; max-width: 400px;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #10b981; outline: none; box-shadow: 0 0 0 3px rgba(16,185,129,0.1);
+}
+
+/* Dark mode overrides for Django elements */
+.dark #changelist-filter { background: #1e293b; border-color: #334155; }
+.dark #result_list th { background: #0f172a; color: #64748b; border-color: #334155; }
+.dark #result_list td { color: #cbd5e1; border-color: #1e293b; }
+.dark fieldset { background: #1e293b; border-color: #334155; }
+.dark .submit-row { background: #0f172a; border-color: #334155; }
+.dark input, .dark select, .dark textarea { background: #1e293b; border-color: #334155; color: #e2e8f0; }

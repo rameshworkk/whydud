@@ -1,0 +1,30 @@
+{% comment %}
+Action Card — form action card.
+Usage:
+  {% with title="Run Discovery" description="Discover products from PriceHistory sitemaps" action_url=action_url button_text="Run" btn_color="emerald" %}
+    {% include "admin/includes/action_card.html" %}
+  {% endwith %}
+
+  For custom form fields, use the block-style inline instead.
+{% endcomment %}
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+            rounded-2xl p-5 shadow-xs">
+  <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ title }}</div>
+  {% if description %}
+  <div class="text-xs text-slate-400 mt-1 mb-3">{{ description }}</div>
+  {% endif %}
+  {% if action_url %}
+  <form method="post" action="{{ action_url }}" class="flex items-end gap-2 flex-wrap">
+    {% csrf_token %}
+    {% if form_fields %}{{ form_fields }}{% endif %}
+    <button type="submit"
+            class="px-4 py-1.5 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]
+                   {% if btn_color == 'red' %}bg-red-500 hover:bg-red-600
+                   {% elif btn_color == 'blue' %}bg-blue-500 hover:bg-blue-600
+                   {% elif btn_color == 'amber' %}bg-amber-500 hover:bg-amber-600
+                   {% else %}bg-emerald-500 hover:bg-emerald-600{% endif %}">
+      {{ button_text|default:"Run" }}
+    </button>
+  </form>
+  {% endif %}
+</div>
