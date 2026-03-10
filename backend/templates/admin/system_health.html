@@ -1,0 +1,299 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}System Health{% endblock %}
+{% block content_title %}<h1>System Health</h1>{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .health-card {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border-left: 4px solid #ccc;
+  }
+  .health-card.healthy { border-left-color: #16A34A; }
+  .health-card.degraded { border-left-color: #EAB308; }
+  .health-card.down { border-left-color: #DC2626; }
+  .health-card .svc-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 4px;
+  }
+  .health-card .svc-status {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .health-card .svc-status.healthy { color: #16A34A; }
+  .health-card .svc-status.degraded { color: #EAB308; }
+  .health-card .svc-status.down { color: #DC2626; }
+  .health-card .svc-detail {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+    word-break: break-all;
+  }
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 24px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #F97316;
+    color: #1a1a2e;
+  }
+  .stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    max-width: 700px;
+  }
+  .stats-table th,
+  .stats-table td {
+    padding: 6px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+  }
+  .stats-table th {
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+  .stats-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 768px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+  .queue-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .queue-bar-label {
+    width: 100px;
+    font-weight: 500;
+    text-align: right;
+    color: #333;
+  }
+  .queue-bar-track {
+    flex: 1;
+    height: 20px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+    max-width: 300px;
+  }
+  .queue-bar-fill {
+    height: 100%;
+    background: #F97316;
+    border-radius: 4px;
+    min-width: 2px;
+  }
+  .queue-bar-val {
+    width: 40px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: #333;
+  }
+  .worker-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+  }
+  .worker-card .worker-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #1a1a2e;
+  }
+  .worker-card .worker-meta {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+  .worker-card .worker-badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .worker-badge.online { background: #dcfce7; color: #16A34A; }
+  .auto-refresh-note {
+    font-size: 11px;
+    color: #999;
+    text-align: right;
+    margin-bottom: 8px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<p class="auto-refresh-note">Auto-refreshes every 30 seconds</p>
+
+<!-- Service Status Cards -->
+<div class="section-title">Service Status</div>
+<div class="health-grid">
+  {% for svc in services %}
+  <div class="health-card {{ svc.status }}">
+    <div class="svc-name">{{ svc.name }}</div>
+    <div class="svc-status {{ svc.status }}">
+      {% if svc.status == "healthy" %}OK{% elif svc.status == "degraded" %}DEGRADED{% else %}DOWN{% endif %}
+    </div>
+    <div class="svc-detail">{{ svc.detail }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Celery Workers -->
+{% if celery_info.workers %}
+<div class="section-title">Celery Workers</div>
+{% for w in celery_info.workers %}
+<div class="worker-card">
+  <span class="worker-name">{{ w.name }}</span>
+  <span class="worker-badge online">ONLINE</span>
+  <div class="worker-meta">
+    Active: {{ w.active_tasks }} |
+    Reserved: {{ w.reserved_tasks }} |
+    Total completed: {{ w.total_completed }} |
+    Queues: {{ w.queues|join:", " }}
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- Queue Depths -->
+{% if celery_info.queues %}
+<div class="section-title">Queue Depths (reserved tasks)</div>
+{% for queue, depth in celery_info.queues.items %}
+<div class="queue-bar-container">
+  <div class="queue-bar-label">{{ queue }}</div>
+  <div class="queue-bar-track">
+    <div class="queue-bar-fill" style="width: {% widthratio depth 100 100 %}%"></div>
+  </div>
+  <div class="queue-bar-val">{{ depth }}</div>
+</div>
+{% endfor %}
+{% endif %}
+
+<div class="two-col">
+  <!-- Database Stats -->
+  <div>
+    <div class="section-title">Database</div>
+    <table class="stats-table">
+      {% if db_stats.total_size %}
+      <tr><td>Total Size</td><td class="num">{{ db_stats.total_size }}</td></tr>
+      {% endif %}
+      {% if db_stats.active_connections %}
+      <tr><td>Connections</td><td class="num">{{ db_stats.active_connections }} / {{ db_stats.max_connections }}</td></tr>
+      {% endif %}
+    </table>
+
+    {% if db_stats.largest_tables %}
+    <strong style="font-size:13px;color:#333;">Largest Tables</strong>
+    <table class="stats-table">
+      <tr><th>Table</th><th style="text-align:right;">Size</th></tr>
+      {% for t in db_stats.largest_tables %}
+      <tr><td>{{ t.table }}</td><td class="num">{{ t.size }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </div>
+
+  <!-- Key Table Row Counts -->
+  <div>
+    <div class="section-title">Row Counts</div>
+    <table class="stats-table">
+      <tr><th>Table</th><th style="text-align:right;">Rows</th></tr>
+      {% for label, count in table_counts.items %}
+      <tr><td>{{ label }}</td><td class="num">{{ count }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="two-col">
+  <!-- Redis Stats -->
+  {% if redis_stats %}
+  <div>
+    <div class="section-title">Redis</div>
+    <table class="stats-table">
+      {% if redis_stats.used_memory_human %}
+      <tr><td>Memory Used</td><td class="num">{{ redis_stats.used_memory_human }}</td></tr>
+      {% endif %}
+      {% if redis_stats.connected_clients %}
+      <tr><td>Connected Clients</td><td class="num">{{ redis_stats.connected_clients }}</td></tr>
+      {% endif %}
+      <tr><td>Total Keys</td><td class="num">{{ redis_stats.total_keys }}</td></tr>
+      {% if redis_stats.hit_rate %}
+      <tr><td>Hit Rate</td><td class="num">{{ redis_stats.hit_rate }}</td></tr>
+      {% endif %}
+      {% if redis_stats.uptime_days %}
+      <tr><td>Uptime</td><td class="num">{{ redis_stats.uptime_days }} days</td></tr>
+      {% endif %}
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- TimescaleDB Stats -->
+  {% if timescale_stats %}
+  <div>
+    <div class="section-title">TimescaleDB</div>
+    <table class="stats-table">
+      {% if timescale_stats.version %}
+      <tr><td>Version</td><td class="num">{{ timescale_stats.version }}</td></tr>
+      {% endif %}
+      <tr><td>Total Chunks</td><td class="num">{{ timescale_stats.chunks }}</td></tr>
+    </table>
+
+    {% if timescale_stats.hypertables %}
+    <strong style="font-size:13px;color:#333;">Hypertables</strong>
+    <table class="stats-table">
+      <tr><th>Name</th><th style="text-align:right;">Chunks</th><th style="text-align:right;">Size</th></tr>
+      {% for ht in timescale_stats.hypertables %}
+      <tr><td>{{ ht.name }}</td><td class="num">{{ ht.chunks }}</td><td class="num">{{ ht.size }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if timescale_stats.continuous_aggregates %}
+    <strong style="font-size:13px;color:#333;">Continuous Aggregates</strong>
+    <ul style="font-size:13px;margin:4px 0 0 16px;padding:0;">
+      {% for ca in timescale_stats.continuous_aggregates %}
+      <li>{{ ca }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Auto-refresh every 30s -->
+<script>
+  setTimeout(function() { location.reload(); }, 30000);
+</script>
+{% endblock %}

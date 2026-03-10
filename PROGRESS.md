@@ -4172,3 +4172,30 @@ Added four new subcommands to `backfill_prices` management command for pipeline 
 **Dashboard stats shown:** product counts (total/lightweight/enriched/reviews/dudscore), listings, price snapshots, reviews (total/flagged), backfill by status + scrape_status, users (total/new today/active 7d), marketplace listing breakdown.
 
 **Console stubs ready for:** System Health (AD-2), Backfill Pipeline (AD-3), Worker Cluster (AD-4), Enrichment (AD-5), Price Intelligence (AD-10), Analytics (AD-11).
+
+---
+
+### 2026-03-10 — AD-2: System Health Console
+
+**What:** Implemented `/admin/system-health/` with live service checks for all infrastructure components, DB stats, and Celery worker monitoring.
+
+**Health checks (all try/except wrapped — never crashes the view):**
+| Service | Check | Status logic |
+|---|---|---|
+| PostgreSQL | `SELECT 1` with latency | <100ms healthy, else degraded |
+| TimescaleDB | Extension version, chunk count, hypertable sizes, continuous aggregates | Extension present = healthy |
+| Redis | Cache set/get round-trip + `INFO` (memory, clients, keys, hit rate, uptime) | <50ms healthy, else degraded |
+| Meilisearch | `GET /health` with 5s timeout | <500ms healthy, else degraded |
+| Celery Workers | `inspect.ping()` + active/reserved tasks + queue list + total completed | >0 workers = healthy |
+
+**Additional data:** DB total size, connection count, top 10 largest tables, row counts for 7 key tables, queue depth bars, per-worker cards. Auto-refresh 30s.
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Replaced `system_health_view` stub with full implementation + 7 helper methods |
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/templates/admin/system_health.html` | Color-coded health dashboard (green/yellow/red cards, tables, queue bars) |
