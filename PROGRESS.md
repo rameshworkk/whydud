@@ -4458,3 +4458,38 @@ Enhanced `ReviewAdmin` with moderation stats, credibility badges, star ratings, 
 |---|---|
 | `backend/templates/admin/accounts/user/change_list.html` | User changelist with stats cards (totals, auth methods) |
 | `backend/templates/admin/pricing/clickevent/change_list.html` | Click tracking changelist with stats, marketplace rankings, top products |
+
+---
+
+### AD-10: Price Intelligence Console ✅
+
+**price_intel_view** implemented in `admin_site.py` — replaces stub with full console.
+
+**Sections:**
+| Section | Metrics |
+|---|---|
+| Price Snapshots | Total count, new today, by source (donut chart via Chart.js) |
+| TimescaleDB Health | Total chunks, compressed chunks, table size, compression status, price_daily aggregate status |
+| Price Alerts | Active alerts, triggered today, avg days from creation to trigger |
+| Deal Detection | Active deals, detected today, by type (donut chart: error_price / lowest_ever / genuine_discount / flash_sale) |
+| Price Anomalies (7d) | Drops >30% count + top 10 table, Spikes >50% count + top 10 table |
+
+**Anomaly detection:** Raw SQL with DISTINCT ON to compare earliest vs latest snapshot per listing in 7-day window, filtering for >30% change. Product titles resolved via ORM lookup.
+
+**Actions:**
+| Action | Celery Task |
+|---|---|
+| Refresh Aggregate | `refresh_price_daily_aggregate.delay()` |
+| Detect Deals | `detect_blockbuster_deals.delay()` |
+
+**URL routes added:** `price-intel/action/<str:action>/` → `price_intel_action` handler
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Replaced price_intel_view stub with full implementation + action handler + URL route |
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/templates/admin/price_intel.html` | Full console template with stat cards, Chart.js donuts, anomaly tables, action buttons |

@@ -1,0 +1,444 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Price Intelligence{% endblock %}
+{% block content_title %}<h1>Price Intelligence Console</h1>{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .stat-card .label {
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
+  .stat-card .value {
+    font-size: 28px;
+    font-weight: bold;
+    color: #1a1a2e;
+    margin-top: 4px;
+  }
+  .stat-card .sub {
+    font-size: 12px;
+    color: #999;
+    margin-top: 4px;
+  }
+  .stat-card .value.warn { color: #d97706; }
+  .stat-card .value.danger { color: #DC2626; }
+  .stat-card .value.ok { color: #16A34A; }
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 24px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #F97316;
+    color: #1a1a2e;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  .three-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) {
+    .two-col, .three-col { grid-template-columns: 1fr; }
+  }
+  .chart-box {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .chart-box h3 {
+    font-size: 14px;
+    color: #333;
+    margin: 0 0 12px;
+  }
+  .anomaly-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .anomaly-table th {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 2px solid #e2e8f0;
+    font-weight: 600;
+    color: #333;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .anomaly-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #555;
+  }
+  .anomaly-table tr:hover { background: #fafbfc; }
+  .pct-drop {
+    color: #16A34A;
+    font-weight: 600;
+  }
+  .pct-spike {
+    color: #DC2626;
+    font-weight: 600;
+  }
+  .tsdb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .tsdb-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+  .tsdb-item .ti-value {
+    font-weight: 700;
+    font-size: 18px;
+    color: #1a1a2e;
+    min-width: 40px;
+  }
+  .tsdb-item .ti-label {
+    font-size: 12px;
+    color: #666;
+  }
+  /* Actions */
+  .action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .action-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .action-card h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: #1a1a2e;
+  }
+  .action-card .desc {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 12px;
+  }
+  .btn-action {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: opacity 0.2s;
+  }
+  .btn-action:hover { opacity: 0.85; }
+  .btn-primary { background: #F97316; color: white; }
+  .btn-secondary { background: #64748B; color: white; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Price Snapshots -->
+<div class="section-title">Price Snapshots</div>
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Total Snapshots</div>
+    <div class="value">{{ total_snapshots|default:"0" }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">New Today</div>
+    <div class="value">{{ snapshots_today|default:"0" }}</div>
+  </div>
+  {% for s in by_source %}
+  <div class="stat-card">
+    <div class="label">{{ s.source }}</div>
+    <div class="value">{{ s.count }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="two-col">
+  <div class="chart-box">
+    <h3>Snapshots by Source</h3>
+    <canvas id="sourceChart" height="200"></canvas>
+  </div>
+  {% if deals.type_labels %}
+  <div class="chart-box">
+    <h3>Active Deals by Type</h3>
+    <canvas id="dealTypeChart" height="200"></canvas>
+  </div>
+  {% endif %}
+</div>
+
+<!-- TimescaleDB Health -->
+<div class="section-title">TimescaleDB Health</div>
+{% if tsdb.error %}
+<div class="stat-card">
+  <div class="value warn">Unavailable</div>
+  <div class="sub">TimescaleDB extension may not be installed</div>
+</div>
+{% else %}
+<div class="tsdb-grid">
+  <div class="tsdb-item">
+    <span class="ti-value">{{ tsdb.total_chunks|default:"—" }}</span>
+    <span class="ti-label">Total Chunks</span>
+  </div>
+  <div class="tsdb-item">
+    <span class="ti-value">{{ tsdb.compressed_chunks|default:"—" }}</span>
+    <span class="ti-label">Compressed</span>
+  </div>
+  <div class="tsdb-item">
+    <span class="ti-value">{{ tsdb.table_size|default:"—" }}</span>
+    <span class="ti-label">Table Size</span>
+  </div>
+  <div class="tsdb-item">
+    <span class="ti-value{% if tsdb.compression_enabled %} ok{% endif %}">
+      {% if tsdb.compression_enabled %}On{% else %}Off{% endif %}
+    </span>
+    <span class="ti-label">Compression</span>
+  </div>
+  <div class="tsdb-item">
+    <span class="ti-value{% if tsdb.has_aggregate %} ok{% else %} warn{% endif %}">
+      {% if tsdb.has_aggregate %}Yes{% else %}No{% endif %}
+    </span>
+    <span class="ti-label">price_daily Agg</span>
+  </div>
+</div>
+{% endif %}
+
+<!-- Price Alerts -->
+<div class="section-title">Price Alerts</div>
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Active Alerts</div>
+    <div class="value">{{ active_alerts|default:"0" }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Triggered Today</div>
+    <div class="value">{{ triggered_today|default:"0" }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Avg Days to Trigger</div>
+    <div class="value">{% if avg_trigger_days %}{{ avg_trigger_days }}{% else %}—{% endif %}</div>
+    <div class="sub">From alert creation to trigger</div>
+  </div>
+</div>
+
+<!-- Deal Detection -->
+<div class="section-title">Deal Detection</div>
+{% if deals.error %}
+<div class="stat-card">
+  <div class="value warn">Unavailable</div>
+</div>
+{% else %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Active Deals</div>
+    <div class="value">{{ deals.active|default:"0" }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Detected Today</div>
+    <div class="value">{{ deals.today|default:"0" }}</div>
+  </div>
+  {% for d in deals.by_type %}
+  <div class="stat-card">
+    <div class="label">{{ d.deal_type }}</div>
+    <div class="value">{{ d.count }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Price Anomalies -->
+<div class="section-title">Price Anomalies (Last 7 Days)</div>
+{% if anomalies.error %}
+<div class="stat-card">
+  <div class="value warn">Query failed</div>
+  <div class="sub">TimescaleDB may not be available</div>
+</div>
+{% else %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Price Drops &gt; 30%</div>
+    <div class="value{% if anomalies.drop_count %} ok{% endif %}">{{ anomalies.drop_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Price Spikes &gt; 50%</div>
+    <div class="value{% if anomalies.spike_count %} danger{% endif %}">{{ anomalies.spike_count }}</div>
+  </div>
+</div>
+
+<div class="two-col">
+  <!-- Big price drops -->
+  <div>
+    <h3 style="font-size:14px;margin:0 0 8px;color:#333;">Top Price Drops</h3>
+    {% if anomalies.drops %}
+    <table class="anomaly-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Old Price</th>
+          <th>New Price</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in anomalies.drops %}
+        <tr>
+          <td title="{{ a.product_title }}">{{ a.product_title|truncatechars:40 }}</td>
+          <td>₹{{ a.old_price|floatformat:0 }}</td>
+          <td>₹{{ a.new_price|floatformat:0 }}</td>
+          <td class="pct-drop">{{ a.change_pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:#999;font-size:13px;">No significant drops detected.</p>
+    {% endif %}
+  </div>
+
+  <!-- Big price spikes -->
+  <div>
+    <h3 style="font-size:14px;margin:0 0 8px;color:#333;">Top Price Spikes</h3>
+    {% if anomalies.spikes %}
+    <table class="anomaly-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Old Price</th>
+          <th>New Price</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in anomalies.spikes %}
+        <tr>
+          <td title="{{ a.product_title }}">{{ a.product_title|truncatechars:40 }}</td>
+          <td>₹{{ a.old_price|floatformat:0 }}</td>
+          <td>₹{{ a.new_price|floatformat:0 }}</td>
+          <td class="pct-spike">+{{ a.change_pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:#999;font-size:13px;">No significant spikes detected.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Actions -->
+<div class="section-title">Actions</div>
+<div class="action-grid">
+  <div class="action-card">
+    <h4>Refresh Aggregate</h4>
+    <div class="desc">Refresh the price_daily continuous aggregate (TimescaleDB)</div>
+    <form method="post" action="{% url 'admin:price-intel-action' action='refresh-aggregate' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn-action btn-primary">Refresh Aggregate</button>
+    </form>
+  </div>
+
+  <div class="action-card">
+    <h4>Detect Deals</h4>
+    <div class="desc">Scan for error pricing, lowest-ever, flash sales, genuine discounts</div>
+    <form method="post" action="{% url 'admin:price-intel-action' action='detect-deals' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn-action btn-primary">Detect Deals</button>
+    </form>
+  </div>
+</div>
+
+<!-- Charts -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const COLORS = ['#F97316', '#4DB6AC', '#FBBF24', '#16A34A', '#DC2626', '#64748B'];
+
+  // Source donut chart
+  const srcCtx = document.getElementById('sourceChart');
+  if (srcCtx) {
+    new Chart(srcCtx, {
+      type: 'doughnut',
+      data: {
+        labels: {{ source_labels|safe }},
+        datasets: [{
+          data: {{ source_counts|safe }},
+          backgroundColor: COLORS.slice(0, {{ by_source|length }}),
+          borderWidth: 2,
+          borderColor: '#fff',
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } },
+        },
+      }
+    });
+  }
+
+  // Deal type chart
+  {% if deals.type_labels %}
+  const dealCtx = document.getElementById('dealTypeChart');
+  if (dealCtx) {
+    new Chart(dealCtx, {
+      type: 'doughnut',
+      data: {
+        labels: {{ deals.type_labels|safe }},
+        datasets: [{
+          data: {{ deals.type_counts|safe }},
+          backgroundColor: COLORS.slice(0, {{ deals.by_type|length }}),
+          borderWidth: 2,
+          borderColor: '#fff',
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } },
+        },
+      }
+    });
+  }
+  {% endif %}
+});
+</script>
+
+{% endblock %}

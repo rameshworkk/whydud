@@ -47,6 +47,11 @@ class WhydudAdminSite(AdminSite):
                 name="price-intel",
             ),
             path(
+                "price-intel/action/<str:action>/",
+                self.admin_view(self.price_intel_action),
+                name="price-intel-action",
+            ),
+            path(
                 "analytics/",
                 self.admin_view(self.analytics_view),
                 name="analytics",
@@ -1149,13 +1154,265 @@ class WhydudAdminSite(AdminSite):
             return f"Error: {e}"
 
     def price_intel_view(self, request):
-        from django.shortcuts import render
+        """Price intelligence console — snapshot stats, TimescaleDB health,
+        anomaly detection, deal tracking, price alerts."""
+        import json
+        from datetime import timedelta
 
-        return render(
-            request,
-            "admin/stub.html",
-            {**self.each_context(request), "title": "Price Intelligence"},
-        )
+        from django.db import connection
+        from django.db.models import Avg, Count, F, Q
+        from django.shortcuts import render
+        from django.utils import timezone
+
+        now = timezone.now()
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_ago = now - timedelta(days=7)
+
+        # ---- PRICE SNAPSHOTS ----
+        with connection.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM price_snapshots")
+            total_snapshots = cur.fetchone()[0]
+
+            cur.execute(
+                "SELECT COUNT(*) FROM price_snapshots WHERE time >= %s",
+                [today],
+            )
+            snapshots_today = cur.fetchone()[0]
+
+            cur.execute(
+                "SELECT source, COUNT(*) FROM price_snapshots GROUP BY source ORDER BY COUNT(*) DESC"
+            )
+            by_source = [{"source": row[0], "count": row[1]} for row in cur.fetchall()]
+
+        source_labels = json.dumps([s["source"] for s in by_source])
+        source_counts = json.dumps([s["count"] for s in by_source])
+
+        # ---- TIMESCALEDB HEALTH ----
+        tsdb_health = {}
+        try:
+            with connection.cursor() as cur:
+                # Hypertable info
+                cur.execute("""
+                    SELECT hypertable_name, num_chunks, compression_enabled
+                    FROM timescaledb_information.hypertables
+                    WHERE hypertable_name = 'price_snapshots'
+                """)
+                row = cur.fetchone()
+                if row:
+                    tsdb_health["hypertable"] = row[0]
+                    tsdb_health["num_chunks"] = row[1]
+                    tsdb_health["compression_enabled"] = row[2]
+
+                # Chunk count + compressed
+                cur.execute("""
+                    SELECT
+                        COUNT(*) AS total_chunks,
+                        COUNT(*) FILTER (WHERE is_compressed) AS compressed_chunks
+                    FROM timescaledb_information.chunks
+                    WHERE hypertable_name = 'price_snapshots'
+                """)
+                row = cur.fetchone()
+                if row:
+                    tsdb_health["total_chunks"] = row[0]
+                    tsdb_health["compressed_chunks"] = row[1]
+
+                # Compression ratio (approximate from chunk sizes)
+                cur.execute("""
+                    SELECT
+                        pg_size_pretty(
+                            hypertable_size('price_snapshots')
+                        )
+                """)
+                row = cur.fetchone()
+                tsdb_health["table_size"] = row[0] if row else "N/A"
+
+                # Check if continuous aggregate exists
+                cur.execute("""
+                    SELECT materialization_hypertable_name
+                    FROM timescaledb_information.continuous_aggregates
+                    WHERE view_name = 'price_daily'
+                """)
+                row = cur.fetchone()
+                tsdb_health["has_aggregate"] = row is not None
+
+        except Exception:
+            tsdb_health["error"] = True
+
+        # ---- PRICE ANOMALIES (7d) ----
+        anomalies = {"drops": [], "spikes": [], "drop_count": 0, "spike_count": 0}
+        try:
+            with connection.cursor() as cur:
+                # Find significant price changes in last 7 days
+                # Compare earliest and latest snapshot per listing in the window
+                cur.execute("""
+                    WITH listing_window AS (
+                        SELECT DISTINCT ON (listing_id)
+                            listing_id, product_id, price AS old_price, time AS old_time
+                        FROM price_snapshots
+                        WHERE time >= NOW() - INTERVAL '7 days'
+                          AND price > 0
+                        ORDER BY listing_id, time ASC
+                    ),
+                    latest AS (
+                        SELECT DISTINCT ON (listing_id)
+                            listing_id, price AS new_price, time AS new_time
+                        FROM price_snapshots
+                        WHERE time >= NOW() - INTERVAL '7 days'
+                          AND price > 0
+                        ORDER BY listing_id, time DESC
+                    )
+                    SELECT
+                        lw.product_id, lw.listing_id,
+                        lw.old_price, lt.new_price,
+                        ROUND(((lt.new_price - lw.old_price) / lw.old_price * 100)::numeric, 1) AS change_pct
+                    FROM listing_window lw
+                    JOIN latest lt ON lw.listing_id = lt.listing_id
+                    WHERE lw.old_price > 0
+                      AND lw.old_price != lt.new_price
+                      AND ABS((lt.new_price - lw.old_price) / lw.old_price) > 0.3
+                    ORDER BY change_pct ASC
+                    LIMIT 50
+                """)
+                rows = cur.fetchall()
+
+                # Fetch product titles for context
+                product_ids = list({r[0] for r in rows})
+                product_titles = {}
+                if product_ids:
+                    from apps.products.models import Product
+                    product_titles = dict(
+                        Product.objects.filter(id__in=product_ids)
+                        .values_list("id", "title")
+                    )
+
+                for row in rows:
+                    item = {
+                        "product_id": str(row[0]),
+                        "product_title": (product_titles.get(row[0], "Unknown"))[:50],
+                        "old_price": float(row[2]),
+                        "new_price": float(row[3]),
+                        "change_pct": float(row[4]),
+                    }
+                    if item["change_pct"] < -30:
+                        anomalies["drops"].append(item)
+                    elif item["change_pct"] > 50:
+                        anomalies["spikes"].append(item)
+
+                # Sort drops by magnitude (most negative first)
+                anomalies["drops"].sort(key=lambda x: x["change_pct"])
+                anomalies["spikes"].sort(key=lambda x: x["change_pct"], reverse=True)
+                anomalies["drop_count"] = len(anomalies["drops"])
+                anomalies["spike_count"] = len(anomalies["spikes"])
+                # Keep top 10 each for display
+                anomalies["drops"] = anomalies["drops"][:10]
+                anomalies["spikes"] = anomalies["spikes"][:10]
+
+        except Exception:
+            anomalies["error"] = True
+
+        # ---- PRICE ALERTS ----
+        from apps.pricing.models import PriceAlert
+
+        active_alerts = PriceAlert.objects.filter(is_active=True).count()
+        triggered_today = PriceAlert.objects.filter(
+            is_triggered=True, triggered_at__gte=today,
+        ).count()
+
+        # Avg time from creation to trigger
+        avg_trigger_time = None
+        try:
+            triggered = PriceAlert.objects.filter(
+                is_triggered=True, triggered_at__isnull=False,
+            ).annotate(
+                trigger_delta=F("triggered_at") - F("created_at"),
+            ).aggregate(avg=Avg("trigger_delta"))
+            if triggered["avg"]:
+                avg_trigger_time = round(triggered["avg"].total_seconds() / 86400, 1)
+        except Exception:
+            pass
+
+        # ---- DEAL DETECTION ----
+        deal_stats = {}
+        try:
+            from apps.deals.models import Deal
+
+            active_deals = Deal.objects.filter(is_active=True).count()
+            deals_today = Deal.objects.filter(detected_at__gte=today).count()
+            by_type = list(
+                Deal.objects.filter(is_active=True)
+                .values("deal_type")
+                .annotate(count=Count("id"))
+                .order_by("-count")
+            )
+            deal_stats = {
+                "active": active_deals,
+                "today": deals_today,
+                "by_type": by_type,
+                "type_labels": json.dumps([d["deal_type"] for d in by_type]),
+                "type_counts": json.dumps([d["count"] for d in by_type]),
+            }
+        except Exception:
+            deal_stats["error"] = True
+
+        ctx = {
+            **self.each_context(request),
+            "title": "Price Intelligence",
+            # Snapshots
+            "total_snapshots": total_snapshots,
+            "snapshots_today": snapshots_today,
+            "by_source": by_source,
+            "source_labels": source_labels,
+            "source_counts": source_counts,
+            # TimescaleDB
+            "tsdb": tsdb_health,
+            # Anomalies
+            "anomalies": anomalies,
+            # Alerts
+            "active_alerts": active_alerts,
+            "triggered_today": triggered_today,
+            "avg_trigger_days": avg_trigger_time,
+            # Deals
+            "deals": deal_stats,
+        }
+        return render(request, "admin/price_intel.html", ctx)
+
+    def price_intel_action(self, request, action):
+        """Handle POST actions from the price intelligence console."""
+        from django.contrib import messages
+        from django.shortcuts import redirect
+
+        if request.method != "POST":
+            messages.error(request, "Actions require POST.")
+            return redirect("admin:price-intel")
+
+        try:
+            if action == "refresh-aggregate":
+                from apps.pricing.tasks import refresh_price_daily_aggregate
+
+                result = refresh_price_daily_aggregate.delay()
+                messages.success(
+                    request,
+                    f"Aggregate refresh queued. Task: {result.id}",
+                )
+
+            elif action == "detect-deals":
+                from apps.deals.tasks import detect_blockbuster_deals
+
+                result = detect_blockbuster_deals.delay()
+                messages.success(
+                    request,
+                    f"Deal detection queued. Task: {result.id}",
+                )
+
+            else:
+                messages.error(request, f"Unknown action: {action}")
+
+        except ImportError as e:
+            messages.warning(request, f"Task not available: {e}")
+        except Exception as e:
+            messages.error(request, f"Failed: {e}")
+
+        return redirect("admin:price-intel")
 
     def analytics_view(self, request):
         from django.shortcuts import render
