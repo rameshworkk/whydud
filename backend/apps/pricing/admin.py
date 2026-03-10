@@ -6,6 +6,8 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from django.utils.html import format_html
 
+from apps.admin_tools.mixins import AuditLogMixin
+
 from .models import BackfillProduct, ClickEvent, MarketplaceOffer, PriceAlert
 
 
@@ -180,7 +182,7 @@ class MarketplaceOfferAdmin(admin.ModelAdmin):
 
 
 @admin.register(BackfillProduct)
-class BackfillProductAdmin(admin.ModelAdmin):
+class BackfillProductAdmin(AuditLogMixin, admin.ModelAdmin):
     list_display = [
         "external_id", "marketplace_slug", "title", "status",
         "scrape_status", "enrichment_priority", "enrichment_method",

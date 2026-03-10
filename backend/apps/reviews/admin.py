@@ -6,6 +6,8 @@ from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from django.utils.html import format_html
 
+from apps.admin_tools.mixins import AuditLogMixin
+
 from .models import Review, ReviewerProfile, ReviewVote
 
 
@@ -42,7 +44,7 @@ class CredibilityRangeFilter(admin.SimpleListFilter):
 # ------------------------------------------------------------------
 
 @admin.register(Review)
-class ReviewAdmin(admin.ModelAdmin):
+class ReviewAdmin(AuditLogMixin, admin.ModelAdmin):
     change_list_template = "admin/reviews/review/change_list.html"
 
     list_display = [

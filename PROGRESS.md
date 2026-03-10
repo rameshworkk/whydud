@@ -4535,3 +4535,47 @@ Replaced the analytics_view stub with a comprehensive BI dashboard and Meilisear
 | File | Purpose |
 |---|---|
 | `backend/templates/admin/analytics.html` | Full BI dashboard template with 8 Chart.js canvases, stat cards, top content tables, Meilisearch console |
+
+---
+
+### AD-12: Audit Log Mixin + SiteConfig Admin + Navigation Polish
+
+**Date:** 2026-03-11
+
+Added reusable AuditLogMixin for automatic admin action logging, enhanced SiteConfig and AuditLog admin registrations, and added quick links navigation to the admin index page.
+
+**AuditLogMixin:**
+- `save_model()` — logs CREATE or UPDATE with changed_fields list
+- `delete_model()` — logs DELETE with target_type and target_id
+- Uses try/except pass to never break admin operations
+- Applied to 6 admin classes: ProductAdmin, MarketplaceAdmin, ReviewAdmin, UserAdmin, BackfillProductAdmin, DudScoreConfigAdmin
+
+**Enhanced admin registrations:**
+| Admin Class | Enhancements |
+|---|---|
+| AuditLogAdmin | admin_user_email display, changes_preview (truncated), search by admin email, date hierarchy, immutable (no add/change/delete) |
+| SiteConfigAdmin | AuditLogMixin applied, value_preview (truncated JSON), updated_at readonly |
+| ModerationQueueAdmin | reason_short display, approve/reject bulk actions |
+| ScraperRunAdmin | status_badge with emoji indicators |
+
+**Admin index quick links:**
+- 8 quick link cards: Dashboard, Backfill, Enrichment, Cluster, System Health, Price Intel, Analytics, Flower
+- Styled grid layout with hover states (orange border + shadow)
+
+**health_check command:** Already exists at `accounts/management/commands/health_check.py` (7 checks: PostgreSQL, Redis, Meilisearch, Celery, scraper recency, disk usage, backup) — no duplicate created.
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/apps/admin_tools/mixins.py` | AuditLogMixin class |
+| `backend/templates/admin/index.html` | Admin index override with quick links grid |
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin.py` | Enhanced AuditLogAdmin, SiteConfigAdmin with AuditLogMixin |
+| `backend/apps/products/admin.py` | Added AuditLogMixin to ProductAdmin, MarketplaceAdmin |
+| `backend/apps/reviews/admin.py` | Added AuditLogMixin to ReviewAdmin |
+| `backend/apps/accounts/admin.py` | Added AuditLogMixin to UserAdmin |
+| `backend/apps/pricing/admin.py` | Added AuditLogMixin to BackfillProductAdmin |
+| `backend/apps/scoring/admin.py` | Added AuditLogMixin to DudScoreConfigAdmin |

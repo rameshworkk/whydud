@@ -1,20 +1,43 @@
 """Django Admin registrations for admin_tools models."""
 from django.contrib import admin
 from django.utils import timezone
+from django.utils.html import format_html
 
+from .mixins import AuditLogMixin
 from .models import AuditLog, ModerationQueue, ScraperRun, SiteConfig
 
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
-    list_display = ["action", "target_type", "target_id", "admin_user", "ip_address", "created_at"]
-    list_filter = ["action", "target_type"]
-    search_fields = ["target_id", "ip_address"]
+    list_display = [
+        "admin_user_email", "action", "target_type", "target_id",
+        "changes_preview", "ip_address", "created_at",
+    ]
+    list_filter = ["action", "target_type", "created_at"]
+    search_fields = ["target_type", "target_id", "admin_user__email"]
     date_hierarchy = "created_at"
+    ordering = ["-created_at"]
+    list_per_page = 50
     readonly_fields = [
         "id", "admin_user", "action", "target_type", "target_id",
         "old_value", "new_value", "ip_address", "created_at",
     ]
+
+    @admin.display(description="Admin", ordering="admin_user__email")
+    def admin_user_email(self, obj):
+        if obj.admin_user:
+            return obj.admin_user.email
+        return format_html('<span style="color:#94a3b8;">—</span>')
+
+    @admin.display(description="Changes")
+    def changes_preview(self, obj):
+        val = obj.new_value or obj.old_value
+        if not val:
+            return "—"
+        text = str(val)
+        if len(text) > 60:
+            text = text[:60] + "..."
+        return text
 
     def has_add_permission(self, request) -> bool:
         return False
@@ -80,10 +103,19 @@ class ScraperRunAdmin(admin.ModelAdmin):
 
 
 @admin.register(SiteConfig)
-class SiteConfigAdmin(admin.ModelAdmin):
-    list_display = ["key", "value", "updated_by", "updated_at"]
+class SiteConfigAdmin(AuditLogMixin, admin.ModelAdmin):
+    list_display = ["key", "value_preview", "updated_by", "updated_at"]
+    list_editable = []  # JSONField can't be list_editable — use detail view
     search_fields = ["key"]
-    readonly_fields = ["created_at"]
+    readonly_fields = ["created_at", "updated_at"]
+    list_per_page = 50
+
+    @admin.display(description="Value")
+    def value_preview(self, obj):
+        text = str(obj.value)
+        if len(text) > 50:
+            text = text[:50] + "..."
+        return text
 
     def save_model(self, request, obj, form, change) -> None:
         obj.updated_by = request.user

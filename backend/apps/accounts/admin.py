@@ -7,6 +7,8 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from django.utils.html import format_html
 
+from apps.admin_tools.mixins import AuditLogMixin
+
 from .models import (
     Notification, NotificationPreference, OAuthConnection,
     PaymentMethod, ReservedUsername, User, WhydudEmail,
@@ -47,7 +49,7 @@ class NotificationPreferenceInline(admin.StackedInline):
 # ------------------------------------------------------------------
 
 @admin.register(User)
-class UserAdmin(BaseUserAdmin):
+class UserAdmin(AuditLogMixin, BaseUserAdmin):
     change_list_template = "admin/accounts/user/change_list.html"
 
     list_display = [

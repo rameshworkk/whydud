@@ -1,0 +1,122 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .quick-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+    padding: 20px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+  }
+  .quick-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #1a1a2e;
+    font-size: 13px;
+    font-weight: 500;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .quick-link:hover {
+    border-color: #F97316;
+    box-shadow: 0 2px 8px rgba(249,115,22,0.12);
+    color: #F97316;
+  }
+  .quick-link .ql-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .ql-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ql-section-title">Quick Links</div>
+<div class="quick-links">
+  <a href="{% url 'admin:admin-dashboard' %}" class="quick-link">
+    <span class="ql-icon">📊</span> Dashboard
+  </a>
+  <a href="{% url 'admin:backfill-console' %}" class="quick-link">
+    <span class="ql-icon">📦</span> Backfill
+  </a>
+  <a href="{% url 'admin:enrichment-console' %}" class="quick-link">
+    <span class="ql-icon">🔄</span> Enrichment
+  </a>
+  <a href="{% url 'admin:cluster-console' %}" class="quick-link">
+    <span class="ql-icon">🖥️</span> Cluster
+  </a>
+  <a href="{% url 'admin:system-health' %}" class="quick-link">
+    <span class="ql-icon">⚙️</span> System Health
+  </a>
+  <a href="{% url 'admin:price-intel' %}" class="quick-link">
+    <span class="ql-icon">📈</span> Price Intel
+  </a>
+  <a href="{% url 'admin:analytics' %}" class="quick-link">
+    <span class="ql-icon">📊</span> Analytics
+  </a>
+  <a href="/flower/" class="quick-link" target="_blank">
+    <span class="ql-icon">🌸</span> Flower
+  </a>
+</div>
+
+{% if app_list %}
+  {% for app in app_list %}
+    <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|default:'' %} current-app{% endif %}">
+    <table>
+    <caption>
+        <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }}</a>
+    </caption>
+    {% for model in app.models %}
+        <tr class="model-{{ model.object_name|lower }}">
+        {% if model.admin_url %}
+            <th scope="row"><a href="{{ model.admin_url }}">{{ model.name }}</a></th>
+        {% else %}
+            <th scope="row">{{ model.name }}</th>
+        {% endif %}
+
+        {% if model.add_url %}
+            <td><a href="{{ model.add_url }}" class="addlink">{% translate 'Add' %}</a></td>
+        {% else %}
+            <td>&nbsp;</td>
+        {% endif %}
+
+        {% if model.admin_url and show_changelinks %}
+            {% if model.view_only %}
+            <td><a href="{{ model.admin_url }}" class="viewlink">{% translate 'View' %}</a></td>
+            {% else %}
+            <td><a href="{{ model.admin_url }}" class="changelink">{% translate 'Change' %}</a></td>
+            {% endif %}
+        {% elif model.admin_url %}
+            <td><a href="{{ model.admin_url }}" class="changelink">{% translate 'Change' %}</a></td>
+        {% else %}
+            <td>&nbsp;</td>
+        {% endif %}
+        </tr>
+    {% endfor %}
+    </table>
+    </div>
+  {% endfor %}
+{% else %}
+    <p>{% translate "You don't have permission to view or edit anything." %}</p>
+{% endif %}
+{% endblock %}

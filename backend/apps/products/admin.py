@@ -3,6 +3,8 @@ from django.contrib import admin
 from django.db.models import Count, Q
 from django.utils.html import format_html
 
+from apps.admin_tools.mixins import AuditLogMixin
+
 from .models import (
     BankCard, Brand, Category, Marketplace, MarketplaceCategoryMapping,
     Product, ProductListing, Seller,
@@ -121,7 +123,7 @@ class ProductListingInline(admin.TabularInline):
 # ------------------------------------------------------------------
 
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(AuditLogMixin, admin.ModelAdmin):
     change_list_template = "admin/products/product/change_list.html"
 
     list_display = [
@@ -328,7 +330,7 @@ class ProductAdmin(admin.ModelAdmin):
 # ------------------------------------------------------------------
 
 @admin.register(Marketplace)
-class MarketplaceAdmin(admin.ModelAdmin):
+class MarketplaceAdmin(AuditLogMixin, admin.ModelAdmin):
     list_display = ["name", "slug", "scraper_status"]
 
 

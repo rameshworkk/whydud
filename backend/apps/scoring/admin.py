@@ -3,6 +3,8 @@ from django.contrib import admin
 from django.utils import timezone
 from django.utils.html import format_html
 
+from apps.admin_tools.mixins import AuditLogMixin
+
 from .models import BrandTrustScore, DudScoreConfig, DudScoreHistory
 
 
@@ -11,7 +13,7 @@ from .models import BrandTrustScore, DudScoreConfig, DudScoreHistory
 # ------------------------------------------------------------------
 
 @admin.register(DudScoreConfig)
-class DudScoreConfigAdmin(admin.ModelAdmin):
+class DudScoreConfigAdmin(AuditLogMixin, admin.ModelAdmin):
     list_display = [
         "version",
         "is_active_icon",
