@@ -1,690 +1,558 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
 
 {% block title %}Backfill Pipeline{% endblock %}
-{% block content_title %}<h1>Backfill Pipeline Management</h1>{% endblock %}
-
-{% block extrahead %}
-{{ block.super }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<style>
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .stat-card .label {
-    font-size: 12px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0;
-  }
-  .stat-card .value {
-    font-size: 28px;
-    font-weight: bold;
-    color: #1a1a2e;
-    margin-top: 4px;
-  }
-  .stat-card .sub {
-    font-size: 12px;
-    color: #999;
-    margin-top: 4px;
-  }
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 24px 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #F97316;
-    color: #1a1a2e;
-  }
-  .breakdown-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 16px;
-  }
-  .breakdown-table th,
-  .breakdown-table td {
-    padding: 6px 12px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-    font-size: 13px;
-  }
-  .breakdown-table th {
-    font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-  }
-  .breakdown-table td.num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-  }
-  .two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  .three-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  @media (max-width: 900px) {
-    .two-col, .three-col { grid-template-columns: 1fr; }
-  }
-
-  /* Progress bars */
-  .progress-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-    font-size: 13px;
-  }
-  .progress-label {
-    width: 120px;
-    font-weight: 500;
-    text-align: right;
-    color: #333;
-    flex-shrink: 0;
-  }
-  .progress-track {
-    flex: 1;
-    height: 22px;
-    background: #f0f0f0;
-    border-radius: 4px;
-    overflow: hidden;
-    position: relative;
-  }
-  .progress-fill {
-    height: 100%;
-    border-radius: 4px;
-    min-width: 2px;
-    transition: width 0.3s;
-  }
-  .progress-val {
-    width: 80px;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    color: #333;
-    text-align: right;
-    flex-shrink: 0;
-  }
-  .fill-discovered { background: #94a3b8; }
-  .fill-bh_filling { background: #fbbf24; }
-  .fill-bh_filled { background: #60a5fa; }
-  .fill-ph_extending { background: #a78bfa; }
-  .fill-ph_extended { background: #818cf8; }
-  .fill-done { background: #16A34A; }
-  .fill-failed { background: #DC2626; }
-  .fill-skipped { background: #9ca3af; }
-  .fill-pending { background: #94a3b8; }
-  .fill-enriching { background: #fbbf24; }
-  .fill-scraped { background: #16A34A; }
-
-  /* Action buttons */
-  .action-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .action-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 16px;
-  }
-  .action-card h4 {
-    margin: 0 0 8px;
-    font-size: 14px;
-    color: #1a1a2e;
-  }
-  .action-card .desc {
-    font-size: 12px;
-    color: #666;
-    margin-bottom: 12px;
-  }
-  .action-card form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: flex-end;
-  }
-  .action-card label {
-    font-size: 11px;
-    color: #555;
-    display: block;
-    margin-bottom: 2px;
-  }
-  .action-card input[type="number"],
-  .action-card select {
-    width: 90px;
-    padding: 4px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 13px;
-  }
-  .btn-action {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
-  }
-  .btn-action:hover { transform: translateY(-1px); }
-  .btn-action:active { transform: translateY(0); }
-  .btn-primary {
-    background: #F97316;
-    color: white;
-  }
-  .btn-primary:hover { background: #ea6c0e; }
-  .btn-secondary {
-    background: #64748b;
-    color: white;
-  }
-  .btn-secondary:hover { background: #556578; }
-  .btn-danger {
-    background: #DC2626;
-    color: white;
-  }
-  .btn-danger:hover { background: #c42020; }
-  .btn-sm {
-    padding: 3px 10px;
-    font-size: 12px;
-  }
-
-  /* Estimate cards */
-  .est-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .est-card {
-    background: #fffbeb;
-    border: 1px solid #fcd34d;
-    border-radius: 8px;
-    padding: 12px 16px;
-  }
-  .est-card .est-label { font-size: 12px; color: #92400e; font-weight: 500; }
-  .est-card .est-value { font-size: 22px; font-weight: bold; color: #92400e; }
-  .est-card .est-sub { font-size: 11px; color: #b45309; }
-
-  /* Chart containers */
-  .chart-container {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .chart-container canvas {
-    max-height: 280px;
-  }
-
-  /* Error table */
-  .error-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
-  .error-table th {
-    font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-    padding: 8px 10px;
-    text-align: left;
-    border-bottom: 2px solid #e2e8f0;
-  }
-  .error-table td {
-    padding: 6px 10px;
-    border-bottom: 1px solid #f1f5f9;
-    vertical-align: top;
-  }
-  .error-table tr:hover td { background: #f8fafc; }
-  .error-msg {
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: #DC2626;
-    font-size: 11px;
-  }
-  .badge {
-    display: inline-block;
-    padding: 1px 8px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .badge-failed { background: #fef2f2; color: #DC2626; }
-  .badge-pending { background: #f0f9ff; color: #0369a1; }
-
-  .auto-refresh-note {
-    font-size: 11px;
-    color: #999;
-    text-align: right;
-    margin-bottom: 8px;
-  }
-</style>
-{% endblock %}
+{% block page_title %}Backfill Pipeline{% endblock %}
 
 {% block content %}
-<p class="auto-refresh-note">Auto-refreshes every 30 seconds</p>
 
 <!-- Top-level Stats -->
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Total BackfillProducts</div>
-    <div class="value">{{ total|default:"0" }}</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-6">
+  {% with label="Total BackfillProducts" value=total|default:"0" icon="database" color="emerald" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Pending</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">{{ by_scrape.pending|default:"0" }}</div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-500/10 text-slate-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="clock" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Pending Enrichment</div>
-    <div class="value">{{ by_scrape.pending|default:"0" }}</div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Enriching</div>
+        <div class="text-[28px] font-bold text-amber-500 mt-1.5 leading-none">{{ by_scrape.enriching|default:"0" }}</div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="loader" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Currently Enriching</div>
-    <div class="value">{{ by_scrape.enriching|default:"0" }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Scraped</div>
-    <div class="value">{{ by_scrape.scraped|default:"0" }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Failed</div>
-    <div class="value">{{ by_scrape.failed|default:"0" }}</div>
+
+  {% with label="Scraped" value=by_scrape.scraped|default:"0" icon="check-circle" color="emerald" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Failed</div>
+        <div class="text-[28px] font-bold text-red-500 mt-1.5 leading-none">{{ by_scrape.failed|default:"0" }}</div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="alert-circle" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- Pipeline Status Bars -->
-<div class="section-title">Pipeline Status</div>
-<div id="status-bars" style="max-width: 800px;"></div>
-<script>
-(function() {
-  var total = {{ total|default:"0" }};
-  var statuses = [
-    {label: 'Discovered', key: 'discovered', count: {{ by_status.discovered|default:"0" }}, color: '#94a3b8'},
-    {label: 'BH Filling', key: 'bh_filling', count: {{ by_status.bh_filling|default:"0" }}, color: '#fbbf24'},
-    {label: 'BH Filled', key: 'bh_filled', count: {{ by_status.bh_filled|default:"0" }}, color: '#60a5fa'},
-    {label: 'PH Extending', key: 'ph_extending', count: {{ by_status.ph_extending|default:"0" }}, color: '#a78bfa'},
-    {label: 'PH Extended', key: 'ph_extended', count: {{ by_status.ph_extended|default:"0" }}, color: '#818cf8'},
-    {label: 'Done', key: 'done', count: {{ by_status.done|default:"0" }}, color: '#16A34A'},
-    {label: 'Failed', key: 'failed', count: {{ by_status.failed|default:"0" }}, color: '#DC2626'},
-    {label: 'Skipped', key: 'skipped', count: {{ by_status.skipped|default:"0" }}, color: '#9ca3af'}
-  ];
-  var container = document.getElementById('status-bars');
-  statuses.forEach(function(s) {
-    var pct = total > 0 ? (s.count / total * 100) : 0;
-    container.innerHTML +=
-      '<div class="progress-row">' +
-        '<div class="progress-label">' + s.label + '</div>' +
-        '<div class="progress-track">' +
-          '<div class="progress-fill" style="width:' + pct.toFixed(1) + '%;background:' + s.color + '"></div>' +
-        '</div>' +
-        '<div class="progress-val">' + s.count.toLocaleString() + '</div>' +
-      '</div>';
-  });
-})();
-</script>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Pipeline Status</div>
+    <div id="pipeline-bars"></div>
+  </div>
 
-<!-- Scrape Status Bars -->
-<div class="section-title">Scrape Status</div>
-<div id="scrape-bars" style="max-width: 800px;"></div>
-<script>
-(function() {
-  var total = {{ total|default:"0" }};
-  var scrapes = [
-    {label: 'Pending', count: {{ by_scrape.pending|default:"0" }}, color: '#94a3b8'},
-    {label: 'Enriching', count: {{ by_scrape.enriching|default:"0" }}, color: '#fbbf24'},
-    {label: 'Scraped', count: {{ by_scrape.scraped|default:"0" }}, color: '#16A34A'},
-    {label: 'Failed', count: {{ by_scrape.failed|default:"0" }}, color: '#DC2626'}
-  ];
-  var container = document.getElementById('scrape-bars');
-  scrapes.forEach(function(s) {
-    var pct = total > 0 ? (s.count / total * 100) : 0;
-    container.innerHTML +=
-      '<div class="progress-row">' +
-        '<div class="progress-label">' + s.label + '</div>' +
-        '<div class="progress-track">' +
-          '<div class="progress-fill" style="width:' + pct.toFixed(1) + '%;background:' + s.color + '"></div>' +
-        '</div>' +
-        '<div class="progress-val">' + s.count.toLocaleString() + '</div>' +
-      '</div>';
-  });
-})();
-</script>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Scrape Status</div>
+    <div id="scrape-bars"></div>
+  </div>
+</div>
 
 <!-- Estimated Time Remaining -->
-<div class="section-title">Estimated Time Remaining</div>
-<div class="est-grid">
-  <div class="est-card">
-    <div class="est-label">P1 Playwright</div>
-    <div class="est-value">{{ est_p1_hrs }} hrs</div>
-    <div class="est-sub">{{ p1_pending|default:"0" }} products @ ~30s each</div>
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Estimated Time Remaining</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
+  <div class="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-medium">P1 Playwright</div>
+    <div class="text-[24px] font-bold text-amber-800 dark:text-amber-300 mt-1.5 leading-none">{{ est_p1_hrs }} hrs</div>
+    <div class="text-xs text-amber-600 dark:text-amber-400/70 mt-1.5">{{ p1_pending|default:"0" }} products @ ~30s each</div>
   </div>
-  <div class="est-card">
-    <div class="est-label">P2/P3 curl_cffi</div>
-    <div class="est-value">{{ est_p2p3_hrs }} hrs</div>
-    <div class="est-sub">{{ p2p3_pending|default:"0" }} products @ ~2s each</div>
+  <div class="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-blue-700 dark:text-blue-400 font-medium">P2/P3 curl_cffi</div>
+    <div class="text-[24px] font-bold text-blue-800 dark:text-blue-300 mt-1.5 leading-none">{{ est_p2p3_hrs }} hrs</div>
+    <div class="text-xs text-blue-600 dark:text-blue-400/70 mt-1.5">{{ p2p3_pending|default:"0" }} products @ ~2s each</div>
   </div>
-  <div class="est-card">
-    <div class="est-label">Reviews</div>
-    <div class="est-value">{{ est_reviews_hrs }} hrs</div>
-    <div class="est-sub">{{ reviews_pending|default:"0" }} products @ ~15s each</div>
+  <div class="bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-violet-700 dark:text-violet-400 font-medium">Reviews</div>
+    <div class="text-[24px] font-bold text-violet-800 dark:text-violet-300 mt-1.5 leading-none">{{ est_reviews_hrs }} hrs</div>
+    <div class="text-xs text-violet-600 dark:text-violet-400/70 mt-1.5">{{ reviews_pending|default:"0" }} products @ ~15s each</div>
   </div>
 </div>
 
 <!-- Charts Row -->
-<div class="section-title">Distribution Charts</div>
-<div class="two-col">
-  <div class="chart-container">
-    <canvas id="priorityChart"></canvas>
-  </div>
-  <div class="chart-container">
-    <canvas id="snapshotChart"></canvas>
-  </div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+  {% with title="Enrichment Priority Distribution" chart_id="priorityChart" height="280" %}
+    {% include "admin/includes/chart_card.html" %}
+  {% endwith %}
+
+  {% with title="Price Snapshots by Source" chart_id="snapshotChart" height="280" %}
+    {% include "admin/includes/chart_card.html" %}
+  {% endwith %}
 </div>
 
-<!-- Breakdown Tables -->
-<div class="section-title">Detailed Breakdowns</div>
-<div class="three-col">
+<!-- Detailed Breakdowns -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Detailed Breakdowns</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-6">
   <!-- By Enrichment Method -->
-  <div>
-    <table class="breakdown-table">
-      <caption style="text-align:left;font-weight:600;margin-bottom:8px;color:#333;">By Enrichment Method</caption>
-      <tr><th>Method</th><th style="text-align:right">Count</th></tr>
-      {% for method, count in by_method.items %}
-      <tr><td>{{ method }}</td><td class="num">{{ count }}</td></tr>
-      {% empty %}
-      <tr><td colspan="2">No data</td></tr>
-      {% endfor %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">By Enrichment Method</div>
+    </div>
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Method</th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for method, count in by_method.items %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 capitalize">{{ method }}</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>
+        {% endfor %}
+      </tbody>
     </table>
   </div>
+
   <!-- By Review Status -->
-  <div>
-    <table class="breakdown-table">
-      <caption style="text-align:left;font-weight:600;margin-bottom:8px;color:#333;">By Review Status</caption>
-      <tr><th>Status</th><th style="text-align:right">Count</th></tr>
-      {% for status, count in by_review.items %}
-      <tr><td>{{ status }}</td><td class="num">{{ count }}</td></tr>
-      {% empty %}
-      <tr><td colspan="2">No data</td></tr>
-      {% endfor %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">By Review Status</div>
+    </div>
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for status, count in by_review.items %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 capitalize">{{ status }}</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>
+        {% endfor %}
+      </tbody>
     </table>
   </div>
+
   <!-- By Marketplace -->
-  <div>
-    <table class="breakdown-table">
-      <caption style="text-align:left;font-weight:600;margin-bottom:8px;color:#333;">By Marketplace</caption>
-      <tr><th>Marketplace</th><th style="text-align:right">Count</th></tr>
-      {% for row in by_marketplace %}
-      <tr><td>{{ row.marketplace_slug }}</td><td class="num">{{ row.count }}</td></tr>
-      {% empty %}
-      <tr><td colspan="2">No data</td></tr>
-      {% endfor %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">By Marketplace</div>
+    </div>
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in by_marketplace %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ row.marketplace_slug }}</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ row.count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>
+        {% endfor %}
+      </tbody>
     </table>
   </div>
 </div>
 
 <!-- Snapshots by Source -->
 {% if snapshots_by_source %}
-<table class="breakdown-table" style="max-width: 400px; margin-bottom: 24px;">
-  <caption style="text-align:left;font-weight:600;margin-bottom:8px;color:#333;">Price Snapshots by Source</caption>
-  <tr><th>Source</th><th style="text-align:right">Count</th></tr>
-  {% for row in snapshots_by_source %}
-  <tr><td>{{ row.source }}</td><td class="num">{{ row.count }}</td></tr>
-  {% endfor %}
-</table>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6 max-w-md">
+  <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Price Snapshots by Source</div>
+  </div>
+  <table class="w-full">
+    <thead>
+      <tr>
+        <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Source</th>
+        <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in snapshots_by_source %}
+      <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+        <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ row.source }}</td>
+        <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ row.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endif %}
 
-<!-- Action Buttons -->
-<div class="section-title">Actions</div>
-<div class="action-grid">
+<!-- Actions -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Actions</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
 
   <!-- Discovery -->
-  <div class="action-card">
-    <h4>Run Discovery</h4>
-    <div class="desc">Discover products from PriceHistory sitemaps (Phase 1)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='discover' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run Discovery</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Discover products from PriceHistory sitemaps (Phase 1)</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='discover' %}" class="flex items-end gap-2 flex-wrap">
       {% csrf_token %}
       <div>
-        <label>Start</label>
-        <input type="number" name="sitemap_start" value="1" min="1">
+        <label class="text-[11px] text-slate-400 block mb-1">Start</label>
+        <input type="number" name="sitemap_start" value="1" min="1"
+               class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
       <div>
-        <label>End</label>
-        <input type="number" name="sitemap_end" value="5" min="1">
+        <label class="text-[11px] text-slate-400 block mb-1">End</label>
+        <input type="number" name="sitemap_end" value="5" min="1"
+               class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
-      <button type="submit" class="btn-action btn-primary">Run Discovery</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Run Discovery
+      </button>
     </form>
   </div>
 
   <!-- BH-Fill -->
-  <div class="action-card">
-    <h4>Run BH-Fill</h4>
-    <div class="desc">BuyHatke price history fill (Phase 2) via Celery workers</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='bh-fill' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run BH-Fill</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">BuyHatke price history fill (Phase 2) via Celery workers</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='bh-fill' %}" class="flex items-end gap-2 flex-wrap">
       {% csrf_token %}
       <div>
-        <label>Batch</label>
-        <input type="number" name="batch_size" value="5000" min="100">
+        <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
+        <input type="number" name="batch_size" value="5000" min="100"
+               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
       <div>
-        <label>Workers</label>
-        <input type="number" name="workers" value="2" min="1" max="8">
+        <label class="text-[11px] text-slate-400 block mb-1">Workers</label>
+        <input type="number" name="workers" value="2" min="1" max="8"
+               class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
-      <button type="submit" class="btn-action btn-primary">Run BH-Fill</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Run BH-Fill
+      </button>
     </form>
   </div>
 
   <!-- PH-Extend -->
-  <div class="action-card">
-    <h4>Run PH-Extend</h4>
-    <div class="desc">PriceHistory.app deep history extension (Phase 3)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='ph-extend' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run PH-Extend</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">PriceHistory.app deep history extension (Phase 3)</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='ph-extend' %}" class="flex items-end gap-2 flex-wrap">
       {% csrf_token %}
       <div>
-        <label>Limit</label>
-        <input type="number" name="limit" value="5000" min="100">
+        <label class="text-[11px] text-slate-400 block mb-1">Limit</label>
+        <input type="number" name="limit" value="5000" min="100"
+               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
       <div>
-        <label>Workers</label>
-        <input type="number" name="workers" value="2" min="1" max="8">
+        <label class="text-[11px] text-slate-400 block mb-1">Workers</label>
+        <input type="number" name="workers" value="2" min="1" max="8"
+               class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
-      <button type="submit" class="btn-action btn-primary">Run PH-Extend</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Run PH-Extend
+      </button>
     </form>
   </div>
 
   <!-- Create Lightweight -->
-  <div class="action-card">
-    <h4>Create Lightweight</h4>
-    <div class="desc">Create Product+Listing from tracker data (no scraping needed)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='create-lightweight' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Create Lightweight</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Create Product+Listing from tracker data (no scraping needed)</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='create-lightweight' %}" class="flex items-end gap-2 flex-wrap">
       {% csrf_token %}
       <div>
-        <label>Batch</label>
-        <input type="number" name="batch_size" value="2000" min="100" max="5000">
+        <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
+        <input type="number" name="batch_size" value="2000" min="100" max="5000"
+               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
-      <button type="submit" class="btn-action btn-primary">Create</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Create
+      </button>
     </form>
   </div>
 
   <!-- Assign Priorities -->
-  <div class="action-card">
-    <h4>Assign Priorities</h4>
-    <div class="desc">Populate derived fields, assign P1/P2/P3, mark review targets</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='assign-priorities' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Assign Priorities</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Populate derived fields, assign P1/P2/P3, mark review targets</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='assign-priorities' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-primary">Assign</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Assign
+      </button>
     </form>
   </div>
 
   <!-- Start Enrichment -->
-  <div class="action-card">
-    <h4>Start Enrichment</h4>
-    <div class="desc">Enrich a batch of products by priority (Phase 4)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='enrich' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Start Enrichment</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Enrich a batch of products by priority (Phase 4)</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='enrich' %}" class="flex items-end gap-2 flex-wrap">
       {% csrf_token %}
       <div>
-        <label>Batch</label>
-        <input type="number" name="batch_size" value="100" min="1" max="500">
+        <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
+        <input type="number" name="batch_size" value="100" min="1" max="500"
+               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
-      <button type="submit" class="btn-action btn-primary">Enrich</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Enrich
+      </button>
     </form>
   </div>
 
   <!-- Run Overnight -->
-  <div class="action-card">
-    <h4>Run Overnight</h4>
-    <div class="desc">Continuous enrichment — auto-stops at 6 AM IST</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='run-overnight' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run Overnight</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Continuous enrichment — auto-stops at 6 AM IST</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='run-overnight' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-secondary">Run Overnight</button>
+      <button type="submit" class="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Run Overnight
+      </button>
     </form>
   </div>
 
   <!-- Refresh Aggregate -->
-  <div class="action-card">
-    <h4>Refresh Aggregate</h4>
-    <div class="desc">Refresh TimescaleDB price_daily continuous aggregate</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='refresh-aggregate' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Refresh Aggregate</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Refresh TimescaleDB price_daily continuous aggregate</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='refresh-aggregate' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-secondary">Refresh</button>
+      <button type="submit" class="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Refresh
+      </button>
     </form>
   </div>
 
   <!-- Reset Failed -->
-  <div class="action-card">
-    <h4>Reset Failed</h4>
-    <div class="desc">Reset failed products back to pending for another attempt</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='reset-failed' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Reset Failed</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Reset failed products back to pending for another attempt</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='reset-failed' %}" class="flex items-end gap-2 flex-wrap">
       {% csrf_token %}
       <div>
-        <label>Which</label>
-        <select name="which">
+        <label class="text-[11px] text-slate-400 block mb-1">Which</label>
+        <select name="which"
+                class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
           <option value="all">All (status)</option>
           <option value="scrape">Enrichments</option>
           <option value="review">Reviews</option>
         </select>
       </div>
-      <button type="submit" class="btn-action btn-danger">Reset</button>
+      <button type="submit" class="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Reset
+      </button>
     </form>
   </div>
 
   <!-- Retry Failed -->
-  <div class="action-card">
-    <h4>Retry Failed Enrichments</h4>
-    <div class="desc">Reset failed enrichments with retry_count &lt; 3 back to pending</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='retry-failed' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Retry Failed Enrichments</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Reset failed enrichments with retry_count &lt; 3 back to pending</div>
+    <form method="post" action="{% url 'admin:backfill-action' action='retry-failed' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-danger">Retry</button>
+      <button type="submit" class="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Retry
+      </button>
     </form>
   </div>
 
 </div>
 
 <!-- Failed Products Table -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Failed Products (Last 50)</div>
 {% if failed_products %}
-<div class="section-title">Failed Products (Last 50)</div>
-<div style="overflow-x: auto;">
-  <table class="error-table">
-    <tr>
-      <th>External ID</th>
-      <th>Marketplace</th>
-      <th>Status</th>
-      <th>Scrape</th>
-      <th>Retries</th>
-      <th>Error</th>
-      <th>Updated</th>
-    </tr>
-    {% for fp in failed_products %}
-    <tr>
-      <td><code style="font-size:11px;">{{ fp.external_id }}</code></td>
-      <td>{{ fp.marketplace_slug }}</td>
-      <td><span class="badge badge-failed">{{ fp.status }}</span></td>
-      <td><span class="badge badge-failed">{{ fp.scrape_status }}</span></td>
-      <td style="text-align:center;">{{ fp.retry_count }}</td>
-      <td><div class="error-msg" title="{{ fp.error_message }}">{{ fp.error_message|truncatechars:80 }}</div></td>
-      <td style="white-space:nowrap;">{{ fp.updated_at }}</td>
-    </tr>
-    {% endfor %}
-  </table>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">External ID</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Scrape</th>
+          <th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Retries</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Error</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fp in failed_products %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ fp.external_id }}</code>
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ fp.marketplace_slug }}</td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> {{ fp.status }}
+            </span>
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> {{ fp.scrape_status }}
+            </span>
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-center font-semibold border-b border-slate-100 dark:border-slate-700/50">{{ fp.retry_count }}</td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-red-500" title="{{ fp.error_message }}">
+              {{ fp.error_message|truncatechars:80 }}
+            </div>
+          </td>
+          <td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">{{ fp.updated_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% else %}
-<div class="section-title">Failed Products</div>
-<p style="color:#666;font-size:13px;">No failed products.</p>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-xs mb-6 text-center">
+  <i data-lucide="check-circle" class="w-8 h-8 text-emerald-400 mx-auto mb-2"></i>
+  <div class="text-[13px] text-slate-400">No failed products.</div>
+</div>
 {% endif %}
 
-<!-- Chart.js Rendering -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  var chartColors = ['#F97316', '#60a5fa', '#16A34A', '#a78bfa', '#fbbf24', '#DC2626', '#4DB6AC', '#94a3b8'];
+{% endblock %}
 
-  // Enrichment Priority Pie Chart
-  var priorityData = {{ priority_chart|safe }};
-  new Chart(document.getElementById('priorityChart'), {
+{% block extra_js %}
+<script>
+// Progress bar builder
+function buildProgressBars(containerId, items, total) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  items.forEach(function(item) {
+    const pct = total > 0 ? (item.count / total * 100) : 0;
+    const row = document.createElement('div');
+    row.className = 'mb-3';
+    row.innerHTML =
+      '<div class="flex justify-between text-xs mb-1.5">' +
+        '<span class="text-slate-500 dark:text-slate-400 font-medium">' + item.label + '</span>' +
+        '<span class="text-slate-400 tabular-nums">' + item.count.toLocaleString() + ' (' + pct.toFixed(1) + '%)</span>' +
+      '</div>' +
+      '<div class="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">' +
+        '<div class="h-full rounded-full transition-all duration-500" style="width:' + pct.toFixed(1) + '%;background:' + item.color + '"></div>' +
+      '</div>';
+    container.appendChild(row);
+  });
+}
+
+// Pipeline status bars
+var total = {{ total|default:"0" }};
+buildProgressBars('pipeline-bars', [
+  {label: 'Discovered', count: {{ by_status.discovered|default:"0" }}, color: '#94a3b8'},
+  {label: 'BH Filling', count: {{ by_status.bh_filling|default:"0" }}, color: '#fbbf24'},
+  {label: 'BH Filled', count: {{ by_status.bh_filled|default:"0" }}, color: '#60a5fa'},
+  {label: 'PH Extending', count: {{ by_status.ph_extending|default:"0" }}, color: '#a78bfa'},
+  {label: 'PH Extended', count: {{ by_status.ph_extended|default:"0" }}, color: '#818cf8'},
+  {label: 'Done', count: {{ by_status.done|default:"0" }}, color: '#10b981'},
+  {label: 'Failed', count: {{ by_status.failed|default:"0" }}, color: '#ef4444'},
+  {label: 'Skipped', count: {{ by_status.skipped|default:"0" }}, color: '#9ca3af'}
+], total);
+
+// Scrape status bars
+buildProgressBars('scrape-bars', [
+  {label: 'Pending', count: {{ by_scrape.pending|default:"0" }}, color: '#94a3b8'},
+  {label: 'Enriching', count: {{ by_scrape.enriching|default:"0" }}, color: '#fbbf24'},
+  {label: 'Scraped', count: {{ by_scrape.scraped|default:"0" }}, color: '#10b981'},
+  {label: 'Failed', count: {{ by_scrape.failed|default:"0" }}, color: '#ef4444'}
+], total);
+
+// Chart colors
+var chartColors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#94a3b8'];
+var isDark = document.documentElement.classList.contains('dark');
+var borderColor = isDark ? '#1e293b' : '#ffffff';
+
+// Enrichment Priority Doughnut
+var priorityData = {{ priority_chart|safe }};
+new Chart(document.getElementById('priorityChart'), {
+  type: 'doughnut',
+  data: {
+    labels: priorityData.labels,
+    datasets: [{
+      data: priorityData.data,
+      backgroundColor: ['#ef4444', '#f97316', '#3b82f6', '#94a3b8'],
+      borderWidth: 2,
+      borderColor: borderColor
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    cutout: '65%',
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } }
+    }
+  }
+});
+
+// Snapshots by Source Doughnut
+var snapshotData = {{ snapshot_chart|safe }};
+if (snapshotData.labels.length > 0) {
+  new Chart(document.getElementById('snapshotChart'), {
     type: 'doughnut',
     data: {
-      labels: priorityData.labels,
+      labels: snapshotData.labels,
       datasets: [{
-        data: priorityData.data,
-        backgroundColor: ['#DC2626', '#F97316', '#60a5fa', '#94a3b8'],
-        borderWidth: 1,
-        borderColor: '#fff'
+        data: snapshotData.data,
+        backgroundColor: chartColors.slice(0, snapshotData.labels.length),
+        borderWidth: 2,
+        borderColor: borderColor
       }]
     },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
+      cutout: '65%',
       plugins: {
-        title: { display: true, text: 'Enrichment Priority Distribution', font: { size: 14, weight: 600 } },
-        legend: { position: 'bottom', labels: { font: { size: 12 } } }
+        legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } }
       }
     }
   });
+}
 
-  // Snapshots by Source Donut
-  var snapshotData = {{ snapshot_chart|safe }};
-  if (snapshotData.labels.length > 0) {
-    new Chart(document.getElementById('snapshotChart'), {
-      type: 'doughnut',
-      data: {
-        labels: snapshotData.labels,
-        datasets: [{
-          data: snapshotData.data,
-          backgroundColor: chartColors.slice(0, snapshotData.labels.length),
-          borderWidth: 1,
-          borderColor: '#fff'
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          title: { display: true, text: 'Price Snapshots by Source', font: { size: 14, weight: 600 } },
-          legend: { position: 'bottom', labels: { font: { size: 12 } } }
-        }
-      }
-    });
-  }
-});
+// Re-init Lucide icons
+lucide.createIcons();
 </script>
 
 <!-- Auto-refresh every 30s -->

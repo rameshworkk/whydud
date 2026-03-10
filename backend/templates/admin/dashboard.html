@@ -1,218 +1,214 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
 
 {% block title %}Platform Dashboard{% endblock %}
-{% block content_title %}<h1>Platform Dashboard</h1>{% endblock %}
-
-{% block extrahead %}
-{{ block.super }}
-<style>
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .stat-card .label {
-    font-size: 12px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0;
-  }
-  .stat-card .value {
-    font-size: 28px;
-    font-weight: bold;
-    color: #1a1a2e;
-    margin-top: 4px;
-  }
-  .stat-card .sub {
-    font-size: 12px;
-    color: #999;
-    margin-top: 4px;
-  }
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 24px 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #F97316;
-    color: #1a1a2e;
-  }
-  .quick-links {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin: 16px 0 24px;
-  }
-  .quick-link {
-    padding: 8px 16px;
-    background: #f0f0f0;
-    border-radius: 6px;
-    text-decoration: none;
-    color: #333;
-    font-size: 13px;
-    font-weight: 500;
-    transition: background 0.15s, color 0.15s;
-  }
-  .quick-link:hover {
-    background: #F97316;
-    color: white;
-  }
-  .breakdown-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 16px;
-  }
-  .breakdown-table th,
-  .breakdown-table td {
-    padding: 6px 12px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-    font-size: 13px;
-  }
-  .breakdown-table th {
-    font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-  }
-  .breakdown-table td.num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-  }
-  .two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  @media (max-width: 768px) {
-    .two-col { grid-template-columns: 1fr; }
-  }
-</style>
-{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
 
-<!-- Quick Links -->
-<div class="quick-links">
-  <a href="{% url 'admin:backfill-console' %}" class="quick-link">Backfill Pipeline</a>
-  <a href="{% url 'admin:enrichment-console' %}" class="quick-link">Enrichment Queue</a>
-  <a href="{% url 'admin:cluster-console' %}" class="quick-link">Worker Cluster</a>
-  <a href="{% url 'admin:system-health' %}" class="quick-link">System Health</a>
-  <a href="{% url 'admin:price-intel' %}" class="quick-link">Price Intelligence</a>
-  <a href="{% url 'admin:analytics' %}" class="quick-link">Analytics</a>
-  <a href="http://{{ request.get_host|cut:':8000' }}:5555/" class="quick-link" target="_blank">Flower</a>
+<p class="text-sm text-slate-400 mb-6">Welcome back. Here's what's happening today.</p>
+
+<!-- Products & Data Row 1 -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+  <!-- Total Products (inline for complex sub-text) -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200 overflow-hidden">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Total Products</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">{{ product_count|default:"0" }}</div>
+        <div class="text-xs text-slate-400 mt-1.5">{{ product_lightweight|default:"0" }} lightweight / {{ product_enriched|default:"0" }} enriched</div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="package" class="w-5 h-5"></i>
+      </div>
+    </div>
+    <div class="mt-3 -mx-5 -mb-5 h-10"><canvas id="spark-products"></canvas></div>
+  </div>
+
+  {% with label="With Reviews" value=product_with_reviews|default:"0" icon="star" color="amber" sparkline_id="spark-reviews" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  {% with label="With DudScore" value=product_with_dudscore|default:"0" icon="shield-check" color="blue" sparkline_id="spark-dudscore" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  {% with label="Price Snapshots" value=snapshot_count|default:"0" icon="database" color="violet" sparkline_id="spark-snapshots" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
 </div>
 
-<!-- Product Stats -->
-<div class="section-title">Products &amp; Data</div>
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Total Products</div>
-    <div class="value">{{ product_count|default:"0" }}</div>
-    <div class="sub">{{ product_lightweight|default:"0" }} lightweight / {{ product_enriched|default:"0" }} enriched</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">With Reviews</div>
-    <div class="value">{{ product_with_reviews|default:"0" }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">With DudScore</div>
-    <div class="value">{{ product_with_dudscore|default:"0" }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Price Snapshots</div>
-    <div class="value">{{ snapshot_count|default:"0" }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Listings</div>
-    <div class="value">{{ listing_count|default:"0" }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Reviews</div>
-    <div class="value">{{ review_count|default:"0" }}</div>
-    <div class="sub">{{ review_flagged|default:"0" }} flagged</div>
+<!-- Products & Data Row 2 -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
+  {% with label="Listings" value=listing_count|default:"0" icon="list" color="sky" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  <!-- Reviews (inline for flagged sub-text) -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Reviews</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">{{ review_count|default:"0" }}</div>
+        {% if review_flagged %}
+        <div class="text-xs text-red-500 font-medium mt-1.5">{{ review_flagged }} flagged</div>
+        {% endif %}
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="message-square" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- Backfill Pipeline -->
-<div class="section-title">Backfill Pipeline</div>
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Total BackfillProducts</div>
-    <div class="value">{{ backfill_total|default:"0" }}</div>
-  </div>
-</div>
-<div class="two-col">
-  <div>
-    <table class="breakdown-table">
-      <caption style="text-align:left;font-weight:600;margin-bottom:8px;color:#333;">By Status</caption>
+<!-- Backfill Pipeline Section -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Backfill Pipeline</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+  {% with label="BackfillProducts" value=backfill_total|default:"0" icon="database" color="emerald" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">By Status</div>
+    <div class="mt-3 space-y-2">
       {% for row in backfill_by_status %}
-      <tr>
-        <td>{{ row.status }}</td>
-        <td class="num">{{ row.count }}</td>
-      </tr>
+      <div class="flex justify-between text-[13px]">
+        <span class="text-slate-600 dark:text-slate-300 capitalize">{{ row.status }}</span>
+        <span class="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">{{ row.count }}</span>
+      </div>
       {% empty %}
-      <tr><td colspan="2">No data</td></tr>
+      <div class="text-xs text-slate-400">No data</div>
       {% endfor %}
-    </table>
+    </div>
   </div>
-  <div>
-    <table class="breakdown-table">
-      <caption style="text-align:left;font-weight:600;margin-bottom:8px;color:#333;">By Scrape Status</caption>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">By Scrape Status</div>
+    <div class="mt-3 space-y-2">
       {% for row in backfill_by_scrape %}
-      <tr>
-        <td>{{ row.scrape_status }}</td>
-        <td class="num">{{ row.count }}</td>
-      </tr>
+      <div class="flex justify-between text-[13px]">
+        <span class="text-slate-600 dark:text-slate-300 capitalize">{{ row.scrape_status }}</span>
+        <span class="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">{{ row.count }}</span>
+      </div>
       {% empty %}
-      <tr><td colspan="2">No data</td></tr>
+      <div class="text-xs text-slate-400">No data</div>
       {% endfor %}
-    </table>
+    </div>
   </div>
 </div>
 
-<!-- User Stats -->
-<div class="section-title">Users</div>
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Total Users</div>
-    <div class="value">{{ user_count|default:"0" }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">New Today</div>
-    <div class="value">{{ user_new_today|default:"0" }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Active (7d)</div>
-    <div class="value">{{ user_active_7d|default:"0" }}</div>
-  </div>
+<!-- Users Section -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Users</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+  {% with label="Total Users" value=user_count|default:"0" icon="users" color="violet" sparkline_id="spark-users" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  {% with label="New Today" value=user_new_today|default:"0" icon="user-plus" color="emerald" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  {% with label="Active (7d)" value=user_active_7d|default:"0" icon="user-check" color="blue" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
 </div>
 
-<!-- Marketplace Breakdown -->
+<!-- Listings by Marketplace -->
 {% if marketplace_stats %}
-<div class="section-title">Listings by Marketplace</div>
-<table class="breakdown-table" style="max-width:500px;">
-  <tr><th>Marketplace</th><th style="text-align:right;">Listings</th></tr>
-  {% for row in marketplace_stats %}
-  <tr>
-    <td>{{ row.marketplace__name }}</td>
-    <td class="num">{{ row.count }}</td>
-  </tr>
-  {% endfor %}
-</table>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+            rounded-2xl overflow-hidden shadow-xs mb-8 max-w-xl">
+  <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">
+      Listings by Marketplace
+    </div>
+  </div>
+  <table class="w-full">
+    <thead>
+      <tr>
+        <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                   px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+          Marketplace
+        </th>
+        <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                   px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+          Listings
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in marketplace_stats %}
+      <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+        <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300
+                   border-b border-slate-100 dark:border-slate-700/50">
+          {{ row.marketplace__name }}
+        </td>
+        <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums
+                   border-b border-slate-100 dark:border-slate-700/50">
+          {{ row.count }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Sparkline helper
+function createSparkline(canvasId, data, color) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 40);
+  gradient.addColorStop(0, color + '40');
+  gradient.addColorStop(1, color + '00');
+  new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: data.map((_, i) => i),
+      datasets: [{
+        data: data,
+        borderColor: color,
+        borderWidth: 1.5,
+        backgroundColor: gradient,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { display: false },
+        y: { display: false, beginAtZero: true }
+      },
+      elements: { line: { borderJoinStyle: 'round' } }
+    }
+  });
+}
+
+// TODO: Replace with real trend data from context
+// Placeholder sparkline data
+createSparkline('spark-products', [10, 12, 15, 14, 18, 20, 23], '#10b981');
+createSparkline('spark-reviews', [5, 6, 4, 8, 7, 9, 11], '#f59e0b');
+createSparkline('spark-dudscore', [2, 3, 5, 4, 6, 8, 7], '#3b82f6');
+createSparkline('spark-snapshots', [100, 120, 110, 150, 140, 180, 200], '#8b5cf6');
+createSparkline('spark-users', [3, 4, 2, 5, 6, 4, 7], '#8b5cf6');
+</script>
 
 <!-- Auto-refresh every 60s -->
 <script>
