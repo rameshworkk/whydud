@@ -153,7 +153,16 @@ class ProductAdmin(admin.ModelAdmin):
     list_select_related = ["brand", "category"]
     inlines = [ProductListingInline]
 
-    actions = ["merge_selected", "mark_inactive", "trigger_dudscore_recalc"]
+    actions = ["merge_selected", "mark_inactive", "trigger_dudscore_recalc", "full_dudscore_recalc"]
+
+    def get_inlines(self, request, obj=None):
+        inlines = list(self.inlines)
+        try:
+            from apps.scoring.admin import DudScoreHistoryInline
+            inlines.append(DudScoreHistoryInline)
+        except ImportError:
+            pass
+        return inlines
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(_listing_count=Count("listings"))
@@ -261,6 +270,22 @@ class ProductAdmin(admin.ModelAdmin):
             messages.warning(request, "scoring.tasks.compute_dudscore not available yet.")
         except Exception as e:
             messages.error(request, f"Failed to queue recalculation: {e}")
+
+    @admin.action(description="Full DudScore recalculation (ALL products)")
+    def full_dudscore_recalc(self, request, queryset):
+        from django.contrib import messages
+
+        try:
+            from apps.scoring.tasks import full_dudscore_recalculation
+            result = full_dudscore_recalculation.delay()
+            messages.success(
+                request,
+                f"Full DudScore recalculation queued. Task: {result.id}",
+            )
+        except ImportError:
+            messages.warning(request, "scoring.tasks.full_dudscore_recalculation not available yet.")
+        except Exception as e:
+            messages.error(request, f"Failed to queue full recalculation: {e}")
 
     # ------------------------------------------------------------------
     # Stats header

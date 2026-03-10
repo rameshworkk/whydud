@@ -4344,3 +4344,67 @@ Enhanced `ProductAdmin` with data quality stats header, 5 custom filters, 3 bulk
 | File | Purpose |
 |---|---|
 | `backend/templates/admin/products/product/change_list.html` | Changelist override with product count cards + data quality grid |
+
+---
+
+### AD-8: Review Moderation + DudScore Management (2026-03-11)
+
+**Status:** ✅ Complete
+
+**What was built:**
+Enhanced `ReviewAdmin` with moderation stats, credibility badges, star ratings, fraud flags, and 4 moderation actions. Enhanced `DudScoreConfigAdmin` with weight display, single-active enforcement, and audit logging. Added `DudScoreHistoryAdmin` (fully readonly) and inline on ProductAdmin. Added full recalculation action to ProductAdmin.
+
+**ReviewAdmin enhancements:**
+| Feature | Detail |
+|---|---|
+| rating_stars | ★★★★☆ colored gold/gray |
+| credibility_badge | 🟢/🟡/🔴 + score value, thresholds: >0.7/0.3-0.7/<0.3 |
+| fraud_flags_summary | ⚠️ N flags with tooltip showing first 3 |
+| is_published_icon | Boolean ✅/❌ |
+| is_flagged_icon | Boolean ✅/❌ |
+| CredibilityRangeFilter | Low (<0.3), Medium (0.3-0.7), High (>0.7), Unscored |
+
+**Review moderation actions (4 total):**
+| Action | Behavior |
+|---|---|
+| Approve & Publish Now | `is_published=True, is_flagged=False` |
+| Reject | Creates AuditLog entry, then deletes review |
+| Re-run Fraud Detection | Queues `detect_fake_reviews.delay()` per unique product |
+| Suspend Reviewer | Deactivates user + hides all their reviews + AuditLog |
+
+**Review stats header (changelist_view override):**
+- Total reviews | Pending (48h hold) | Flagged | Published today
+- Avg credibility | Fraud detection rate %
+
+**DudScoreConfigAdmin enhancements:**
+| Feature | Detail |
+|---|---|
+| list_display | All 6 weights + anomaly_threshold + reason shown |
+| fieldsets | Organized: General / Weights / Thresholds / Meta |
+| save_model | Enforces only 1 active config, creates AuditLog with old→new diffs |
+
+**DudScoreHistoryAdmin:**
+| Feature | Detail |
+|---|---|
+| list_display | product_title (50ch), score_badge (colored), config_version, time |
+| Permissions | Fully readonly (no add/change/delete) |
+| Inline | TabularInline on ProductAdmin, last 10 entries, readonly |
+
+**BrandTrustScoreAdmin enhanced:**
+- trust_tier_badge with color-coded tier labels
+
+**ProductAdmin additions:**
+- DudScoreHistoryInline (via `get_inlines` to avoid circular import)
+- "Full DudScore recalculation (ALL products)" action → `full_dudscore_recalculation.delay()`
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/reviews/admin.py` | Complete rewrite — star ratings, credibility badges, moderation actions, stats header |
+| `backend/apps/scoring/admin.py` | Complete rewrite — weight display, audit log on save, DudScoreHistory admin + inline |
+| `backend/apps/products/admin.py` | Added DudScoreHistoryInline via get_inlines, full recalc action |
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/templates/admin/reviews/review/change_list.html` | Changelist override with moderation stats cards |
