@@ -1,345 +1,118 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
 
 {% block title %}Worker Cluster{% endblock %}
-{% block content_title %}<h1>Worker Cluster</h1>{% endblock %}
-
-{% block extrahead %}
-{{ block.super }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<style>
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .stat-card .label {
-    font-size: 12px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0;
-  }
-  .stat-card .value {
-    font-size: 28px;
-    font-weight: bold;
-    color: #1a1a2e;
-    margin-top: 4px;
-  }
-  .stat-card .sub {
-    font-size: 12px;
-    color: #999;
-    margin-top: 4px;
-  }
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 24px 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #F97316;
-    color: #1a1a2e;
-  }
-
-  /* Node cards */
-  .node-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .node-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    overflow: hidden;
-  }
-  .node-header {
-    padding: 14px 16px 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-  .node-header .node-label {
-    font-size: 15px;
-    font-weight: 700;
-    color: #1a1a2e;
-  }
-  .node-header .node-ip {
-    font-size: 12px;
-    color: #64748b;
-    font-family: monospace;
-    margin-top: 2px;
-  }
-  .node-badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-    flex-shrink: 0;
-  }
-  .node-badge.online { background: #dcfce7; color: #16A34A; }
-  .node-badge.offline { background: #fef2f2; color: #DC2626; }
-
-  .node-body {
-    padding: 0 16px 14px;
-  }
-  .node-spec {
-    font-size: 11px;
-    color: #94a3b8;
-    margin-bottom: 10px;
-  }
-  .node-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .node-stat {
-    background: #f8fafc;
-    border-radius: 6px;
-    padding: 8px 10px;
-  }
-  .node-stat .ns-label {
-    font-size: 10px;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .node-stat .ns-value {
-    font-size: 18px;
-    font-weight: 700;
-    color: #1a1a2e;
-    margin-top: 2px;
-  }
-  .node-queues {
-    margin-top: 10px;
-    font-size: 12px;
-    color: #64748b;
-  }
-  .node-queues .queue-tag {
-    display: inline-block;
-    padding: 1px 8px;
-    background: #f0f0f0;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 500;
-    margin-right: 4px;
-    color: #333;
-  }
-  .node-meta {
-    margin-top: 8px;
-    font-size: 11px;
-    color: #94a3b8;
-  }
-
-  /* Offline node styling */
-  .node-card.offline {
-    opacity: 0.6;
-    border-color: #fecaca;
-  }
-  .node-card.offline .node-header {
-    background: #fef2f2;
-  }
-
-  /* Queue depths */
-  .queue-bar-container {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-    font-size: 13px;
-  }
-  .queue-bar-label {
-    width: 120px;
-    font-weight: 500;
-    text-align: right;
-    color: #333;
-    font-family: monospace;
-    font-size: 13px;
-    flex-shrink: 0;
-  }
-  .queue-bar-track {
-    flex: 1;
-    height: 22px;
-    background: #f0f0f0;
-    border-radius: 4px;
-    overflow: hidden;
-    max-width: 400px;
-  }
-  .queue-bar-fill {
-    height: 100%;
-    background: #F97316;
-    border-radius: 4px;
-    min-width: 2px;
-  }
-  .queue-bar-val {
-    width: 50px;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    color: #333;
-    text-align: right;
-    flex-shrink: 0;
-  }
-
-  /* Active tasks table */
-  .tasks-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
-  .tasks-table th {
-    font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-    padding: 8px 10px;
-    text-align: left;
-    border-bottom: 2px solid #e2e8f0;
-  }
-  .tasks-table td {
-    padding: 6px 10px;
-    border-bottom: 1px solid #f1f5f9;
-  }
-  .tasks-table tr:hover td { background: #f8fafc; }
-  .tasks-table code {
-    font-size: 11px;
-    background: #f1f5f9;
-    padding: 1px 5px;
-    border-radius: 3px;
-    color: #334155;
-  }
-
-  .two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  @media (max-width: 900px) {
-    .two-col { grid-template-columns: 1fr; }
-  }
-  .chart-container {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .chart-container canvas {
-    max-height: 250px;
-  }
-  .auto-refresh-note {
-    font-size: 11px;
-    color: #999;
-    text-align: right;
-    margin-bottom: 8px;
-  }
-  .quick-links {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin: 0 0 24px;
-  }
-  .quick-link {
-    padding: 8px 16px;
-    background: #f0f0f0;
-    border-radius: 6px;
-    text-decoration: none;
-    color: #333;
-    font-size: 13px;
-    font-weight: 500;
-    transition: background 0.15s, color 0.15s;
-  }
-  .quick-link:hover { background: #F97316; color: white; }
-</style>
-{% endblock %}
+{% block page_title %}Worker Cluster{% endblock %}
 
 {% block content %}
-<p class="auto-refresh-note">Auto-refreshes every 15 seconds</p>
 
-<!-- Quick links -->
-<div class="quick-links">
-  <a href="http://{{ request.get_host|cut:':8000' }}:5555/" class="quick-link" target="_blank">Open Flower Dashboard</a>
-  <a href="{% url 'admin:system-health' %}" class="quick-link">System Health</a>
-  <a href="{% url 'admin:backfill-console' %}" class="quick-link">Backfill Pipeline</a>
+<!-- Quick Links -->
+<div class="flex flex-wrap gap-3 mb-6">
+  <a href="http://{{ request.get_host|cut:':8000' }}:5555/" target="_blank"
+     class="px-4 py-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[13px] font-medium
+            hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors inline-flex items-center gap-2">
+    <i data-lucide="flower-2" class="w-4 h-4"></i> Open Flower Dashboard
+  </a>
+  <a href="{% url 'admin:system-health' %}"
+     class="px-4 py-2 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg text-[13px] font-medium
+            hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors inline-flex items-center gap-2">
+    <i data-lucide="activity" class="w-4 h-4"></i> System Health
+  </a>
+  <a href="{% url 'admin:backfill-console' %}"
+     class="px-4 py-2 bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-lg text-[13px] font-medium
+            hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors inline-flex items-center gap-2">
+    <i data-lucide="database" class="w-4 h-4"></i> Backfill Pipeline
+  </a>
 </div>
 
 <!-- Summary Stats -->
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Nodes Online</div>
-    <div class="value">{{ online_count }} / {{ total_nodes }}</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Nodes Online</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">{{ online_count }} / {{ total_nodes }}</div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="server" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Active Tasks</div>
-    <div class="value">{{ total_active }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Reserved Tasks</div>
-    <div class="value">{{ total_reserved }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Total Completed</div>
-    <div class="value">{{ total_completed }}</div>
-  </div>
+
+  {% with label="Active Tasks" value=total_active|default:"0" icon="play-circle" color="amber" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  {% with label="Reserved Tasks" value=total_reserved|default:"0" icon="clock" color="blue" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  {% with label="Total Completed" value=total_completed|default:"0" icon="check-circle" color="emerald" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
 </div>
 
-<!-- Node Cards -->
-<div class="section-title">Cluster Topology</div>
-<div class="node-grid">
+<!-- Cluster Topology -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Cluster Topology</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-6">
   {% for node in nodes %}
-  <div class="node-card {% if node.status == 'offline' %}offline{% endif %}">
-    <div class="node-header">
-      <div>
-        <div class="node-label">{{ node.label }}</div>
-        {% if node.ip %}<div class="node-ip">{{ node.ip }}</div>{% endif %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl overflow-hidden shadow-xs
+              border-l-4 {% if node.status == 'online' %}border-l-emerald-500{% else %}border-l-red-500 opacity-60{% endif %}">
+    <!-- Node Header -->
+    <div class="p-5 pb-3 {% if node.status == 'offline' %}bg-red-50/50 dark:bg-red-500/5{% endif %}">
+      <div class="flex justify-between items-start">
+        <div>
+          <div class="text-[15px] font-bold text-slate-900 dark:text-slate-100">{{ node.label }}</div>
+          {% if node.ip %}
+          <div class="text-[12px] text-slate-400 font-mono mt-0.5">{{ node.ip }}</div>
+          {% endif %}
+        </div>
+        {% if node.status == "online" %}
+        <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ONLINE
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
+          <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> OFFLINE
+        </span>
+        {% endif %}
       </div>
-      <span class="node-badge {{ node.status }}">
-        {% if node.status == "online" %}ONLINE{% else %}OFFLINE{% endif %}
-      </span>
+      <div class="text-[11px] text-slate-400 mt-2">{{ node.spec }} &mdash; {{ node.role }}</div>
     </div>
-    <div class="node-body">
-      <div class="node-spec">{{ node.spec }} &mdash; {{ node.role }}</div>
-      <div class="node-stats">
-        <div class="node-stat">
-          <div class="ns-label">Active</div>
-          <div class="ns-value">{{ node.active_tasks }}</div>
+
+    <!-- Node Stats -->
+    <div class="px-5 pb-4">
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Active</div>
+          <div class="text-[18px] font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ node.active_tasks }}</div>
         </div>
-        <div class="node-stat">
-          <div class="ns-label">Reserved</div>
-          <div class="ns-value">{{ node.reserved_tasks }}</div>
+        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Reserved</div>
+          <div class="text-[18px] font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ node.reserved_tasks }}</div>
         </div>
-        <div class="node-stat">
-          <div class="ns-label">Completed</div>
-          <div class="ns-value">{{ node.total_completed }}</div>
+        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Completed</div>
+          <div class="text-[18px] font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ node.total_completed }}</div>
         </div>
-        <div class="node-stat">
-          <div class="ns-label">Concurrency</div>
-          <div class="ns-value">{{ node.concurrency }}</div>
+        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Concurrency</div>
+          <div class="text-[18px] font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ node.concurrency }}</div>
         </div>
       </div>
+
       {% if node.queues %}
-      <div class="node-queues">
-        Queues:
+      <div class="mt-3 flex flex-wrap gap-1.5">
         {% for q in node.queues %}
-        <span class="queue-tag">{{ q }}</span>
+        <span class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{{ q }}</span>
         {% endfor %}
       </div>
       {% endif %}
+
       {% if node.hostname %}
-      <div class="node-meta">
+      <div class="mt-2 text-[11px] text-slate-400 truncate">
         {{ node.hostname }}{% if node.uptime %} &middot; up {{ node.uptime }}{% endif %}{% if node.prefetch_count != "?" %} &middot; prefetch {{ node.prefetch_count }}{% endif %}
       </div>
       {% endif %}
@@ -349,107 +122,136 @@
 </div>
 
 <!-- Queue Depths + Chart -->
-<div class="two-col">
-  <div>
-    <div class="section-title">Queue Depths</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Queue Depths</div>
     {% if queues %}
     <div id="queue-bars"></div>
-    <script>
-    (function() {
-      var queues = {{ queue_chart|safe }};
-      var maxVal = Math.max.apply(null, queues.data) || 1;
-      var container = document.getElementById('queue-bars');
-      for (var i = 0; i < queues.labels.length; i++) {
-        var pct = (queues.data[i] / maxVal * 100);
-        container.innerHTML +=
-          '<div class="queue-bar-container">' +
-            '<div class="queue-bar-label">' + queues.labels[i] + '</div>' +
-            '<div class="queue-bar-track">' +
-              '<div class="queue-bar-fill" style="width:' + pct.toFixed(1) + '%"></div>' +
-            '</div>' +
-            '<div class="queue-bar-val">' + queues.data[i] + '</div>' +
-          '</div>';
-      }
-      if (queues.labels.length === 0 || (queues.labels.length === 1 && queues.labels[0] === '(none)')) {
-        container.innerHTML = '<p style="color:#999;font-size:13px;">No queued tasks.</p>';
-      }
-    })();
-    </script>
     {% else %}
-    <p style="color:#999;font-size:13px;">No queued tasks detected.</p>
+    <div class="text-center py-8">
+      <i data-lucide="inbox" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+      <div class="text-[13px] text-slate-400">No queued tasks detected.</div>
+    </div>
     {% endif %}
   </div>
-  <div>
-    <div class="section-title">Tasks per Queue</div>
-    <div class="chart-container">
-      <canvas id="queueChart"></canvas>
-    </div>
-  </div>
+
+  {% with title="Tasks per Queue" chart_id="queueChart" height="250" %}
+    {% include "admin/includes/chart_card.html" %}
+  {% endwith %}
 </div>
 
 <!-- Active Tasks -->
-<div class="section-title">Active Tasks ({{ active_tasks|length }})</div>
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Active Tasks ({{ active_tasks|length }})</div>
 {% if active_tasks %}
-<div style="overflow-x:auto;">
-  <table class="tasks-table">
-    <tr>
-      <th>Worker</th>
-      <th>Task</th>
-      <th>Task ID</th>
-      <th>Args</th>
-    </tr>
-    {% for task in active_tasks %}
-    <tr>
-      <td>{{ task.worker|truncatechars:30 }}</td>
-      <td><code>{{ task.name }}</code></td>
-      <td><code>{{ task.id }}</code></td>
-      <td style="font-size:11px;color:#64748b;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-        {% if task.kwargs != "{}" %}{{ task.kwargs|truncatechars:60 }}{% else %}{{ task.args|truncatechars:60 }}{% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Args</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in active_tasks %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ task.worker|truncatechars:30 }}</td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ task.name }}</code>
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ task.id }}</code>
+          </td>
+          <td class="px-5 py-3 text-[11px] text-slate-400 max-w-[250px] overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">
+            {% if task.kwargs != "{}" %}{{ task.kwargs|truncatechars:60 }}{% else %}{{ task.args|truncatechars:60 }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% else %}
-<p style="color:#999;font-size:13px;">No tasks currently running.</p>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-xs mb-6 text-center">
+  <i data-lucide="coffee" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+  <div class="text-[13px] text-slate-400">No tasks currently running.</div>
+</div>
 {% endif %}
 
-<!-- Chart.js -->
+{% endblock %}
+
+{% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  var queueData = {{ queue_chart|safe }};
-  var colors = ['#F97316', '#60a5fa', '#16A34A', '#a78bfa', '#fbbf24', '#DC2626', '#4DB6AC', '#94a3b8'];
-  if (queueData.labels.length > 0 && !(queueData.labels.length === 1 && queueData.labels[0] === '(none)')) {
-    new Chart(document.getElementById('queueChart'), {
-      type: 'bar',
-      data: {
-        labels: queueData.labels,
-        datasets: [{
-          label: 'Queued + Active',
-          data: queueData.data,
-          backgroundColor: colors.slice(0, queueData.labels.length),
-          borderWidth: 0,
-          borderRadius: 4
-        }]
-      },
-      options: {
-        responsive: true,
-        indexAxis: 'y',
-        plugins: {
-          legend: { display: false },
-          title: { display: false }
-        },
-        scales: {
-          x: { beginAtZero: true, grid: { color: '#f1f5f9' } },
-          y: { grid: { display: false } }
-        }
-      }
-    });
-  } else {
-    document.getElementById('queueChart').parentNode.innerHTML =
-      '<p style="color:#999;font-size:13px;padding:40px 0;text-align:center;">No queue data available.</p>';
+{% if queues %}
+// Queue depth bars
+(function() {
+  var queues = {{ queue_chart|safe }};
+  var maxVal = Math.max.apply(null, queues.data) || 1;
+  var container = document.getElementById('queue-bars');
+  if (!container) return;
+  for (var i = 0; i < queues.labels.length; i++) {
+    var pct = (queues.data[i] / maxVal * 100);
+    var row = document.createElement('div');
+    row.className = 'mb-3';
+    row.innerHTML =
+      '<div class="flex justify-between text-xs mb-1.5">' +
+        '<span class="text-slate-500 dark:text-slate-400 font-medium font-mono">' + queues.labels[i] + '</span>' +
+        '<span class="text-slate-400 tabular-nums font-semibold">' + queues.data[i] + '</span>' +
+      '</div>' +
+      '<div class="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">' +
+        '<div class="h-full rounded-full bg-emerald-500 transition-all duration-500" style="width:' + pct.toFixed(1) + '%"></div>' +
+      '</div>';
+    container.appendChild(row);
   }
-});
+  if (queues.labels.length === 0 || (queues.labels.length === 1 && queues.labels[0] === '(none)')) {
+    container.innerHTML =
+      '<div class="text-center py-4"><div class="text-[13px] text-slate-400">No queued tasks.</div></div>';
+  }
+})();
+{% endif %}
+
+// Chart.js — Tasks per Queue
+var queueData = {{ queue_chart|safe }};
+var chartColors = ['#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#fbbf24', '#ef4444', '#4DB6AC', '#94a3b8'];
+if (queueData.labels.length > 0 && !(queueData.labels.length === 1 && queueData.labels[0] === '(none)')) {
+  new Chart(document.getElementById('queueChart'), {
+    type: 'bar',
+    data: {
+      labels: queueData.labels,
+      datasets: [{
+        label: 'Queued + Active',
+        data: queueData.data,
+        backgroundColor: chartColors.slice(0, queueData.labels.length),
+        borderWidth: 0,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: { beginAtZero: true, grid: { color: document.documentElement.classList.contains('dark') ? '#1e293b' : '#f1f5f9' } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+} else {
+  var chartEl = document.getElementById('queueChart');
+  if (chartEl) {
+    chartEl.parentNode.innerHTML =
+      '<div class="text-center py-8"><i data-lucide="inbox" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>' +
+      '<div class="text-[13px] text-slate-400">No queue data available.</div></div>';
+    lucide.createIcons();
+  }
+}
+
+// Re-init Lucide icons
+lucide.createIcons();
 </script>
 
 <!-- Auto-refresh every 15s -->

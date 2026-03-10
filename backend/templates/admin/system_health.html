@@ -1,297 +1,274 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
 
 {% block title %}System Health{% endblock %}
-{% block content_title %}<h1>System Health</h1>{% endblock %}
-
-{% block extrahead %}
-{{ block.super }}
-<style>
-  .health-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .health-card {
-    background: white;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    border-left: 4px solid #ccc;
-  }
-  .health-card.healthy { border-left-color: #16A34A; }
-  .health-card.degraded { border-left-color: #EAB308; }
-  .health-card.down { border-left-color: #DC2626; }
-  .health-card .svc-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #1a1a2e;
-    margin-bottom: 4px;
-  }
-  .health-card .svc-status {
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .health-card .svc-status.healthy { color: #16A34A; }
-  .health-card .svc-status.degraded { color: #EAB308; }
-  .health-card .svc-status.down { color: #DC2626; }
-  .health-card .svc-detail {
-    font-size: 12px;
-    color: #666;
-    margin-top: 4px;
-    word-break: break-all;
-  }
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 24px 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #F97316;
-    color: #1a1a2e;
-  }
-  .stats-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 16px;
-    max-width: 700px;
-  }
-  .stats-table th,
-  .stats-table td {
-    padding: 6px 12px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-    font-size: 13px;
-  }
-  .stats-table th {
-    font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-  }
-  .stats-table td.num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-  }
-  .two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  @media (max-width: 768px) {
-    .two-col { grid-template-columns: 1fr; }
-  }
-  .queue-bar-container {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-    font-size: 13px;
-  }
-  .queue-bar-label {
-    width: 100px;
-    font-weight: 500;
-    text-align: right;
-    color: #333;
-  }
-  .queue-bar-track {
-    flex: 1;
-    height: 20px;
-    background: #f0f0f0;
-    border-radius: 4px;
-    overflow: hidden;
-    max-width: 300px;
-  }
-  .queue-bar-fill {
-    height: 100%;
-    background: #F97316;
-    border-radius: 4px;
-    min-width: 2px;
-  }
-  .queue-bar-val {
-    width: 40px;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    color: #333;
-  }
-  .worker-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 8px;
-  }
-  .worker-card .worker-name {
-    font-weight: 600;
-    font-size: 13px;
-    color: #1a1a2e;
-  }
-  .worker-card .worker-meta {
-    font-size: 12px;
-    color: #666;
-    margin-top: 4px;
-  }
-  .worker-card .worker-badge {
-    display: inline-block;
-    font-size: 11px;
-    padding: 1px 8px;
-    border-radius: 10px;
-    font-weight: 600;
-    margin-left: 8px;
-  }
-  .worker-badge.online { background: #dcfce7; color: #16A34A; }
-  .auto-refresh-note {
-    font-size: 11px;
-    color: #999;
-    text-align: right;
-    margin-bottom: 8px;
-  }
-</style>
-{% endblock %}
+{% block page_title %}System Health{% endblock %}
 
 {% block content %}
-<p class="auto-refresh-note">Auto-refreshes every 30 seconds</p>
 
 <!-- Service Status Cards -->
-<div class="section-title">Service Status</div>
-<div class="health-grid">
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Service Status</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
   {% for svc in services %}
-  <div class="health-card {{ svc.status }}">
-    <div class="svc-name">{{ svc.name }}</div>
-    <div class="svc-status {{ svc.status }}">
-      {% if svc.status == "healthy" %}OK{% elif svc.status == "degraded" %}DEGRADED{% else %}DOWN{% endif %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs border-l-4
+              {% if svc.status == 'healthy' %}border-l-emerald-500
+              {% elif svc.status == 'degraded' %}border-l-amber-500
+              {% else %}border-l-red-500{% endif %}">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[14px] font-semibold text-slate-900 dark:text-slate-100">{{ svc.name }}</div>
+        <div class="text-[12px] text-slate-400 mt-1 break-all">{{ svc.detail }}</div>
+      </div>
+      {% if svc.status == "healthy" %}
+      <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> OK
+      </span>
+      {% elif svc.status == "degraded" %}
+      <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> DEGRADED
+      </span>
+      {% else %}
+      <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> DOWN
+      </span>
+      {% endif %}
     </div>
-    <div class="svc-detail">{{ svc.detail }}</div>
   </div>
   {% endfor %}
 </div>
 
 <!-- Celery Workers -->
 {% if celery_info.workers %}
-<div class="section-title">Celery Workers</div>
-{% for w in celery_info.workers %}
-<div class="worker-card">
-  <span class="worker-name">{{ w.name }}</span>
-  <span class="worker-badge online">ONLINE</span>
-  <div class="worker-meta">
-    Active: {{ w.active_tasks }} |
-    Reserved: {{ w.reserved_tasks }} |
-    Total completed: {{ w.total_completed }} |
-    Queues: {{ w.queues|join:", " }}
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Celery Workers</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+  {% for w in celery_info.workers %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="flex items-center gap-2 mb-2">
+      <div class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 truncate">{{ w.name }}</div>
+      <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ONLINE
+      </span>
+    </div>
+    <div class="grid grid-cols-3 gap-3 mt-3">
+      <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5 text-center">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Active</div>
+        <div class="text-[16px] font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ w.active_tasks }}</div>
+      </div>
+      <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5 text-center">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Reserved</div>
+        <div class="text-[16px] font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ w.reserved_tasks }}</div>
+      </div>
+      <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5 text-center">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Completed</div>
+        <div class="text-[16px] font-bold text-slate-900 dark:text-slate-100 mt-0.5">{{ w.total_completed }}</div>
+      </div>
+    </div>
+    {% if w.queues %}
+    <div class="mt-3 flex flex-wrap gap-1.5">
+      {% for q in w.queues %}
+      <span class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{{ q }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
+  {% endfor %}
 </div>
-{% endfor %}
 {% endif %}
 
 <!-- Queue Depths -->
 {% if celery_info.queues %}
-<div class="section-title">Queue Depths (reserved tasks)</div>
-{% for queue, depth in celery_info.queues.items %}
-<div class="queue-bar-container">
-  <div class="queue-bar-label">{{ queue }}</div>
-  <div class="queue-bar-track">
-    <div class="queue-bar-fill" style="width: {% widthratio depth 100 100 %}%"></div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs mb-6">
+  <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Queue Depths (reserved tasks)</div>
+  <div class="max-w-lg">
+    {% for queue, depth in celery_info.queues.items %}
+    <div class="mb-3">
+      <div class="flex justify-between text-xs mb-1.5">
+        <span class="text-slate-500 dark:text-slate-400 font-medium">{{ queue }}</span>
+        <span class="text-slate-400 tabular-nums font-semibold">{{ depth }}</span>
+      </div>
+      <div class="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+        <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" style="width: {% widthratio depth 100 100 %}%"></div>
+      </div>
+    </div>
+    {% endfor %}
   </div>
-  <div class="queue-bar-val">{{ depth }}</div>
 </div>
-{% endfor %}
 {% endif %}
 
-<div class="two-col">
+<!-- Database + Row Counts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
   <!-- Database Stats -->
-  <div>
-    <div class="section-title">Database</div>
-    <table class="stats-table">
-      {% if db_stats.total_size %}
-      <tr><td>Total Size</td><td class="num">{{ db_stats.total_size }}</td></tr>
-      {% endif %}
-      {% if db_stats.active_connections %}
-      <tr><td>Connections</td><td class="num">{{ db_stats.active_connections }} / {{ db_stats.max_connections }}</td></tr>
-      {% endif %}
-    </table>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Database</div>
+    </div>
+    <div class="p-5">
+      <table class="w-full mb-4">
+        <tbody>
+          {% if db_stats.total_size %}
+          <tr>
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2">Total Size</td>
+            <td class="text-[13px] text-slate-900 dark:text-slate-100 py-2 text-right font-semibold tabular-nums">{{ db_stats.total_size }}</td>
+          </tr>
+          {% endif %}
+          {% if db_stats.active_connections %}
+          <tr>
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2">Connections</td>
+            <td class="text-[13px] text-slate-900 dark:text-slate-100 py-2 text-right font-semibold tabular-nums">{{ db_stats.active_connections }} / {{ db_stats.max_connections }}</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
 
-    {% if db_stats.largest_tables %}
-    <strong style="font-size:13px;color:#333;">Largest Tables</strong>
-    <table class="stats-table">
-      <tr><th>Table</th><th style="text-align:right;">Size</th></tr>
-      {% for t in db_stats.largest_tables %}
-      <tr><td>{{ t.table }}</td><td class="num">{{ t.size }}</td></tr>
-      {% endfor %}
-    </table>
-    {% endif %}
+      {% if db_stats.largest_tables %}
+      <div class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 mb-2">Largest Tables</div>
+      <table class="w-full">
+        <thead>
+          <tr>
+            <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium py-2 border-b border-slate-200 dark:border-slate-700">Table</th>
+            <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium py-2 border-b border-slate-200 dark:border-slate-700">Size</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in db_stats.largest_tables %}
+          <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2 border-b border-slate-100 dark:border-slate-700/50">{{ t.table }}</td>
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ t.size }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
   </div>
 
-  <!-- Key Table Row Counts -->
-  <div>
-    <div class="section-title">Row Counts</div>
-    <table class="stats-table">
-      <tr><th>Table</th><th style="text-align:right;">Rows</th></tr>
-      {% for label, count in table_counts.items %}
-      <tr><td>{{ label }}</td><td class="num">{{ count }}</td></tr>
-      {% endfor %}
+  <!-- Row Counts -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Row Counts</div>
+    </div>
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Table</th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Rows</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for label, count in table_counts.items %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ label }}</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
   </div>
 </div>
 
-<div class="two-col">
+<!-- Redis + TimescaleDB -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
   <!-- Redis Stats -->
   {% if redis_stats %}
-  <div>
-    <div class="section-title">Redis</div>
-    <table class="stats-table">
-      {% if redis_stats.used_memory_human %}
-      <tr><td>Memory Used</td><td class="num">{{ redis_stats.used_memory_human }}</td></tr>
-      {% endif %}
-      {% if redis_stats.connected_clients %}
-      <tr><td>Connected Clients</td><td class="num">{{ redis_stats.connected_clients }}</td></tr>
-      {% endif %}
-      <tr><td>Total Keys</td><td class="num">{{ redis_stats.total_keys }}</td></tr>
-      {% if redis_stats.hit_rate %}
-      <tr><td>Hit Rate</td><td class="num">{{ redis_stats.hit_rate }}</td></tr>
-      {% endif %}
-      {% if redis_stats.uptime_days %}
-      <tr><td>Uptime</td><td class="num">{{ redis_stats.uptime_days }} days</td></tr>
-      {% endif %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Redis</div>
+    </div>
+    <table class="w-full">
+      <tbody>
+        {% if redis_stats.used_memory_human %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">Memory Used</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ redis_stats.used_memory_human }}</td>
+        </tr>
+        {% endif %}
+        {% if redis_stats.connected_clients %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">Connected Clients</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ redis_stats.connected_clients }}</td>
+        </tr>
+        {% endif %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">Total Keys</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ redis_stats.total_keys }}</td>
+        </tr>
+        {% if redis_stats.hit_rate %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">Hit Rate</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ redis_stats.hit_rate }}</td>
+        </tr>
+        {% endif %}
+        {% if redis_stats.uptime_days %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">Uptime</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ redis_stats.uptime_days }} days</td>
+        </tr>
+        {% endif %}
+      </tbody>
     </table>
   </div>
   {% endif %}
 
   <!-- TimescaleDB Stats -->
   {% if timescale_stats %}
-  <div>
-    <div class="section-title">TimescaleDB</div>
-    <table class="stats-table">
-      {% if timescale_stats.version %}
-      <tr><td>Version</td><td class="num">{{ timescale_stats.version }}</td></tr>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">TimescaleDB</div>
+    </div>
+    <div class="p-5">
+      <table class="w-full mb-4">
+        <tbody>
+          {% if timescale_stats.version %}
+          <tr>
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2">Version</td>
+            <td class="text-[13px] text-slate-900 dark:text-slate-100 py-2 text-right font-semibold tabular-nums">{{ timescale_stats.version }}</td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2">Total Chunks</td>
+            <td class="text-[13px] text-slate-900 dark:text-slate-100 py-2 text-right font-semibold tabular-nums">{{ timescale_stats.chunks }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {% if timescale_stats.hypertables %}
+      <div class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 mb-2">Hypertables</div>
+      <table class="w-full mb-4">
+        <thead>
+          <tr>
+            <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium py-2 border-b border-slate-200 dark:border-slate-700">Name</th>
+            <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium py-2 border-b border-slate-200 dark:border-slate-700">Chunks</th>
+            <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium py-2 border-b border-slate-200 dark:border-slate-700">Size</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ht in timescale_stats.hypertables %}
+          <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2 border-b border-slate-100 dark:border-slate-700/50">{{ ht.name }}</td>
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ ht.chunks }}</td>
+            <td class="text-[13px] text-slate-600 dark:text-slate-300 py-2 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ ht.size }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
       {% endif %}
-      <tr><td>Total Chunks</td><td class="num">{{ timescale_stats.chunks }}</td></tr>
-    </table>
 
-    {% if timescale_stats.hypertables %}
-    <strong style="font-size:13px;color:#333;">Hypertables</strong>
-    <table class="stats-table">
-      <tr><th>Name</th><th style="text-align:right;">Chunks</th><th style="text-align:right;">Size</th></tr>
-      {% for ht in timescale_stats.hypertables %}
-      <tr><td>{{ ht.name }}</td><td class="num">{{ ht.chunks }}</td><td class="num">{{ ht.size }}</td></tr>
-      {% endfor %}
-    </table>
-    {% endif %}
-
-    {% if timescale_stats.continuous_aggregates %}
-    <strong style="font-size:13px;color:#333;">Continuous Aggregates</strong>
-    <ul style="font-size:13px;margin:4px 0 0 16px;padding:0;">
-      {% for ca in timescale_stats.continuous_aggregates %}
-      <li>{{ ca }}</li>
-      {% endfor %}
-    </ul>
-    {% endif %}
+      {% if timescale_stats.continuous_aggregates %}
+      <div class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 mb-2">Continuous Aggregates</div>
+      <div class="flex flex-wrap gap-1.5">
+        {% for ca in timescale_stats.continuous_aggregates %}
+        <span class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{{ ca }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
   </div>
   {% endif %}
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
 <!-- Auto-refresh every 30s -->
 <script>
   setTimeout(function() { location.reload(); }, 30000);

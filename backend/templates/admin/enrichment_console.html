@@ -1,558 +1,310 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
 
 {% block title %}Enrichment Queue{% endblock %}
-{% block content_title %}<h1>Enrichment Queue Management</h1>{% endblock %}
-
-{% block extrahead %}
-{{ block.super }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<style>
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .stat-card .label {
-    font-size: 12px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0;
-  }
-  .stat-card .value {
-    font-size: 28px;
-    font-weight: bold;
-    color: #1a1a2e;
-    margin-top: 4px;
-  }
-  .stat-card .sub {
-    font-size: 12px;
-    color: #999;
-    margin-top: 4px;
-  }
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 24px 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #F97316;
-    color: #1a1a2e;
-  }
-  .two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  .three-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  @media (max-width: 900px) {
-    .two-col, .three-col { grid-template-columns: 1fr; }
-  }
-
-  /* Progress bars */
-  .progress-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-    font-size: 13px;
-  }
-  .progress-label {
-    width: 140px;
-    font-weight: 500;
-    text-align: right;
-    color: #333;
-    flex-shrink: 0;
-  }
-  .progress-track {
-    flex: 1;
-    height: 22px;
-    background: #f0f0f0;
-    border-radius: 4px;
-    overflow: hidden;
-    position: relative;
-  }
-  .progress-fill {
-    height: 100%;
-    border-radius: 4px;
-    min-width: 2px;
-    transition: width 0.3s;
-  }
-  .progress-val {
-    width: 90px;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    color: #333;
-    text-align: right;
-    flex-shrink: 0;
-  }
-
-  /* Breakdown tables */
-  .breakdown-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 16px;
-  }
-  .breakdown-table th,
-  .breakdown-table td {
-    padding: 6px 12px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-    font-size: 13px;
-  }
-  .breakdown-table th {
-    font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-  }
-  .breakdown-table td.num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-  }
-
-  /* Estimate cards */
-  .est-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .est-card {
-    background: #fffbeb;
-    border: 1px solid #fcd34d;
-    border-radius: 8px;
-    padding: 12px 16px;
-  }
-  .est-card .est-label { font-size: 12px; color: #92400e; font-weight: 500; }
-  .est-card .est-value { font-size: 22px; font-weight: bold; color: #92400e; }
-  .est-card .est-sub { font-size: 11px; color: #b45309; }
-
-  /* Bandwidth cards */
-  .bw-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .bw-card {
-    background: #eff6ff;
-    border: 1px solid #93c5fd;
-    border-radius: 8px;
-    padding: 12px 16px;
-  }
-  .bw-card .bw-label { font-size: 12px; color: #1e40af; font-weight: 500; }
-  .bw-card .bw-value { font-size: 22px; font-weight: bold; color: #1e40af; }
-  .bw-card .bw-sub { font-size: 11px; color: #2563eb; }
-
-  /* Chart containers */
-  .chart-container {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .chart-container canvas {
-    max-height: 280px;
-  }
-
-  /* Action buttons */
-  .action-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .action-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 16px;
-  }
-  .action-card h4 {
-    margin: 0 0 8px;
-    font-size: 14px;
-    color: #1a1a2e;
-  }
-  .action-card .desc {
-    font-size: 12px;
-    color: #666;
-    margin-bottom: 12px;
-  }
-  .action-card form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: flex-end;
-  }
-  .action-card label {
-    font-size: 11px;
-    color: #555;
-    display: block;
-    margin-bottom: 2px;
-  }
-  .action-card input[type="number"],
-  .action-card select {
-    width: 100px;
-    padding: 4px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 13px;
-  }
-  .btn-action {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
-  }
-  .btn-action:hover { transform: translateY(-1px); }
-  .btn-action:active { transform: translateY(0); }
-  .btn-primary { background: #F97316; color: white; }
-  .btn-primary:hover { background: #ea6c0e; }
-  .btn-secondary { background: #64748b; color: white; }
-  .btn-secondary:hover { background: #556578; }
-  .btn-danger { background: #DC2626; color: white; }
-  .btn-danger:hover { background: #c42020; }
-
-  /* Error table */
-  .error-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
-  .error-table th {
-    font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-    padding: 8px 10px;
-    text-align: left;
-    border-bottom: 2px solid #e2e8f0;
-  }
-  .error-table td {
-    padding: 6px 10px;
-    border-bottom: 1px solid #f1f5f9;
-    vertical-align: top;
-  }
-  .error-table tr:hover td { background: #f8fafc; }
-  .error-msg {
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: #DC2626;
-    font-size: 11px;
-  }
-  .badge {
-    display: inline-block;
-    padding: 1px 8px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .badge-failed { background: #fef2f2; color: #DC2626; }
-  .badge-pending { background: #f0f9ff; color: #0369a1; }
-  .badge-enriching { background: #fffbeb; color: #92400e; }
-  .badge-scraped { background: #f0fdf4; color: #16A34A; }
-
-  .auto-refresh-note {
-    font-size: 11px;
-    color: #999;
-    text-align: right;
-    margin-bottom: 8px;
-  }
-</style>
-{% endblock %}
+{% block page_title %}Enrichment Queue{% endblock %}
 
 {% block content %}
-<p class="auto-refresh-note">Auto-refreshes every 30 seconds</p>
 
 <!-- Top-level Stats -->
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Total Queue</div>
-    <div class="value">{{ total_queue|default:"0" }}</div>
-    <div class="sub">Pending enrichment</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Currently Enriching</div>
-    <div class="value">{{ enriching_total|default:"0" }}</div>
-    <div class="sub">
-      {% for method, count in enriching_by_method.items %}
-        {{ count }} {{ method }}{% if not forloop.last %}, {% endif %}
-      {% empty %}
-        idle
-      {% endfor %}
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-6">
+  {% with label="Total Queue" value=total_queue|default:"0" icon="layers" color="emerald" sub="Pending enrichment" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Currently Enriching</div>
+        <div class="text-[28px] font-bold text-amber-500 mt-1.5 leading-none">{{ enriching_total|default:"0" }}</div>
+        <div class="text-xs text-slate-400 mt-1.5">
+          {% for method, count in enriching_by_method.items %}
+            {{ count }} {{ method }}{% if not forloop.last %}, {% endif %}
+          {% empty %}
+            idle
+          {% endfor %}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="loader" class="w-5 h-5"></i>
+      </div>
     </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Completed</div>
-    <div class="value">{{ completed_total|default:"0" }}</div>
-    <div class="sub">
-      {% for method, count in completed_by_method.items %}
-        {{ count }} {{ method }}{% if not forloop.last %}, {% endif %}
-      {% endfor %}
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Completed</div>
+        <div class="text-[28px] font-bold text-emerald-500 mt-1.5 leading-none">{{ completed_total|default:"0" }}</div>
+        <div class="text-xs text-slate-400 mt-1.5">
+          {% for method, count in completed_by_method.items %}
+            {{ count }} {{ method }}{% if not forloop.last %}, {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="check-circle" class="w-5 h-5"></i>
+      </div>
     </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Failed</div>
-    <div class="value">{{ failed_total|default:"0" }}</div>
-    <div class="sub">{{ failed_retryable }} retryable / {{ failed_exhausted }} exhausted</div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Failed</div>
+        <div class="text-[28px] font-bold text-red-500 mt-1.5 leading-none">{{ failed_total|default:"0" }}</div>
+        <div class="text-xs text-slate-400 mt-1.5">{{ failed_retryable }} retryable / {{ failed_exhausted }} exhausted</div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="alert-circle" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Enriched (24h)</div>
-    <div class="value">{{ enriched_24h|default:"0" }}</div>
-    <div class="sub">Throughput last 24 hours</div>
+
+  {% with label="Enriched (24h)" value=enriched_24h|default:"0" icon="zap" color="blue" sub="Throughput last 24 hours" %}
+    {% include "admin/includes/stat_card.html" %}
+  {% endwith %}
+</div>
+
+<!-- Queue Depth + Scrape Status -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Queue Depth by Priority</div>
+    <div id="queue-bars"></div>
+  </div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Scrape Status Overview</div>
+    <div id="scrape-bars"></div>
   </div>
 </div>
 
-<!-- Queue Depth by Priority -->
-<div class="section-title">Queue Depth by Priority</div>
-<div id="queue-bars" style="max-width: 800px;"></div>
-<script>
-(function() {
-  var totalQueue = {{ total_queue|default:"0" }};
-  var priorities = [
-    {label: 'P0 On-demand', count: {{ p0_queue|default:"0" }}, color: '#DC2626'},
-    {label: 'P1 Playwright', count: {{ p1_queue|default:"0" }}, color: '#F97316'},
-    {label: 'P2 curl_cffi', count: {{ p2_queue|default:"0" }}, color: '#60a5fa'},
-    {label: 'P3 curl_cffi-low', count: {{ p3_queue|default:"0" }}, color: '#94a3b8'}
-  ];
-  var container = document.getElementById('queue-bars');
-  priorities.forEach(function(p) {
-    var pct = totalQueue > 0 ? (p.count / totalQueue * 100) : 0;
-    container.innerHTML +=
-      '<div class="progress-row">' +
-        '<div class="progress-label">' + p.label + '</div>' +
-        '<div class="progress-track">' +
-          '<div class="progress-fill" style="width:' + pct.toFixed(1) + '%;background:' + p.color + '"></div>' +
-        '</div>' +
-        '<div class="progress-val">' + p.count.toLocaleString() + '</div>' +
-      '</div>';
-  });
-})();
-</script>
-
-<!-- Scrape Status Overview -->
-<div class="section-title">Scrape Status Overview</div>
-<div id="scrape-bars" style="max-width: 800px;"></div>
-<script>
-(function() {
-  var total = {{ total|default:"0" }};
-  var statuses = [
-    {label: 'Pending', count: {{ by_scrape.pending|default:"0" }}, color: '#94a3b8'},
-    {label: 'Enriching', count: {{ by_scrape.enriching|default:"0" }}, color: '#fbbf24'},
-    {label: 'Scraped', count: {{ by_scrape.scraped|default:"0" }}, color: '#16A34A'},
-    {label: 'Failed', count: {{ by_scrape.failed|default:"0" }}, color: '#DC2626'}
-  ];
-  var container = document.getElementById('scrape-bars');
-  statuses.forEach(function(s) {
-    var pct = total > 0 ? (s.count / total * 100) : 0;
-    container.innerHTML +=
-      '<div class="progress-row">' +
-        '<div class="progress-label">' + s.label + '</div>' +
-        '<div class="progress-track">' +
-          '<div class="progress-fill" style="width:' + pct.toFixed(1) + '%;background:' + s.color + '"></div>' +
-        '</div>' +
-        '<div class="progress-val">' + s.count.toLocaleString() + '</div>' +
-      '</div>';
-  });
-})();
-</script>
-
 <!-- Estimated Time Remaining -->
-<div class="section-title">Estimated Time Remaining</div>
-<div class="est-grid">
-  <div class="est-card">
-    <div class="est-label">P0 On-demand</div>
-    <div class="est-value">{{ est_p0_hrs }} hrs</div>
-    <div class="est-sub">{{ p0_queue|default:"0" }} products @ ~30s each</div>
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Estimated Time Remaining</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
+  <div class="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-medium">P0 On-demand</div>
+    <div class="text-[24px] font-bold text-amber-800 dark:text-amber-300 mt-1.5 leading-none">{{ est_p0_hrs }} hrs</div>
+    <div class="text-xs text-amber-600 dark:text-amber-400/70 mt-1.5">{{ p0_queue|default:"0" }} products @ ~30s each</div>
   </div>
-  <div class="est-card">
-    <div class="est-label">P1 Playwright</div>
-    <div class="est-value">{{ est_p1_hrs }} hrs</div>
-    <div class="est-sub">{{ p1_queue|default:"0" }} products @ ~30s each</div>
+  <div class="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-medium">P1 Playwright</div>
+    <div class="text-[24px] font-bold text-amber-800 dark:text-amber-300 mt-1.5 leading-none">{{ est_p1_hrs }} hrs</div>
+    <div class="text-xs text-amber-600 dark:text-amber-400/70 mt-1.5">{{ p1_queue|default:"0" }} products @ ~30s each</div>
   </div>
-  <div class="est-card">
-    <div class="est-label">P2/P3 curl_cffi</div>
-    <div class="est-value">{{ est_p2p3_hrs }} hrs</div>
-    <div class="est-sub">{{ p2_queue|default:"0" }} + {{ p3_queue|default:"0" }} products @ ~2s each</div>
+  <div class="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-blue-700 dark:text-blue-400 font-medium">P2/P3 curl_cffi</div>
+    <div class="text-[24px] font-bold text-blue-800 dark:text-blue-300 mt-1.5 leading-none">{{ est_p2p3_hrs }} hrs</div>
+    <div class="text-xs text-blue-600 dark:text-blue-400/70 mt-1.5">{{ p2_queue|default:"0" }} + {{ p3_queue|default:"0" }} products @ ~2s each</div>
   </div>
 </div>
 
 <!-- Bandwidth Estimates -->
-<div class="section-title">Estimated Bandwidth (Remaining Queue)</div>
-<div class="bw-grid">
-  <div class="bw-card">
-    <div class="bw-label">P1 Playwright</div>
-    <div class="bw-value">{{ bw_p1_gb }} GB</div>
-    <div class="bw-sub">{{ p1_queue|default:"0" }} products @ ~625 KB each</div>
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Estimated Bandwidth (Remaining Queue)</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
+  <div class="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-blue-700 dark:text-blue-400 font-medium">P1 Playwright</div>
+    <div class="text-[24px] font-bold text-blue-800 dark:text-blue-300 mt-1.5 leading-none">{{ bw_p1_gb }} GB</div>
+    <div class="text-xs text-blue-600 dark:text-blue-400/70 mt-1.5">{{ p1_queue|default:"0" }} products @ ~625 KB each</div>
   </div>
-  <div class="bw-card">
-    <div class="bw-label">P2/P3 curl_cffi</div>
-    <div class="bw-value">{{ bw_p2p3_gb }} GB</div>
-    <div class="bw-sub">{{ p2_queue|default:"0" }} + {{ p3_queue|default:"0" }} products @ ~85 KB each</div>
+  <div class="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-blue-700 dark:text-blue-400 font-medium">P2/P3 curl_cffi</div>
+    <div class="text-[24px] font-bold text-blue-800 dark:text-blue-300 mt-1.5 leading-none">{{ bw_p2p3_gb }} GB</div>
+    <div class="text-xs text-blue-600 dark:text-blue-400/70 mt-1.5">{{ p2_queue|default:"0" }} + {{ p3_queue|default:"0" }} products @ ~85 KB each</div>
   </div>
-  <div class="bw-card">
-    <div class="bw-label">Total Estimated</div>
-    <div class="bw-value">{{ bw_total_gb }} GB</div>
-    <div class="bw-sub">Remaining bandwidth to complete queue</div>
-  </div>
-</div>
-
-<!-- Charts Row -->
-<div class="section-title">Distribution Charts</div>
-<div class="three-col">
-  <div class="chart-container">
-    <canvas id="queueChart"></canvas>
-  </div>
-  <div class="chart-container">
-    <canvas id="methodChart"></canvas>
-  </div>
-  <div class="chart-container">
-    <canvas id="reviewChart"></canvas>
+  <div class="bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 rounded-2xl p-5">
+    <div class="text-[11px] uppercase tracking-wider text-violet-700 dark:text-violet-400 font-medium">Total Estimated</div>
+    <div class="text-[24px] font-bold text-violet-800 dark:text-violet-300 mt-1.5 leading-none">{{ bw_total_gb }} GB</div>
+    <div class="text-xs text-violet-600 dark:text-violet-400/70 mt-1.5">Remaining bandwidth to complete queue</div>
   </div>
 </div>
 
-<!-- Breakdown Tables -->
-<div class="section-title">Detailed Breakdowns</div>
-<div class="two-col">
+<!-- Distribution Charts -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Distribution Charts</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+  {% with title="Queue by Priority" chart_id="queueChart" height="280" %}
+    {% include "admin/includes/chart_card.html" %}
+  {% endwith %}
+
+  {% with title="Completed by Method" chart_id="methodChart" height="280" %}
+    {% include "admin/includes/chart_card.html" %}
+  {% endwith %}
+
+  {% with title="Review Status" chart_id="reviewChart" height="280" %}
+    {% include "admin/includes/chart_card.html" %}
+  {% endwith %}
+</div>
+
+<!-- Detailed Breakdowns -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Detailed Breakdowns</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
   <!-- Review Status -->
-  <div>
-    <table class="breakdown-table">
-      <caption style="text-align:left;font-weight:600;margin-bottom:8px;color:#333;">Review Status</caption>
-      <tr><th>Status</th><th style="text-align:right">Count</th></tr>
-      {% for status, count in by_review.items %}
-      <tr><td>{{ status }}</td><td class="num">{{ count }}</td></tr>
-      {% empty %}
-      <tr><td colspan="2">No data</td></tr>
-      {% endfor %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Review Status</div>
+    </div>
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for status, count in by_review.items %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 capitalize">{{ status }}</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>
+        {% endfor %}
+      </tbody>
     </table>
   </div>
+
   <!-- Pending by Marketplace -->
-  <div>
-    <table class="breakdown-table">
-      <caption style="text-align:left;font-weight:600;margin-bottom:8px;color:#333;">Pending by Marketplace</caption>
-      <tr><th>Marketplace</th><th style="text-align:right">Pending</th></tr>
-      {% for row in pending_by_marketplace %}
-      <tr><td>{{ row.marketplace_slug }}</td><td class="num">{{ row.count }}</td></tr>
-      {% empty %}
-      <tr><td colspan="2">No data</td></tr>
-      {% endfor %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Pending by Marketplace</div>
+    </div>
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Pending</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pending_by_marketplace %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ row.marketplace_slug }}</td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ row.count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>
+        {% endfor %}
+      </tbody>
     </table>
   </div>
 </div>
 
-<!-- Action Buttons -->
-<div class="section-title">Actions</div>
-<div class="action-grid">
+<!-- Actions -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Actions</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
 
   <!-- Enrich Batch -->
-  <div class="action-card">
-    <h4>Enrich Batch</h4>
-    <div class="desc">Dispatch enrichment for a batch of pending products by priority</div>
-    <form method="post" action="{% url 'admin:enrichment-action' action='enrich-batch' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Enrich Batch</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Dispatch enrichment for a batch of pending products by priority</div>
+    <form method="post" action="{% url 'admin:enrichment-action' action='enrich-batch' %}" class="flex items-end gap-2 flex-wrap">
       {% csrf_token %}
       <div>
-        <label>Batch Size</label>
-        <input type="number" name="batch_size" value="100" min="1" max="500">
+        <label class="text-[11px] text-slate-400 block mb-1">Batch Size</label>
+        <input type="number" name="batch_size" value="100" min="1" max="500"
+               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
-      <button type="submit" class="btn-action btn-primary">Enrich</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Enrich
+      </button>
     </form>
   </div>
 
   <!-- Assign Priorities -->
-  <div class="action-card">
-    <h4>Assign Priorities</h4>
-    <div class="desc">Populate derived fields and assign P1/P2/P3 enrichment priorities</div>
-    <form method="post" action="{% url 'admin:enrichment-action' action='assign-priorities' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Assign Priorities</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Populate derived fields and assign P1/P2/P3 enrichment priorities</div>
+    <form method="post" action="{% url 'admin:enrichment-action' action='assign-priorities' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-primary">Assign</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Assign
+      </button>
     </form>
   </div>
 
   <!-- Assign Review Targets -->
-  <div class="action-card">
-    <h4>Assign Review Targets</h4>
-    <div class="desc">Mark top products for review scraping after enrichment</div>
-    <form method="post" action="{% url 'admin:enrichment-action' action='assign-review-targets' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Assign Review Targets</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Mark top products for review scraping after enrichment</div>
+    <form method="post" action="{% url 'admin:enrichment-action' action='assign-review-targets' %}" class="flex items-end gap-2 flex-wrap">
       {% csrf_token %}
       <div>
-        <label>Max Products</label>
-        <input type="number" name="max_targets" value="100000" min="1000" max="500000">
+        <label class="text-[11px] text-slate-400 block mb-1">Max Products</label>
+        <input type="number" name="max_targets" value="100000" min="1000" max="500000"
+               class="w-28 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
-      <button type="submit" class="btn-action btn-primary">Assign</button>
+      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Assign
+      </button>
     </form>
   </div>
 
   <!-- Cleanup Stale -->
-  <div class="action-card">
-    <h4>Cleanup Stale Enrichments</h4>
-    <div class="desc">Reset enrichments stuck in "enriching" for 2+ hours</div>
-    <form method="post" action="{% url 'admin:enrichment-action' action='cleanup-stale' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Cleanup Stale Enrichments</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Reset enrichments stuck in "enriching" for 2+ hours</div>
+    <form method="post" action="{% url 'admin:enrichment-action' action='cleanup-stale' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-secondary">Clean Up</button>
+      <button type="submit" class="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Clean Up
+      </button>
     </form>
   </div>
 
   <!-- Reset Failed Enrichments -->
-  <div class="action-card">
-    <h4>Reset Failed Enrichments</h4>
-    <div class="desc">Reset ALL failed enrichments to pending (clears retry count)</div>
-    <form method="post" action="{% url 'admin:enrichment-action' action='reset-failed-enrichments' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Reset Failed Enrichments</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Reset ALL failed enrichments to pending (clears retry count)</div>
+    <form method="post" action="{% url 'admin:enrichment-action' action='reset-failed-enrichments' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-danger">Reset All Failed</button>
+      <button type="submit" class="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Reset All Failed
+      </button>
     </form>
   </div>
 
   <!-- Retry Retryable -->
-  <div class="action-card">
-    <h4>Retry Retryable Failures</h4>
-    <div class="desc">Reset failed enrichments with retry_count &lt; 3 back to pending</div>
-    <form method="post" action="{% url 'admin:enrichment-action' action='retry-retryable' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Retry Retryable Failures</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Reset failed enrichments with retry_count &lt; 3 back to pending</div>
+    <form method="post" action="{% url 'admin:enrichment-action' action='retry-retryable' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-danger">Retry</button>
+      <button type="submit" class="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Retry
+      </button>
     </form>
   </div>
 
   <!-- Reset Failed Reviews -->
-  <div class="action-card">
-    <h4>Reset Failed Reviews</h4>
-    <div class="desc">Reset failed review scraping back to pending</div>
-    <form method="post" action="{% url 'admin:enrichment-action' action='reset-failed-reviews' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Reset Failed Reviews</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Reset failed review scraping back to pending</div>
+    <form method="post" action="{% url 'admin:enrichment-action' action='reset-failed-reviews' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-danger">Reset Reviews</button>
+      <button type="submit" class="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Reset Reviews
+      </button>
     </form>
   </div>
 
   <!-- Check Review Completion -->
-  <div class="action-card">
-    <h4>Check Review Completion</h4>
-    <div class="desc">Run review completion check (detect finished spiders, timeout stale)</div>
-    <form method="post" action="{% url 'admin:enrichment-action' action='check-review-completion' %}">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Check Review Completion</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">Run review completion check (detect finished spiders, timeout stale)</div>
+    <form method="post" action="{% url 'admin:enrichment-action' action='check-review-completion' %}" class="flex items-end gap-2">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-secondary">Check</button>
+      <button type="submit" class="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Check
+      </button>
     </form>
   </div>
 
@@ -560,132 +312,214 @@
 
 <!-- Stale Enrichments Table -->
 {% if stale_products %}
-<div class="section-title">Stale Enrichments (Enriching &gt; 2 Hours)</div>
-<div style="overflow-x: auto;">
-  <table class="error-table">
-    <tr>
-      <th>External ID</th>
-      <th>Marketplace</th>
-      <th>Method</th>
-      <th>Retries</th>
-      <th>Queued At</th>
-      <th>Error</th>
-    </tr>
-    {% for sp in stale_products %}
-    <tr>
-      <td><code style="font-size:11px;">{{ sp.external_id }}</code></td>
-      <td>{{ sp.marketplace_slug }}</td>
-      <td><span class="badge badge-enriching">{{ sp.enrichment_method }}</span></td>
-      <td style="text-align:center;">{{ sp.retry_count }}</td>
-      <td style="white-space:nowrap;">{{ sp.enrichment_queued_at }}</td>
-      <td><div class="error-msg" title="{{ sp.error_message }}">{{ sp.error_message|truncatechars:80 }}</div></td>
-    </tr>
-    {% endfor %}
-  </table>
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Stale Enrichments (Enriching &gt; 2 Hours)</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">External ID</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Method</th>
+          <th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Retries</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Queued At</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sp in stale_products %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ sp.external_id }}</code>
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ sp.marketplace_slug }}</td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> {{ sp.enrichment_method }}
+            </span>
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-center font-semibold border-b border-slate-100 dark:border-slate-700/50">{{ sp.retry_count }}</td>
+          <td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">{{ sp.enrichment_queued_at }}</td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-red-500" title="{{ sp.error_message }}">
+              {{ sp.error_message|truncatechars:80 }}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
 
 <!-- Recent Failures Table -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Recent Failures (Last 50)</div>
 {% if recent_failures %}
-<div class="section-title">Recent Failures (Last 50)</div>
-<div style="overflow-x: auto;">
-  <table class="error-table">
-    <tr>
-      <th>External ID</th>
-      <th>Marketplace</th>
-      <th>Method</th>
-      <th>Retries</th>
-      <th>Error</th>
-      <th>Updated</th>
-    </tr>
-    {% for rf in recent_failures %}
-    <tr>
-      <td><code style="font-size:11px;">{{ rf.external_id }}</code></td>
-      <td>{{ rf.marketplace_slug }}</td>
-      <td><span class="badge badge-failed">{{ rf.enrichment_method }}</span></td>
-      <td style="text-align:center;">{{ rf.retry_count }}</td>
-      <td><div class="error-msg" title="{{ rf.error_message }}">{{ rf.error_message|truncatechars:80 }}</div></td>
-      <td style="white-space:nowrap;">{{ rf.updated_at }}</td>
-    </tr>
-    {% endfor %}
-  </table>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">External ID</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Method</th>
+          <th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Retries</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Error</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rf in recent_failures %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ rf.external_id }}</code>
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ rf.marketplace_slug }}</td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> {{ rf.enrichment_method }}
+            </span>
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-center font-semibold border-b border-slate-100 dark:border-slate-700/50">{{ rf.retry_count }}</td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-red-500" title="{{ rf.error_message }}">
+              {{ rf.error_message|truncatechars:80 }}
+            </div>
+          </td>
+          <td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">{{ rf.updated_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% else %}
-<div class="section-title">Recent Failures</div>
-<p style="color:#666;font-size:13px;">No failed enrichments.</p>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-xs mb-6 text-center">
+  <i data-lucide="check-circle" class="w-8 h-8 text-emerald-400 mx-auto mb-2"></i>
+  <div class="text-[13px] text-slate-400">No failed enrichments.</div>
+</div>
 {% endif %}
 
-<!-- Chart.js Rendering -->
+{% endblock %}
+
+{% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  // Queue Depth by Priority (Doughnut)
-  var queueData = {{ queue_chart|safe }};
-  new Chart(document.getElementById('queueChart'), {
-    type: 'doughnut',
-    data: {
-      labels: queueData.labels,
-      datasets: [{
-        data: queueData.data,
-        backgroundColor: ['#DC2626', '#F97316', '#60a5fa', '#94a3b8'],
-        borderWidth: 1,
-        borderColor: '#fff'
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        title: { display: true, text: 'Queue by Priority', font: { size: 14, weight: 600 } },
-        legend: { position: 'bottom', labels: { font: { size: 12 } } }
-      }
-    }
+// Progress bar builder (same as backfill_console)
+function buildProgressBars(containerId, items, total) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  items.forEach(function(item) {
+    const pct = total > 0 ? (item.count / total * 100) : 0;
+    const row = document.createElement('div');
+    row.className = 'mb-3';
+    row.innerHTML =
+      '<div class="flex justify-between text-xs mb-1.5">' +
+        '<span class="text-slate-500 dark:text-slate-400 font-medium">' + item.label + '</span>' +
+        '<span class="text-slate-400 tabular-nums">' + item.count.toLocaleString() + ' (' + pct.toFixed(1) + '%)</span>' +
+      '</div>' +
+      '<div class="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">' +
+        '<div class="h-full rounded-full transition-all duration-500" style="width:' + pct.toFixed(1) + '%;background:' + item.color + '"></div>' +
+      '</div>';
+    container.appendChild(row);
   });
+}
 
-  // Completed by Method (Doughnut)
-  var methodData = {{ method_chart|safe }};
-  if (methodData.labels.length > 0) {
-    new Chart(document.getElementById('methodChart'), {
-      type: 'doughnut',
-      data: {
-        labels: methodData.labels,
-        datasets: [{
-          data: methodData.data,
-          backgroundColor: ['#F97316', '#60a5fa', '#16A34A', '#94a3b8'],
-          borderWidth: 1,
-          borderColor: '#fff'
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          title: { display: true, text: 'Completed by Method', font: { size: 14, weight: 600 } },
-          legend: { position: 'bottom', labels: { font: { size: 12 } } }
-        }
-      }
-    });
+// Queue depth bars
+var totalQueue = {{ total_queue|default:"0" }};
+buildProgressBars('queue-bars', [
+  {label: 'P0 On-demand', count: {{ p0_queue|default:"0" }}, color: '#ef4444'},
+  {label: 'P1 Playwright', count: {{ p1_queue|default:"0" }}, color: '#f97316'},
+  {label: 'P2 curl_cffi', count: {{ p2_queue|default:"0" }}, color: '#3b82f6'},
+  {label: 'P3 curl_cffi-low', count: {{ p3_queue|default:"0" }}, color: '#94a3b8'}
+], totalQueue);
+
+// Scrape status bars
+var total = {{ total|default:"0" }};
+buildProgressBars('scrape-bars', [
+  {label: 'Pending', count: {{ by_scrape.pending|default:"0" }}, color: '#94a3b8'},
+  {label: 'Enriching', count: {{ by_scrape.enriching|default:"0" }}, color: '#fbbf24'},
+  {label: 'Scraped', count: {{ by_scrape.scraped|default:"0" }}, color: '#10b981'},
+  {label: 'Failed', count: {{ by_scrape.failed|default:"0" }}, color: '#ef4444'}
+], total);
+
+// Chart.js
+var isDark = document.documentElement.classList.contains('dark');
+var borderColor = isDark ? '#1e293b' : '#ffffff';
+
+// Queue by Priority (Doughnut)
+var queueData = {{ queue_chart|safe }};
+new Chart(document.getElementById('queueChart'), {
+  type: 'doughnut',
+  data: {
+    labels: queueData.labels,
+    datasets: [{
+      data: queueData.data,
+      backgroundColor: ['#ef4444', '#f97316', '#3b82f6', '#94a3b8'],
+      borderWidth: 2,
+      borderColor: borderColor
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    cutout: '65%',
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } }
+    }
   }
+});
 
-  // Review Status (Doughnut)
-  var reviewData = {{ review_chart|safe }};
-  new Chart(document.getElementById('reviewChart'), {
+// Completed by Method (Doughnut)
+var methodData = {{ method_chart|safe }};
+if (methodData.labels.length > 0) {
+  new Chart(document.getElementById('methodChart'), {
     type: 'doughnut',
     data: {
-      labels: reviewData.labels,
+      labels: methodData.labels,
       datasets: [{
-        data: reviewData.data,
-        backgroundColor: ['#94a3b8', '#fbbf24', '#60a5fa', '#16A34A', '#DC2626'],
-        borderWidth: 1,
-        borderColor: '#fff'
+        data: methodData.data,
+        backgroundColor: ['#f97316', '#3b82f6', '#10b981', '#94a3b8'],
+        borderWidth: 2,
+        borderColor: borderColor
       }]
     },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
+      cutout: '65%',
       plugins: {
-        title: { display: true, text: 'Review Status', font: { size: 14, weight: 600 } },
-        legend: { position: 'bottom', labels: { font: { size: 12 } } }
+        legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } }
       }
     }
   });
+}
+
+// Review Status (Doughnut)
+var reviewData = {{ review_chart|safe }};
+new Chart(document.getElementById('reviewChart'), {
+  type: 'doughnut',
+  data: {
+    labels: reviewData.labels,
+    datasets: [{
+      data: reviewData.data,
+      backgroundColor: ['#94a3b8', '#fbbf24', '#3b82f6', '#10b981', '#ef4444'],
+      borderWidth: 2,
+      borderColor: borderColor
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    cutout: '65%',
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } }
+    }
+  }
 });
+
+// Re-init Lucide icons
+lucide.createIcons();
 </script>
 
 <!-- Auto-refresh every 30s -->
