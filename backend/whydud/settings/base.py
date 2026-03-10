@@ -31,7 +31,7 @@ ALLOWED_HOSTS: list[str] = []
 # ---------------------------------------------------------------------------
 
 DJANGO_APPS = [
-    "django.contrib.admin",
+    "apps.admin_tools.admin_config.WhydudAdminConfig",  # custom admin site (replaces django.contrib.admin)
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

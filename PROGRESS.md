@@ -4144,3 +4144,31 @@ Added four new subcommands to `backfill_prices` management command for pipeline 
 | `docs/DEPLOYMENT.md` | All `10.0.0` → `10.8.0` |
 | `.gitignore` | Added `docker/setup-worker.sh`, `docker/.env.worker`, `*.env.worker` |
 | `frontend/src/contexts/compare-context.tsx` | Added missing `isLightweight: false` |
+
+---
+
+### 2026-03-10 — AD-1: Custom Admin Site + Dashboard Home
+
+**What:** Created custom `WhydudAdminSite` replacing the default Django admin, with a platform dashboard showing live stats and navigation to 7 console views.
+
+**Approach:** Used Django's `AdminConfig.default_site` mechanism instead of modifying all 13 admin.py files. This makes `admin.site` globally point to our custom site — zero changes to existing admin registrations.
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | `WhydudAdminSite` class — dashboard view, 6 stub console views, 2 AJAX API endpoints |
+| `backend/apps/admin_tools/admin_config.py` | `WhydudAdminConfig(AdminConfig)` — sets `default_site` to our custom site |
+| `backend/templates/admin/dashboard.html` | Dashboard with stat cards: products, backfill pipeline, users, marketplace breakdown |
+| `backend/templates/admin/base_site.html` | Navigation bar with links to all console views |
+| `backend/templates/admin/stub.html` | Placeholder template for not-yet-implemented consoles |
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/whydud/settings/base.py` | Replaced `django.contrib.admin` with `apps.admin_tools.admin_config.WhydudAdminConfig` |
+
+**Verification:** `manage.py check` passes, 47 models registered, 9 custom URL routes active.
+
+**Dashboard stats shown:** product counts (total/lightweight/enriched/reviews/dudscore), listings, price snapshots, reviews (total/flagged), backfill by status + scrape_status, users (total/new today/active 7d), marketplace listing breakdown.
+
+**Console stubs ready for:** System Health (AD-2), Backfill Pipeline (AD-3), Worker Cluster (AD-4), Enrichment (AD-5), Price Intelligence (AD-10), Analytics (AD-11).

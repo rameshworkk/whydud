@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ title }} | WHYDUD Admin{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}">{{ site_header|default:"WHYDUD Admin" }}</a>
+</h1>
+{% endblock %}
+
+{% block nav-global %}
+<div style="background:#1a1a2e;padding:6px 16px;display:flex;gap:12px;flex-wrap:wrap;font-size:13px;">
+  <a href="{% url 'admin:admin-dashboard' %}" style="color:#F97316;text-decoration:none;font-weight:600;">Dashboard</a>
+  <a href="{% url 'admin:backfill-console' %}" style="color:#ccc;text-decoration:none;">Backfill</a>
+  <a href="{% url 'admin:enrichment-console' %}" style="color:#ccc;text-decoration:none;">Enrichment</a>
+  <a href="{% url 'admin:cluster-console' %}" style="color:#ccc;text-decoration:none;">Cluster</a>
+  <a href="{% url 'admin:system-health' %}" style="color:#ccc;text-decoration:none;">Health</a>
+  <a href="{% url 'admin:price-intel' %}" style="color:#ccc;text-decoration:none;">Price Intel</a>
+  <a href="{% url 'admin:analytics' %}" style="color:#ccc;text-decoration:none;">Analytics</a>
+  <a href="{% url 'admin:index' %}" style="color:#ccc;text-decoration:none;">Models</a>
+</div>
+{% endblock %}

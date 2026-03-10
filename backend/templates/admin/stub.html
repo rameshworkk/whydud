@@ -1,0 +1,15 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block content_title %}<h1>{{ title }}</h1>{% endblock %}
+
+{% block content %}
+<div style="padding:40px;text-align:center;color:#666;">
+  <p style="font-size:18px;font-weight:600;">{{ title }}</p>
+  <p>This console will be implemented in a subsequent session.</p>
+  <p style="margin-top:16px;">
+    <a href="{% url 'admin:admin-dashboard' %}" style="color:#F97316;">Back to Dashboard</a>
+  </p>
+</div>
+{% endblock %}
