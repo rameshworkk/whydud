@@ -4408,3 +4408,53 @@ Enhanced `ReviewAdmin` with moderation stats, credibility badges, star ratings, 
 | File | Purpose |
 |---|---|
 | `backend/templates/admin/reviews/review/change_list.html` | Changelist override with moderation stats cards |
+
+---
+
+### AD-9: User Management + Revenue Console ✅
+
+**UserAdmin enhanced** (apps/accounts/admin.py):
+| Feature | Detail |
+|---|---|
+| list_display | email, name, is_active icon, role, subscription_tier, review_count (annotated), @whyd.* icon, last_login, created_at |
+| list_filter | is_active, is_staff, is_suspended, role, subscription_tier, has_whydud_email, created_at, last_login_at |
+| Inlines | WhydudEmailInline, NotificationPreferenceInline |
+| Annotation | `_review_count` via `Count("reviews")` |
+| Stats header | Total / New today / New this week / Active 7d / With @whyd.* / Suspended / OAuth% / Password% |
+
+**Admin actions:**
+| Action | What It Does |
+|---|---|
+| Suspend Users | Sets is_suspended=True, is_active=False, hides all reviews, creates AuditLog |
+| Restore Users | Sets is_suspended=False, is_active=True, creates AuditLog |
+| Force Password Reset | Sets unusable password — user must use forgot password |
+| Grant 100 Reward Points | Creates RewardPointsLedger entry + updates RewardBalance |
+| Broadcast Notification | Creates Notification for all selected active users |
+
+**ClickEventAdmin** (apps/pricing/admin.py):
+| Feature | Detail |
+|---|---|
+| list_display | product_title, marketplace, source_page, price, affiliate_tag, purchased icon, device_type, clicked_at |
+| list_filter | marketplace, source_page, purchase_confirmed, device_type, clicked_at |
+| date_hierarchy | clicked_at |
+| Stats header | Clicks today/week/month, conversion rate (7d), top 5 marketplaces, top 5 products |
+
+**PriceAlertAdmin enhanced:**
+| Feature | Detail |
+|---|---|
+| list_display | user_email, product_title, target_price (₹), current_price (₹), marketplace, active icon, triggered icon, triggered_at |
+| list_filter | is_active, is_triggered, marketplace |
+
+**Additional admins registered:** OAuthConnectionAdmin, NotificationAdmin, ReservedUsernameAdmin
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/accounts/admin.py` | Complete rewrite — enhanced UserAdmin with stats header, inlines, 5 actions, plus Notification/OAuth admins |
+| `backend/apps/pricing/admin.py` | Added ClickEventAdmin with stats header, enhanced PriceAlertAdmin with full display |
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/templates/admin/accounts/user/change_list.html` | User changelist with stats cards (totals, auth methods) |
+| `backend/templates/admin/pricing/clickevent/change_list.html` | Click tracking changelist with stats, marketplace rankings, top products |

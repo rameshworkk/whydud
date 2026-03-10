@@ -1,0 +1,94 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block content %}
+{% if stats_header %}
+<style>
+  .user-stats { margin-bottom: 20px; }
+  .user-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .user-stat-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .user-stat-card .label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
+  .user-stat-card .value {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1a1a2e;
+    margin-top: 2px;
+  }
+  .user-stat-card .sub {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+  }
+  .user-stat-card .value.warn { color: #d97706; }
+  .user-stat-card .value.danger { color: #DC2626; }
+  .user-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 16px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #F97316;
+    color: #1a1a2e;
+  }
+</style>
+
+<div class="user-stats">
+  <div class="user-stat-grid">
+    <div class="user-stat-card">
+      <div class="label">Total Users</div>
+      <div class="value">{{ total_users|default:"0" }}</div>
+    </div>
+    <div class="user-stat-card">
+      <div class="label">New Today</div>
+      <div class="value">{{ new_today|default:"0" }}</div>
+    </div>
+    <div class="user-stat-card">
+      <div class="label">New This Week</div>
+      <div class="value">{{ new_this_week|default:"0" }}</div>
+    </div>
+    <div class="user-stat-card">
+      <div class="label">Active (7d)</div>
+      <div class="value">{{ active_7d|default:"0" }}</div>
+    </div>
+    <div class="user-stat-card">
+      <div class="label">With @whyd.* Email</div>
+      <div class="value">{{ with_whydud_email|default:"0" }}</div>
+    </div>
+    <div class="user-stat-card">
+      <div class="label">Suspended</div>
+      <div class="value{% if suspended_count %} danger{% endif %}">{{ suspended_count|default:"0" }}</div>
+    </div>
+  </div>
+
+  <div class="user-section-title">Auth Methods</div>
+  <div class="user-stat-grid">
+    <div class="user-stat-card">
+      <div class="label">OAuth</div>
+      <div class="value">{{ oauth_pct }}%</div>
+    </div>
+    <div class="user-stat-card">
+      <div class="label">Password</div>
+      <div class="value">{{ password_pct }}%</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{{ block.super }}
+{% endblock %}
