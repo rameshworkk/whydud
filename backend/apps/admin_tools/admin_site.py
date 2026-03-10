@@ -27,6 +27,11 @@ class WhydudAdminSite(AdminSite):
                 name="backfill-console",
             ),
             path(
+                "backfill/action/<str:action>/",
+                self.admin_view(self.backfill_action),
+                name="backfill-action",
+            ),
+            path(
                 "enrichment/",
                 self.admin_view(self.enrichment_view),
                 name="enrichment-console",
@@ -515,14 +520,314 @@ class WhydudAdminSite(AdminSite):
                 counts[label] = "error"
         return counts
 
+    # ------------------------------------------------------------------
+    # Backfill Pipeline Console (AD-3)
+    # ------------------------------------------------------------------
+
     def backfill_view(self, request):
+        """Backfill pipeline management — stats, charts, action buttons."""
+        import json
+
+        from django.db.models import Count, Q
         from django.shortcuts import render
 
-        return render(
-            request,
-            "admin/stub.html",
-            {**self.each_context(request), "title": "Backfill Pipeline"},
+        from apps.pricing.models import BackfillProduct
+
+        total = BackfillProduct.objects.count()
+
+        # --- By status ---
+        by_status = dict(
+            BackfillProduct.objects.values_list("status")
+            .annotate(c=Count("id"))
+            .values_list("status", "c")
         )
+
+        # --- By scrape_status ---
+        by_scrape = dict(
+            BackfillProduct.objects.values_list("scrape_status")
+            .annotate(c=Count("id"))
+            .values_list("scrape_status", "c")
+        )
+
+        # --- By enrichment_priority ---
+        by_priority = dict(
+            BackfillProduct.objects.values_list("enrichment_priority")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_priority", "c")
+        )
+
+        # --- By enrichment_method ---
+        by_method = dict(
+            BackfillProduct.objects.values_list("enrichment_method")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_method", "c")
+        )
+
+        # --- By review_status ---
+        by_review = dict(
+            BackfillProduct.objects.values_list("review_status")
+            .annotate(c=Count("id"))
+            .values_list("review_status", "c")
+        )
+
+        # --- By marketplace ---
+        by_marketplace = list(
+            BackfillProduct.objects.values("marketplace_slug")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        # --- Price snapshots by source ---
+        snapshots_by_source = self._get_snapshots_by_source()
+
+        # --- Estimated time remaining ---
+        p1_pending = BackfillProduct.objects.filter(
+            scrape_status="pending", enrichment_priority=1
+        ).count()
+        p2p3_pending = BackfillProduct.objects.filter(
+            scrape_status="pending", enrichment_priority__in=[2, 3]
+        ).count()
+        reviews_pending = BackfillProduct.objects.filter(
+            review_status="pending"
+        ).count()
+
+        # P1: ~30s/product, P2/P3: ~2s/product, reviews: ~15s/product
+        est_p1_hrs = round(p1_pending * 30 / 3600, 1)
+        est_p2p3_hrs = round(p2p3_pending * 2 / 3600, 1)
+        est_reviews_hrs = round(reviews_pending * 15 / 3600, 1)
+
+        # --- Failed products (last 50) ---
+        failed_products = list(
+            BackfillProduct.objects.filter(
+                Q(status="failed") | Q(scrape_status="failed")
+            )
+            .order_by("-updated_at")
+            .values(
+                "id",
+                "external_id",
+                "marketplace_slug",
+                "error_message",
+                "retry_count",
+                "status",
+                "scrape_status",
+                "updated_at",
+            )[:50]
+        )
+        # Serialize updated_at for template
+        for fp in failed_products:
+            fp["updated_at"] = fp["updated_at"].strftime("%Y-%m-%d %H:%M")
+
+        # --- Chart data as JSON ---
+        status_labels = [
+            "discovered", "bh_filling", "bh_filled",
+            "ph_extending", "ph_extended", "done", "failed", "skipped",
+        ]
+        status_chart = json.dumps({
+            "labels": [s.replace("_", " ").title() for s in status_labels],
+            "data": [by_status.get(s, 0) for s in status_labels],
+        })
+
+        priority_chart = json.dumps({
+            "labels": ["P0 On-demand", "P1 Playwright", "P2 curl_cffi", "P3 curl_cffi-low"],
+            "data": [
+                by_priority.get(0, 0),
+                by_priority.get(1, 0),
+                by_priority.get(2, 0),
+                by_priority.get(3, 0),
+            ],
+        })
+
+        snapshot_chart = json.dumps({
+            "labels": [s["source"] for s in snapshots_by_source],
+            "data": [s["count"] for s in snapshots_by_source],
+        })
+
+        scrape_labels = ["pending", "enriching", "scraped", "failed"]
+        scrape_chart = json.dumps({
+            "labels": [s.title() for s in scrape_labels],
+            "data": [by_scrape.get(s, 0) for s in scrape_labels],
+        })
+
+        context = {
+            **self.each_context(request),
+            "title": "Backfill Pipeline",
+            "total": total,
+            "by_status": by_status,
+            "by_scrape": by_scrape,
+            "by_priority": by_priority,
+            "by_method": by_method,
+            "by_review": by_review,
+            "by_marketplace": by_marketplace,
+            "snapshots_by_source": snapshots_by_source,
+            "p1_pending": p1_pending,
+            "p2p3_pending": p2p3_pending,
+            "reviews_pending": reviews_pending,
+            "est_p1_hrs": est_p1_hrs,
+            "est_p2p3_hrs": est_p2p3_hrs,
+            "est_reviews_hrs": est_reviews_hrs,
+            "failed_products": failed_products,
+            "status_chart": status_chart,
+            "priority_chart": priority_chart,
+            "snapshot_chart": snapshot_chart,
+            "scrape_chart": scrape_chart,
+        }
+        return render(request, "admin/backfill_console.html", context)
+
+    def backfill_action(self, request, action):
+        """Handle POST actions from the backfill console."""
+        from django.contrib import messages
+        from django.shortcuts import redirect
+
+        if request.method != "POST":
+            messages.error(request, "Actions require POST.")
+            return redirect("admin:backfill-console")
+
+        result_msg = self._dispatch_backfill_action(action, request.POST)
+        if result_msg.startswith("Error"):
+            messages.error(request, result_msg)
+        else:
+            messages.success(request, result_msg)
+
+        return redirect("admin:backfill-console")
+
+    @staticmethod
+    def _dispatch_backfill_action(action, post_data):
+        """Dispatch a backfill action and return a status message."""
+        try:
+            if action == "discover":
+                from apps.pricing.tasks import run_phase1_discover
+
+                start = int(post_data.get("sitemap_start", 1))
+                end = int(post_data.get("sitemap_end", 5))
+                result = run_phase1_discover.delay(
+                    sitemap_start=start, sitemap_end=end
+                )
+                return f"Discovery started (sitemaps {start}-{end}). Task: {result.id}"
+
+            elif action == "bh-fill":
+                from apps.pricing.tasks import run_phase2_buyhatke
+
+                batch = int(post_data.get("batch_size", 5000))
+                workers = int(post_data.get("workers", 2))
+                task_ids = []
+                for _ in range(workers):
+                    r = run_phase2_buyhatke.delay(batch_size=batch)
+                    task_ids.append(r.id[:8])
+                return f"BH-Fill dispatched ({workers} workers, batch {batch}). Tasks: {', '.join(task_ids)}"
+
+            elif action == "ph-extend":
+                from apps.pricing.tasks import run_phase3_extend
+
+                limit = int(post_data.get("limit", 5000))
+                workers = int(post_data.get("workers", 2))
+                task_ids = []
+                for _ in range(workers):
+                    r = run_phase3_extend.delay(limit=limit)
+                    task_ids.append(r.id[:8])
+                return f"PH-Extend dispatched ({workers} workers, limit {limit}). Tasks: {', '.join(task_ids)}"
+
+            elif action == "create-lightweight":
+                from apps.pricing.backfill.lightweight_creator import (
+                    create_lightweight_records,
+                )
+
+                batch = int(post_data.get("batch_size", 2000))
+                result = create_lightweight_records(batch_size=batch)
+                created = result.get("created", 0)
+                return f"Created {created} lightweight products (batch {batch})."
+
+            elif action == "assign-priorities":
+                from apps.pricing.backfill.prioritizer import (
+                    assign_enrichment_priorities,
+                    assign_review_targets,
+                    populate_derived_fields,
+                )
+
+                d = populate_derived_fields()
+                p = assign_enrichment_priorities()
+                r = assign_review_targets()
+                return (
+                    f"Priorities assigned. Derived: {d}, "
+                    f"P1: {p.get('p1', 0)}, P2: {p.get('p2', 0)}, "
+                    f"Reviews: {r} targets"
+                )
+
+            elif action == "enrich":
+                from whydud.celery import app as celery_app
+
+                batch = int(post_data.get("batch_size", 100))
+                result = celery_app.send_task(
+                    "apps.pricing.backfill.enrichment.enrich_batch",
+                    kwargs={"batch_size": batch},
+                )
+                return f"Enrichment batch queued ({batch} products). Task: {result.id}"
+
+            elif action == "run-overnight":
+                from django.core.management import call_command
+                import threading
+
+                # Run overnight in a background thread so we don't block the response
+                def _run():
+                    call_command("backfill_prices", "run-overnight")
+
+                t = threading.Thread(target=_run, daemon=True)
+                t.start()
+                return "Overnight run started in background thread."
+
+            elif action == "refresh-aggregate":
+                from apps.pricing.tasks import refresh_price_daily_aggregate
+
+                result = refresh_price_daily_aggregate.delay()
+                return f"Aggregate refresh queued. Task: {result.id}"
+
+            elif action == "reset-failed":
+                from apps.pricing.models import BackfillProduct
+
+                which = post_data.get("which", "all")
+                if which == "scrape":
+                    count = BackfillProduct.objects.filter(
+                        scrape_status="failed"
+                    ).update(scrape_status="pending", retry_count=0, error_message="")
+                    return f"Reset {count} failed enrichments to pending."
+                elif which == "review":
+                    count = BackfillProduct.objects.filter(
+                        review_status="failed"
+                    ).update(review_status="pending", error_message="")
+                    return f"Reset {count} failed reviews to pending."
+                else:
+                    count = BackfillProduct.objects.filter(
+                        status="failed"
+                    ).update(status="discovered", retry_count=0, error_message="")
+                    return f"Reset {count} failed BackfillProducts to discovered."
+
+            elif action == "retry-failed":
+                from apps.pricing.models import BackfillProduct
+
+                count = BackfillProduct.objects.filter(
+                    scrape_status="failed", retry_count__lt=3
+                ).update(scrape_status="pending", error_message="")
+                return f"Retried {count} failed enrichments (retry_count < 3)."
+
+            else:
+                return f"Error: Unknown action '{action}'."
+
+        except Exception as e:
+            return f"Error: {e}"
+
+    @staticmethod
+    def _get_snapshots_by_source():
+        """Get price snapshot counts grouped by source."""
+        from django.db import connection
+
+        try:
+            with connection.cursor() as cur:
+                cur.execute(
+                    "SELECT source, COUNT(*) FROM price_snapshots "
+                    "GROUP BY source ORDER BY count DESC"
+                )
+                return [{"source": r[0], "count": r[1]} for r in cur.fetchall()]
+        except Exception:
+            return []
 
     def enrichment_view(self, request):
         from django.shortcuts import render
