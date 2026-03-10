@@ -4286,3 +4286,61 @@ Added four new subcommands to `backfill_prices` management command for pipeline 
 | File | Purpose |
 |---|---|
 | `backend/templates/admin/scraping/scraperjob/change_list.html` | Changelist override with stats cards, last-scrape table, ad-hoc scrape form |
+
+---
+
+### AD-7: Enhanced Product Admin + Data Quality Stats (2026-03-11)
+
+**Status:** ✅ Complete
+
+**What was built:**
+Enhanced `ProductAdmin` with data quality stats header, 5 custom filters, 3 bulk actions, inline listings, and improved display columns. Also enhanced `ProductListingAdmin` with formatted display columns.
+
+**Custom list filters (5 total):**
+| Filter | Logic |
+|---|---|
+| Has Images | `images != [] AND images IS NOT NULL` |
+| Has DudScore | `dud_score IS NOT NULL` |
+| Is Lightweight | `is_lightweight = True/False` |
+| Listing Count | Annotated count: 0, 1, 2+ |
+| Price Range | `current_best_price` brackets: <₹5K, ₹5K-₹20K, ₹20K-₹50K, >₹50K |
+
+**Display columns:**
+| Column | Format |
+|---|---|
+| title_short | Truncated to 60 chars |
+| price_display | Indian numbering (₹1,23,456) |
+| listing_count | Annotated Count("listings") |
+| dudscore_badge | Color-coded: green ≥80, amber ≥50, red <50 |
+| has_images_icon | Boolean icon ✅/❌ |
+| is_lightweight_icon | Boolean icon ✅/❌ |
+
+**Bulk actions (3 total):**
+| Action | Behavior |
+|---|---|
+| Merge Selected → first product | Moves all listings from selected to oldest, marks sources as discontinued |
+| Mark as Inactive | Sets status = discontinued |
+| Trigger DudScore Recalculation | Queues `compute_dudscore.delay()` per product |
+
+**Stats header (changelist_view override):**
+- Total products / Active / Lightweight / Enriched
+- Data quality: Missing images, Missing brand, Missing category, Unscored, No listings
+- Counts turn green when 0
+
+**ProductListingInline:**
+- TabularInline on ProductAdmin detail page
+- Shows marketplace, external_id, price, MRP, discount, stock, seller, confidence, last scraped
+
+**ProductListingAdmin enhanced:**
+- product_title_short (50 chars), price_display (₹ formatted), mrp_display, in_stock boolean icon
+- list_select_related for performance
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/apps/products/admin.py` | Complete rewrite — 5 custom filters, enhanced ProductAdmin + ProductListingAdmin, inline, stats, actions |
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/templates/admin/products/product/change_list.html` | Changelist override with product count cards + data quality grid |
