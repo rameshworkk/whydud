@@ -77,7 +77,7 @@ class InboxEmailAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.received_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.received_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -123,9 +123,10 @@ class ParsedOrderAdmin(admin.ModelAdmin):
     @admin.display(description="Amount", ordering="total_amount")
     def amount_display(self, obj):
         if obj.total_amount:
+            p = int(obj.total_amount) // 100
             return format_html(
                 '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
-                f"\u20b9{int(obj.total_amount):,}",
+                f"\u20b9{p:,}",
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
@@ -192,9 +193,10 @@ class RefundTrackingAdmin(admin.ModelAdmin):
     @admin.display(description="Amount", ordering="refund_amount")
     def amount_display(self, obj):
         if obj.refund_amount:
+            p = int(obj.refund_amount) // 100
             return format_html(
                 '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
-                f"\u20b9{int(obj.refund_amount):,}",
+                f"\u20b9{p:,}",
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
@@ -221,7 +223,7 @@ class RefundTrackingAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.initiated_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.initiated_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -320,9 +322,10 @@ class DetectedSubscriptionAdmin(admin.ModelAdmin):
     @admin.display(description="Amount", ordering="amount")
     def amount_display(self, obj):
         if obj.amount:
+            p = int(obj.amount) // 100
             return format_html(
                 '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
-                f"\u20b9{int(obj.amount):,}",
+                f"\u20b9{p:,}",
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 

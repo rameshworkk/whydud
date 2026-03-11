@@ -85,9 +85,10 @@ class ClickEventAdmin(admin.ModelAdmin):
     @admin.display(description="Price", ordering="price_at_click")
     def price_display(self, obj):
         if obj.price_at_click is not None:
+            p = int(obj.price_at_click) // 100
             return format_html(
                 '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
-                f"\u20b9{int(obj.price_at_click):,}",
+                f"\u20b9{p:,}",
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
@@ -129,7 +130,7 @@ class ClickEventAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.clicked_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.clicked_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -233,17 +234,19 @@ class PriceAlertAdmin(admin.ModelAdmin):
 
     @admin.display(description="Target", ordering="target_price")
     def target_price_display(self, obj):
+        p = int(obj.target_price) // 100
         return format_html(
             '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
-            f"\u20b9{int(obj.target_price):,}",
+            f"\u20b9{p:,}",
         )
 
     @admin.display(description="Current", ordering="current_price")
     def current_price_display(self, obj):
         if obj.current_price is not None:
+            p = int(obj.current_price) // 100
             return format_html(
                 '<span class="text-[13px] text-slate-600 dark:text-slate-400">{}</span>',
-                f"\u20b9{int(obj.current_price):,}",
+                f"\u20b9{p:,}",
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
@@ -306,7 +309,7 @@ class PriceAlertAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.triggered_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.triggered_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -382,11 +385,11 @@ class MarketplaceOfferAdmin(admin.ModelAdmin):
             if obj.valid_until < timezone.now():
                 return format_html(
                     '<span class="text-[12px] text-red-500 font-medium">Expired {}</span>',
-                    obj.valid_until.strftime("%b %d"),
+                    timezone.localtime(obj.valid_until).strftime("%b %d"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{}</span>',
-                obj.valid_until.strftime("%b %d, %Y"),
+                timezone.localtime(obj.valid_until).strftime("%b %d, %Y"),
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
@@ -544,7 +547,7 @@ class BackfillProductAdmin(AuditLogMixin, admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.created_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.created_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',

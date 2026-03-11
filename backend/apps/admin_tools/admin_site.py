@@ -1,5 +1,6 @@
 """Custom Django admin site for Whydud platform management."""
 from django.contrib.admin import AdminSite
+from django.utils.timezone import localtime
 
 
 class WhydudAdminSite(AdminSite):
@@ -684,7 +685,7 @@ class WhydudAdminSite(AdminSite):
         )
         # Serialize updated_at for template
         for fp in failed_products:
-            fp["updated_at"] = fp["updated_at"].strftime("%Y-%m-%d %H:%M")
+            fp["updated_at"] = localtime(fp["updated_at"]).strftime("%Y-%m-%d %H:%M")
 
         # --- Chart data as JSON ---
         status_labels = [
@@ -773,18 +774,72 @@ class WhydudAdminSite(AdminSite):
         return redirect("admin:backfill-console")
 
     @staticmethod
+    def _resolve_target_nodes(post_data, celery_app):
+        """Resolve multi-select target_nodes checkboxes to {prefix: full_worker_name} map.
+
+        Returns (resolved_map, error_msg). If no nodes selected, returns ({}, None).
+        """
+        selected = post_data.getlist("target_nodes")
+        if not selected:
+            return {}, None
+
+        ping_result = celery_app.control.ping(timeout=3)
+        online = {}
+        for resp in ping_result:
+            for wn in resp:
+                online[wn.split("@")[0]] = wn
+
+        resolved = {}
+        missing = []
+        for prefix in selected:
+            if prefix in online:
+                resolved[prefix] = online[prefix]
+            else:
+                missing.append(prefix)
+
+        if missing:
+            avail = ", ".join(online.keys()) or "none"
+            return None, f"Error: Workers not online: {', '.join(missing)}. Available: {avail}"
+
+        return resolved, None
+
+    @staticmethod
+    def _dispatch_to_nodes(task_func, kwargs, action_prefix, nodes_map, celery_app):
+        """Dispatch task to specific nodes via temporary queues. Returns list of (node, task_id)."""
+        dispatched = []
+        for prefix, full_name in nodes_map.items():
+            queue_name = f"{action_prefix}-{prefix}"
+            celery_app.control.add_consumer(queue_name, destination=[full_name])
+            r = task_func.apply_async(kwargs=kwargs, queue=queue_name)
+            dispatched.append((prefix, r.id[:8]))
+        return dispatched
+
+    @staticmethod
     def _dispatch_backfill_action(action, post_data):
         """Dispatch a backfill action and return a status message."""
         try:
             if action == "discover":
                 from apps.pricing.tasks import run_phase1_discover
+                from whydud.celery import app as celery_app
 
                 start = int(post_data.get("sitemap_start", 1))
                 end = int(post_data.get("sitemap_end", 5))
-                result = run_phase1_discover.delay(
-                    sitemap_start=start, sitemap_end=end
-                )
-                return f"Discovery started (sitemaps {start}-{end}). Task: {result.id}"
+
+                nodes_map, err = WhydudAdminSite._resolve_target_nodes(post_data, celery_app)
+                if err:
+                    return err
+
+                if nodes_map:
+                    dispatched = WhydudAdminSite._dispatch_to_nodes(
+                        run_phase1_discover,
+                        {"sitemap_start": start, "sitemap_end": end},
+                        "discover", nodes_map, celery_app,
+                    )
+                    parts = [f"{n}:{tid}" for n, tid in dispatched]
+                    return f"Discovery → {', '.join(n for n, _ in dispatched)} (sitemaps {start}-{end}). Tasks: {', '.join(parts)}"
+                else:
+                    result = run_phase1_discover.delay(sitemap_start=start, sitemap_end=end)
+                    return f"Discovery started (sitemaps {start}-{end}). Task: {result.id}"
 
             elif action == "bh-fill":
                 from apps.pricing.tasks import run_phase2_buyhatke
@@ -793,35 +848,34 @@ class WhydudAdminSite(AdminSite):
                 batch = int(post_data.get("batch_size", 5000))
                 workers = int(post_data.get("workers", 2))
                 repeat = post_data.get("repeat") == "on"
-                target_node = post_data.get("target_node", "").strip()
+                delay_val = post_data.get("delay", "").strip()
+                delay = float(delay_val) if delay_val else None
+
+                nodes_map, err = WhydudAdminSite._resolve_target_nodes(post_data, celery_app)
+                if err:
+                    return err
+
+                task_kwargs = {"batch_size": batch, "repeat": repeat}
+                if delay is not None:
+                    task_kwargs["delay"] = delay
+                rpt = " repeat=ON" if repeat else ""
+                dly = f" delay={delay}s" if delay else ""
 
                 task_ids = []
-                if target_node:
-                    ping_result = celery_app.control.ping(timeout=3)
-                    online = {}
-                    for resp in ping_result:
-                        for wn in resp:
-                            online[wn.split("@")[0]] = wn
-                    full_name = online.get(target_node)
-                    if not full_name:
-                        avail = ", ".join(online.keys()) or "none"
-                        return f"Error: Worker '{target_node}' not online. Available: {avail}"
-                    queue_name = f"bh-fill-{target_node}"
-                    celery_app.control.add_consumer(queue_name, destination=[full_name])
-                    for _ in range(workers):
-                        r = run_phase2_buyhatke.apply_async(
-                            kwargs={"batch_size": batch, "repeat": repeat},
-                            queue=queue_name,
-                        )
-                        task_ids.append(r.id[:8])
-                    rpt = " repeat=ON" if repeat else ""
-                    return f"BH-Fill → {target_node} ({workers} tasks, batch {batch}{rpt}). Tasks: {', '.join(task_ids)}"
+                if nodes_map:
+                    for prefix, full_name in nodes_map.items():
+                        queue_name = f"bh-fill-{prefix}"
+                        celery_app.control.add_consumer(queue_name, destination=[full_name])
+                        for _ in range(workers):
+                            r = run_phase2_buyhatke.apply_async(kwargs=task_kwargs, queue=queue_name)
+                            task_ids.append(f"{prefix}:{r.id[:8]}")
+                    nodes_str = ",".join(nodes_map.keys())
+                    return f"BH-Fill → {nodes_str} ({workers}x each, batch {batch}{rpt}{dly}). Tasks: {', '.join(task_ids)}"
                 else:
                     for _ in range(workers):
-                        r = run_phase2_buyhatke.delay(batch_size=batch, repeat=repeat)
+                        r = run_phase2_buyhatke.delay(**task_kwargs)
                         task_ids.append(r.id[:8])
-                    rpt = " repeat=ON" if repeat else ""
-                    return f"BH-Fill dispatched ({workers} workers, batch {batch}{rpt}). Tasks: {', '.join(task_ids)}"
+                    return f"BH-Fill dispatched ({workers} workers, batch {batch}{rpt}{dly}). Tasks: {', '.join(task_ids)}"
 
             elif action == "ph-extend":
                 from apps.pricing.tasks import run_phase3_extend
@@ -830,35 +884,34 @@ class WhydudAdminSite(AdminSite):
                 limit = int(post_data.get("limit", 5000))
                 workers = int(post_data.get("workers", 2))
                 repeat = post_data.get("repeat") == "on"
-                target_node = post_data.get("target_node", "").strip()
+                delay_val = post_data.get("delay", "").strip()
+                delay = float(delay_val) if delay_val else None
+
+                nodes_map, err = WhydudAdminSite._resolve_target_nodes(post_data, celery_app)
+                if err:
+                    return err
+
+                task_kwargs = {"limit": limit, "repeat": repeat}
+                if delay is not None:
+                    task_kwargs["delay"] = delay
+                rpt = " repeat=ON" if repeat else ""
+                dly = f" delay={delay}s" if delay else ""
 
                 task_ids = []
-                if target_node:
-                    ping_result = celery_app.control.ping(timeout=3)
-                    online = {}
-                    for resp in ping_result:
-                        for wn in resp:
-                            online[wn.split("@")[0]] = wn
-                    full_name = online.get(target_node)
-                    if not full_name:
-                        avail = ", ".join(online.keys()) or "none"
-                        return f"Error: Worker '{target_node}' not online. Available: {avail}"
-                    queue_name = f"ph-extend-{target_node}"
-                    celery_app.control.add_consumer(queue_name, destination=[full_name])
-                    for _ in range(workers):
-                        r = run_phase3_extend.apply_async(
-                            kwargs={"limit": limit, "repeat": repeat},
-                            queue=queue_name,
-                        )
-                        task_ids.append(r.id[:8])
-                    rpt = " repeat=ON" if repeat else ""
-                    return f"PH-Extend → {target_node} ({workers} tasks, limit {limit}{rpt}). Tasks: {', '.join(task_ids)}"
+                if nodes_map:
+                    for prefix, full_name in nodes_map.items():
+                        queue_name = f"ph-extend-{prefix}"
+                        celery_app.control.add_consumer(queue_name, destination=[full_name])
+                        for _ in range(workers):
+                            r = run_phase3_extend.apply_async(kwargs=task_kwargs, queue=queue_name)
+                            task_ids.append(f"{prefix}:{r.id[:8]}")
+                    nodes_str = ",".join(nodes_map.keys())
+                    return f"PH-Extend → {nodes_str} ({workers}x each, limit {limit}{rpt}{dly}). Tasks: {', '.join(task_ids)}"
                 else:
                     for _ in range(workers):
-                        r = run_phase3_extend.delay(limit=limit, repeat=repeat)
+                        r = run_phase3_extend.delay(**task_kwargs)
                         task_ids.append(r.id[:8])
-                    rpt = " repeat=ON" if repeat else ""
-                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}). Tasks: {', '.join(task_ids)}"
+                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}{dly}). Tasks: {', '.join(task_ids)}"
 
             elif action == "create-lightweight":
                 from apps.pricing.backfill.lightweight_creator import (
@@ -890,25 +943,24 @@ class WhydudAdminSite(AdminSite):
                 from whydud.celery import app as celery_app
 
                 batch = int(post_data.get("batch_size", 100))
-                target_node = post_data.get("target_node", "").strip()
 
-                if target_node:
-                    ping_result = celery_app.control.ping(timeout=3)
-                    online = {}
-                    for resp in ping_result:
-                        for wn in resp:
-                            online[wn.split("@")[0]] = wn
-                    full_name = online.get(target_node)
-                    if not full_name:
-                        return f"Error: Worker '{target_node}' not online."
-                    queue_name = f"enrich-{target_node}"
-                    celery_app.control.add_consumer(queue_name, destination=[full_name])
-                    result = celery_app.send_task(
-                        "apps.pricing.backfill.enrichment.enrich_batch",
-                        kwargs={"batch_size": batch},
-                        queue=queue_name,
-                    )
-                    return f"Enrichment → {target_node} ({batch} products). Task: {result.id}"
+                nodes_map, err = WhydudAdminSite._resolve_target_nodes(post_data, celery_app)
+                if err:
+                    return err
+
+                if nodes_map:
+                    task_ids = []
+                    for prefix, full_name in nodes_map.items():
+                        queue_name = f"enrich-{prefix}"
+                        celery_app.control.add_consumer(queue_name, destination=[full_name])
+                        r = celery_app.send_task(
+                            "apps.pricing.backfill.enrichment.enrich_batch",
+                            kwargs={"batch_size": batch},
+                            queue=queue_name,
+                        )
+                        task_ids.append(f"{prefix}:{r.id[:8]}")
+                    nodes_str = ",".join(nodes_map.keys())
+                    return f"Enrichment → {nodes_str} ({batch} products each). Tasks: {', '.join(task_ids)}"
                 else:
                     result = celery_app.send_task(
                         "apps.pricing.backfill.enrichment.enrich_batch",
@@ -1109,10 +1161,10 @@ class WhydudAdminSite(AdminSite):
         )
         for sp in stale_products:
             if sp["enrichment_queued_at"]:
-                sp["enrichment_queued_at"] = sp["enrichment_queued_at"].strftime(
+                sp["enrichment_queued_at"] = localtime(sp["enrichment_queued_at"]).strftime(
                     "%Y-%m-%d %H:%M"
                 )
-            sp["updated_at"] = sp["updated_at"].strftime("%Y-%m-%d %H:%M")
+            sp["updated_at"] = localtime(sp["updated_at"]).strftime("%Y-%m-%d %H:%M")
 
         # --- Recent failures (last 50) ---
         recent_failures = list(
@@ -1129,7 +1181,7 @@ class WhydudAdminSite(AdminSite):
             )[:50]
         )
         for rf in recent_failures:
-            rf["updated_at"] = rf["updated_at"].strftime("%Y-%m-%d %H:%M")
+            rf["updated_at"] = localtime(rf["updated_at"]).strftime("%Y-%m-%d %H:%M")
 
         # --- Chart data ---
         queue_chart = json.dumps(
@@ -2153,7 +2205,7 @@ class WhydudAdminSite(AdminSite):
                     r["task_name"].split(".")[-1] if r["task_name"] else "?"
                 )
                 r["date_done_str"] = (
-                    r["date_done"].strftime("%Y-%m-%d %H:%M:%S")
+                    localtime(r["date_done"]).strftime("%Y-%m-%d %H:%M:%S")
                     if r["date_done"]
                     else "—"
                 )

@@ -220,7 +220,7 @@ class UserAdmin(AuditLogMixin, BaseUserAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.last_login_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.last_login_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -442,7 +442,7 @@ class WhydudEmailAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.last_email_received_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.last_email_received_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -510,7 +510,7 @@ class OAuthConnectionAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.connected_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.connected_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -525,7 +525,7 @@ class OAuthConnectionAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.last_sync_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.last_sync_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -646,7 +646,7 @@ class NotificationAdmin(admin.ModelAdmin):
         if delta.days > 30:
             return format_html(
                 '<span class="text-[12px] text-slate-400">{}</span>',
-                obj.created_at.strftime("%b %d, %Y"),
+                timezone.localtime(obj.created_at).strftime("%b %d, %Y"),
             )
         return format_html(
             '<span class="text-[12px] text-slate-500">{} ago</span>',

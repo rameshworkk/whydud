@@ -189,7 +189,7 @@ class ReviewAdmin(AuditLogMixin, admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.created_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.created_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',

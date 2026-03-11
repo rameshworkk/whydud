@@ -94,13 +94,13 @@ class PriceRangeFilter(admin.SimpleListFilter):
 
     def queryset(self, request, queryset):
         if self.value() == "lt5k":
-            return queryset.filter(current_best_price__lt=5000)
+            return queryset.filter(current_best_price__lt=500000)
         if self.value() == "5k-20k":
-            return queryset.filter(current_best_price__gte=5000, current_best_price__lt=20000)
+            return queryset.filter(current_best_price__gte=500000, current_best_price__lt=2000000)
         if self.value() == "20k-50k":
-            return queryset.filter(current_best_price__gte=20000, current_best_price__lt=50000)
+            return queryset.filter(current_best_price__gte=2000000, current_best_price__lt=5000000)
         if self.value() == "gt50k":
-            return queryset.filter(current_best_price__gte=50000)
+            return queryset.filter(current_best_price__gte=5000000)
         return queryset
 
 
@@ -208,7 +208,7 @@ class ProductAdmin(AuditLogMixin, admin.ModelAdmin):
     def price_formatted(self, obj):
         if obj.current_best_price is None:
             return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
-        p = int(obj.current_best_price)
+        p = int(obj.current_best_price) // 100  # paisa → rupees
         return format_html(
             '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
             f"\u20b9{p:,}",
@@ -279,7 +279,7 @@ class ProductAdmin(AuditLogMixin, admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.updated_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.updated_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -562,7 +562,7 @@ class MarketplaceCategoryMappingAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.updated_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.updated_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -654,23 +654,26 @@ class ProductListingAdmin(admin.ModelAdmin):
     @admin.display(description="Price", ordering="current_price")
     def price_display(self, obj):
         if obj.current_price is not None:
+            p = int(obj.current_price) // 100
             return format_html(
                 '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
-                f"\u20b9{int(obj.current_price):,}",
+                f"\u20b9{p:,}",
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
     @admin.display(description="MRP", ordering="mrp")
     def mrp_display(self, obj):
         if obj.mrp and obj.current_price and obj.mrp > obj.current_price:
+            m = int(obj.mrp) // 100
             return format_html(
                 '<span class="text-[12px] text-slate-400 line-through">{}</span>',
-                f"\u20b9{int(obj.mrp):,}",
+                f"\u20b9{m:,}",
             )
         if obj.mrp:
+            m = int(obj.mrp) // 100
             return format_html(
                 '<span class="text-[12px] text-slate-500">{}</span>',
-                f"\u20b9{int(obj.mrp):,}",
+                f"\u20b9{m:,}",
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
@@ -707,7 +710,7 @@ class ProductListingAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.last_scraped_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.last_scraped_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',

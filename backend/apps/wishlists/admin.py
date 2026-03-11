@@ -1,5 +1,6 @@
 """Enhanced wishlists admin — Apex-style badges."""
 from django.contrib import admin
+from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import Wishlist, WishlistItem
@@ -65,6 +66,6 @@ class WishlistItemAdmin(admin.ModelAdmin):
         if hasattr(obj, "created_at") and obj.created_at:
             return format_html(
                 '<span class="text-[12px] text-slate-500">{}</span>',
-                obj.created_at.strftime("%b %d, %Y"),
+                timezone.localtime(obj.created_at).strftime("%b %d, %Y"),
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')

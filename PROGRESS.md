@@ -4934,3 +4934,54 @@ Extended the Apex-style badge pattern to every remaining "raw Django" admin clas
 | `backend/apps/accounts/admin.py` | WhydudEmailAdmin, OAuthConnectionAdmin, PaymentMethodAdmin enhanced |
 | `backend/apps/products/admin.py` | MarketplaceAdmin, CategoryAdmin, BrandAdmin, BankCardAdmin, MCM enhanced |
 | `backend/apps/email_intel/admin.py` | +RefundTrackingAdmin, +ReturnWindowAdmin, +DetectedSubscriptionAdmin |
+
+---
+
+### Enhanced Backfill Console — Repeat, Node Targeting, Active Tasks, Task Logs (2026-03-11)
+
+Brought CLI-only features into the admin UI at `/admin/backfill/`:
+
+**New action card controls:**
+- **Multi-select node targeting** on Discovery, BH-Fill, PH-Extend, and Enrichment cards — checkbox per online Celery worker, select multiple or none for "any"
+- **Repeat toggle** on BH-Fill and PH-Extend — task loops until queue is empty (same as CLI `--repeat`)
+- **Delay input** on BH-Fill (placeholder 0.5s) and PH-Extend (placeholder 1.0s) — passed to task kwargs
+
+**Active Tasks panel:**
+- Live table of currently running Celery tasks (worker, task name, task ID, runtime, kwargs)
+- **Revoke button** per task — sends SIGTERM with confirmation dialog, uses existing `backfill/action/revoke/` route
+
+**Task Log Viewer:**
+- Last 20 backfill task results from `django-celery-results` TaskResult model (already configured)
+- Status badges: Success (green), Failed (red), Running (amber/pulse), Revoked (grey)
+- Shows worker, task ID, completion timestamp, result/traceback preview
+
+**Backend helpers added:**
+- `_get_online_workers()` — lightweight Celery ping for node dropdown population
+- `_get_recent_backfill_tasks()` — queries TaskResult filtered by backfill task names
+- `_resolve_target_nodes()` — resolves multi-select checkboxes to validated worker map
+- `_dispatch_to_nodes()` — creates temp per-node queues via `add_consumer()` and dispatches
+- `_get_cluster_data()` enhanced with `full_id` and `runtime_display` per active task
+
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | +4 helper methods, backfill_view context expanded, dispatch supports repeat/delay/multi-node/revoke |
+| `backend/templates/admin/backfill_console.html` | Action cards with checkboxes+delay, Active Tasks panel with revoke, Task Log Viewer |
+
+### FIX-4: Price Display & Timezone (2026-03-11)
+
+**Problem:** All prices in the admin UI displayed in paisa (raw DB values) instead of rupees. All timestamps displayed in UTC instead of IST.
+
+**Price fix — paisa → rupees (÷100):**
+All admin display methods that format prices/amounts now divide by 100 before display.
+
+| File | Methods fixed |
+|---|---|
+| `backend/apps/products/admin.py` | `ProductAdmin.price_formatted`, `ProductListingAdmin.price_display`, `mrp_display`, `PriceRangeFilter` thresholds (×100) |
+| `backend/apps/pricing/admin.py` | `ClickEventAdmin.price_display`, `PriceAlertAdmin.target_price_display`, `current_price_display` |
+| `backend/apps/email_intel/admin.py` | `ParsedOrderAdmin.amount_display`, `RefundTrackingAdmin.amount_display`, `DetectedSubscriptionAdmin.amount_display` |
+| `backend/apps/deals/admin.py` | `DealAdmin.price_display` |
+
+**Timezone fix — UTC → IST:**
+- `backend/whydud/settings/base.py` — `TIME_ZONE = "Asia/Kolkata"` (with `USE_TZ=True`, storage stays UTC, display converts to IST)
+- All custom `strftime` calls across 12 admin files wrapped with `timezone.localtime()` for correct IST display
+- Backfill console + enrichment console timestamp serialization wrapped with `localtime()`

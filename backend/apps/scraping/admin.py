@@ -156,7 +156,7 @@ class ScraperJobAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.started_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.started_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -315,7 +315,7 @@ class ScraperJobAdmin(admin.ModelAdmin):
                     {
                         "marketplace": slug,
                         "spider": last_job.spider_name,
-                        "finished": last_job.finished_at.strftime("%Y-%m-%d %H:%M"),
+                        "finished": timezone.localtime(last_job.finished_at).strftime("%Y-%m-%d %H:%M"),
                         "ago": ago_str,
                         "items": last_job.items_scraped,
                     }

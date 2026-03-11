@@ -69,7 +69,7 @@ class RewardPointsLedgerAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.created_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.created_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -86,7 +86,7 @@ class RewardPointsLedgerAdmin(admin.ModelAdmin):
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{}</span>',
-                obj.expires_at.strftime("%b %d, %Y"),
+                timezone.localtime(obj.expires_at).strftime("%b %d, %Y"),
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
@@ -140,7 +140,7 @@ class RewardBalanceAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.updated_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.updated_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
@@ -238,7 +238,7 @@ class GiftCardRedemptionAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.created_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.created_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',

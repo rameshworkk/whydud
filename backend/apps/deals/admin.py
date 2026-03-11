@@ -46,7 +46,7 @@ class DealAdmin(admin.ModelAdmin):
         if obj.current_price:
             return format_html(
                 '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
-                f"\u20b9{int(obj.current_price):,}",
+                f"\u20b9{int(obj.current_price) // 100:,}",
             )
         return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
@@ -104,7 +104,7 @@ class DealAdmin(admin.ModelAdmin):
             if delta.days > 30:
                 return format_html(
                     '<span class="text-[12px] text-slate-400">{}</span>',
-                    obj.detected_at.strftime("%b %d, %Y"),
+                    timezone.localtime(obj.detected_at).strftime("%b %d, %Y"),
                 )
             return format_html(
                 '<span class="text-[12px] text-slate-500">{} ago</span>',
