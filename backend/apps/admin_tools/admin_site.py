@@ -2040,6 +2040,31 @@ class WhydudAdminSite(AdminSite):
         _, _, active_tasks = self._get_cluster_data()
         recent_task_results = self._get_recent_backfill_tasks(limit=20)
 
+        # Proxy configuration for display
+        from apps.pricing.backfill.config import BackfillConfig
+        from urllib.parse import urlparse
+
+        raw_proxy_url = BackfillConfig.proxy_url()
+        masked_proxy_url = ""
+        if raw_proxy_url:
+            try:
+                parsed = urlparse(raw_proxy_url)
+                if parsed.username:
+                    masked_proxy_url = f"{parsed.scheme}://{parsed.username}:****@{parsed.hostname}"
+                    if parsed.port:
+                        masked_proxy_url += f":{parsed.port}"
+                else:
+                    masked_proxy_url = raw_proxy_url
+            except Exception:
+                masked_proxy_url = "(configured)"
+
+        proxy_config = {
+            "enabled": bool(raw_proxy_url),
+            "url": masked_proxy_url,
+            "retry_interval_mins": round(BackfillConfig.proxy_retry_interval() / 60, 1),
+            "burn_threshold": BackfillConfig.proxy_burn_threshold(),
+        }
+
         return JsonResponse({
             "total": total,
             "by_status": by_status,
@@ -2056,6 +2081,7 @@ class WhydudAdminSite(AdminSite):
             "est_p2p3_hrs": est_p2p3_hrs,
             "est_reviews_hrs": est_reviews_hrs,
             "failed_products": failed_products,
+            "proxy_config": proxy_config,
             "status_chart": {
                 "labels": [s.replace("_", " ").title() for s in status_labels],
                 "data": [by_status.get(s, 0) for s in status_labels],

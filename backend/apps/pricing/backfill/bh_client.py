@@ -156,6 +156,13 @@ class BHClient:
             return self._proxy_client
         return self._client
 
+    @property
+    def _route_label(self) -> str:
+        """Human-readable label for current routing mode."""
+        if not self._proxy_strategy.enabled:
+            return "direct"
+        return "direct (probe)" if self._proxy_strategy._probing_direct else self._proxy_strategy.mode
+
     def _next_ua(self) -> str:
         """Round-robin User-Agent rotation."""
         ua = _USER_AGENTS[self._ua_idx % len(_USER_AGENTS)]
@@ -234,11 +241,16 @@ class BHClient:
                     resp.raise_for_status()
 
                     # Success — decay delay back toward base
+                    route = self._route_label
                     self._proxy_strategy.on_request_success()
                     self._consecutive_403s = 0
                     if self._delay > self._base_delay:
                         self._delay = max(self._base_delay, self._delay * 0.9)
 
+                    logger.debug(
+                        "BH %s via %s (req #%d)",
+                        pid, route, self._request_count,
+                    )
                     return self._parse_price_history(resp.text)
 
                 except httpx.HTTPStatusError as e:

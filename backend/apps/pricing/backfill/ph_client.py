@@ -184,6 +184,13 @@ class PHClient:
             return self._proxy_client
         return self._client
 
+    @property
+    def _route_label(self) -> str:
+        """Human-readable label for current routing mode."""
+        if not self._proxy_strategy.enabled:
+            return "direct"
+        return "direct (probe)" if self._proxy_strategy._probing_direct else self._proxy_strategy.mode
+
     def _next_ua(self) -> str:
         ua = _USER_AGENTS[self._ua_idx % len(_USER_AGENTS)]
         self._ua_idx += 1
@@ -414,8 +421,13 @@ class PHClient:
                     return {"external_id": "", "marketplace_slug": "", "token": ""}
 
             # Success
+            route = self._route_label
             self._proxy_strategy.on_request_success()
             self._on_success()
+            logger.debug(
+                "PH HTML %s via %s (req #%d)",
+                ph_code, route, self._request_count,
+            )
             html = resp.text
             result = self._extract_jsonld_metadata(html)
             result["token"] = self._extract_token(html)
@@ -622,8 +634,13 @@ class PHClient:
                     raise APIError(f"PH API error {status}") from e
 
             # Success
+            route = self._route_label
             self._proxy_strategy.on_request_success()
             self._on_success()
+            logger.debug(
+                "PH API %s via %s (req #%d)",
+                ph_code, route, self._request_count,
+            )
             body = resp.json()
 
             if body.get("status") is False:
