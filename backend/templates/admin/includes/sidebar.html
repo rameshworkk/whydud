@@ -14,7 +14,7 @@
   </div>
 
   <!-- Navigation -->
-  <nav class="flex-1 overflow-y-auto px-2 py-2 space-y-6 sidebar-scroll">
+  <nav class="flex-1 overflow-y-auto px-2 py-2 space-y-4 sidebar-scroll">
 
     <!-- OVERVIEW -->
     <div>
@@ -96,58 +96,265 @@
       </a>
     </div>
 
-    <!-- DATA -->
-    <div>
-      <div class="px-4 mb-2 text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold sidebar-text">
-        Data
-      </div>
-      <a href="{% url 'admin:app_list' app_label='products' %}"
-         class="flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg text-[13.5px]
-                text-white/55 hover:text-white/90 hover:bg-white/5 transition-colors
-                {% if active_page == 'products' %}!text-white !bg-white/10 border-l-[3px] border-emerald-500{% endif %}">
-        <i data-lucide="package" class="w-[18px] h-[18px] flex-shrink-0"></i>
-        <span class="sidebar-text">Products</span>
-      </a>
-      <a href="{% url 'admin:app_list' app_label='reviews' %}"
-         class="flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg text-[13.5px]
-                text-white/55 hover:text-white/90 hover:bg-white/5 transition-colors
-                {% if active_page == 'reviews' %}!text-white !bg-white/10 border-l-[3px] border-emerald-500{% endif %}">
-        <i data-lucide="message-square" class="w-[18px] h-[18px] flex-shrink-0"></i>
-        <span class="sidebar-text">Reviews</span>
-        {% if sidebar_flagged_reviews and sidebar_flagged_reviews > 0 %}
-        <span class="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 sidebar-text">
-          {{ sidebar_flagged_reviews }}
+    <!-- Divider -->
+    <div class="border-t border-white/5 mx-3"></div>
+
+    <!-- PRODUCTS (expandable) -->
+    <div class="nav-section" data-section="products">
+      <button onclick="toggleSection(this)"
+              class="flex items-center justify-between w-full px-4 py-2 text-[11px] uppercase tracking-widest text-white/35 font-medium hover:text-white/50 cursor-pointer bg-transparent border-none sidebar-text">
+        <span class="flex items-center gap-2">
+          <i data-lucide="package" class="w-3.5 h-3.5"></i>
+          Products
         </span>
-        {% endif %}
-      </a>
-      <a href="{% url 'admin:app_list' app_label='accounts' %}"
-         class="flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg text-[13.5px]
-                text-white/55 hover:text-white/90 hover:bg-white/5 transition-colors
-                {% if active_page == 'users' %}!text-white !bg-white/10 border-l-[3px] border-emerald-500{% endif %}">
-        <i data-lucide="users" class="w-[18px] h-[18px] flex-shrink-0"></i>
-        <span class="sidebar-text">Users</span>
-      </a>
-      <a href="{% url 'admin:app_list' app_label='pricing' %}"
-         class="flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg text-[13.5px]
-                text-white/55 hover:text-white/90 hover:bg-white/5 transition-colors
-                {% if active_page == 'pricing' %}!text-white !bg-white/10 border-l-[3px] border-emerald-500{% endif %}">
-        <i data-lucide="tag" class="w-[18px] h-[18px] flex-shrink-0"></i>
-        <span class="sidebar-text">Pricing</span>
-      </a>
-      <a href="{% url 'admin:app_list' app_label='scraping' %}"
-         class="flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg text-[13.5px]
-                text-white/55 hover:text-white/90 hover:bg-white/5 transition-colors
-                {% if active_page == 'scraping' %}!text-white !bg-white/10 border-l-[3px] border-emerald-500{% endif %}">
-        <i data-lucide="bug" class="w-[18px] h-[18px] flex-shrink-0"></i>
-        <span class="sidebar-text">Scraping</span>
-      </a>
+        <i data-lucide="chevron-right" class="w-3 h-3 chevron transition-transform duration-200"></i>
+      </button>
+      <div class="section-items ml-2 hidden">
+        <a href="/admin/products/product/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/products/product/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">All Products</span>
+        </a>
+        <a href="/admin/products/productlisting/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/products/productlisting/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Listings</span>
+        </a>
+        <a href="/admin/products/marketplace/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/products/marketplace/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Marketplaces</span>
+        </a>
+        <a href="/admin/products/category/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/products/category/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Categories</span>
+        </a>
+        <a href="/admin/products/brand/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/products/brand/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Brands</span>
+        </a>
+        <a href="/admin/products/seller/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/products/seller/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Sellers</span>
+        </a>
+      </div>
     </div>
 
-    <!-- EXTERNAL -->
-    <div>
-      <div class="px-4 mb-2 text-[10px] uppercase tracking-[0.12em] text-white/30 font-semibold sidebar-text">
-        External
+    <!-- USERS & AUTH (expandable) -->
+    <div class="nav-section" data-section="users">
+      <button onclick="toggleSection(this)"
+              class="flex items-center justify-between w-full px-4 py-2 text-[11px] uppercase tracking-widest text-white/35 font-medium hover:text-white/50 cursor-pointer bg-transparent border-none sidebar-text">
+        <span class="flex items-center gap-2">
+          <i data-lucide="users" class="w-3.5 h-3.5"></i>
+          Users &amp; Auth
+        </span>
+        <i data-lucide="chevron-right" class="w-3 h-3 chevron transition-transform duration-200"></i>
+      </button>
+      <div class="section-items ml-2 hidden">
+        <a href="/admin/accounts/user/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if '/admin/accounts/user/' in request.path %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">All Users</span>
+        </a>
+        <a href="/admin/accounts/whydudemail/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/accounts/whydudemail/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Whydud Emails</span>
+        </a>
+        <a href="/admin/accounts/notification/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/accounts/notification/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Notifications</span>
+        </a>
+        <a href="/admin/accounts/oauthconnection/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/accounts/oauthconnection/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">OAuth</span>
+        </a>
+        <a href="/admin/accounts/paymentmethod/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/accounts/paymentmethod/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Payment Methods</span>
+        </a>
       </div>
+    </div>
+
+    <!-- REVIEWS & TRUST (expandable) -->
+    <div class="nav-section" data-section="reviews">
+      <button onclick="toggleSection(this)"
+              class="flex items-center justify-between w-full px-4 py-2 text-[11px] uppercase tracking-widest text-white/35 font-medium hover:text-white/50 cursor-pointer bg-transparent border-none sidebar-text">
+        <span class="flex items-center gap-2">
+          <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+          Reviews &amp; Trust
+        </span>
+        <i data-lucide="chevron-right" class="w-3 h-3 chevron transition-transform duration-200"></i>
+      </button>
+      <div class="section-items ml-2 hidden">
+        <a href="/admin/reviews/review/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/reviews/review/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">All Reviews</span>
+          {% if sidebar_flagged_reviews and sidebar_flagged_reviews > 0 %}
+          <span class="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 sidebar-text">
+            {{ sidebar_flagged_reviews }}
+          </span>
+          {% endif %}
+        </a>
+        <a href="/admin/reviews/reviewerprofile/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/reviews/reviewerprofile/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Reviewer Profiles</span>
+        </a>
+        <a href="/admin/scoring/dudscoreconfig/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/scoring/dudscoreconfig/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">DudScore Config</span>
+        </a>
+        <a href="/admin/scoring/brandtrustscore/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/scoring/brandtrustscore/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Brand Trust</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- PRICING & DEALS (expandable) -->
+    <div class="nav-section" data-section="pricing">
+      <button onclick="toggleSection(this)"
+              class="flex items-center justify-between w-full px-4 py-2 text-[11px] uppercase tracking-widest text-white/35 font-medium hover:text-white/50 cursor-pointer bg-transparent border-none sidebar-text">
+        <span class="flex items-center gap-2">
+          <i data-lucide="tag" class="w-3.5 h-3.5"></i>
+          Pricing &amp; Deals
+        </span>
+        <i data-lucide="chevron-right" class="w-3 h-3 chevron transition-transform duration-200"></i>
+      </button>
+      <div class="section-items ml-2 hidden">
+        <a href="/admin/pricing/backfillproduct/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/pricing/backfillproduct/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Backfill Products</span>
+        </a>
+        <a href="/admin/pricing/pricealert/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/pricing/pricealert/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Price Alerts</span>
+        </a>
+        <a href="/admin/pricing/clickevent/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/pricing/clickevent/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Click Events</span>
+        </a>
+        <a href="/admin/pricing/marketplaceoffer/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/pricing/marketplaceoffer/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Marketplace Offers</span>
+        </a>
+        <a href="/admin/deals/deal/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/deals/deal/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Deals</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- SCRAPING (expandable) -->
+    <div class="nav-section" data-section="scraping">
+      <button onclick="toggleSection(this)"
+              class="flex items-center justify-between w-full px-4 py-2 text-[11px] uppercase tracking-widest text-white/35 font-medium hover:text-white/50 cursor-pointer bg-transparent border-none sidebar-text">
+        <span class="flex items-center gap-2">
+          <i data-lucide="bug" class="w-3.5 h-3.5"></i>
+          Scraping
+        </span>
+        <i data-lucide="chevron-right" class="w-3 h-3 chevron transition-transform duration-200"></i>
+      </button>
+      <div class="section-items ml-2 hidden">
+        <a href="/admin/scraping/scraperjob/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/scraping/scraperjob/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Scraper Jobs</span>
+        </a>
+        <a href="/admin/admin_tools/scraperrun/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/admin_tools/scraperrun/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Scraper Runs</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- SYSTEM (expandable) -->
+    <div class="nav-section" data-section="system">
+      <button onclick="toggleSection(this)"
+              class="flex items-center justify-between w-full px-4 py-2 text-[11px] uppercase tracking-widest text-white/35 font-medium hover:text-white/50 cursor-pointer bg-transparent border-none sidebar-text">
+        <span class="flex items-center gap-2">
+          <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+          System
+        </span>
+        <i data-lucide="chevron-right" class="w-3 h-3 chevron transition-transform duration-200"></i>
+      </button>
+      <div class="section-items ml-2 hidden">
+        <a href="/admin/admin_tools/auditlog/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/admin_tools/auditlog/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Audit Logs</span>
+        </a>
+        <a href="/admin/admin_tools/siteconfig/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/admin_tools/siteconfig/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Site Config</span>
+        </a>
+        <a href="/admin/admin_tools/moderationqueue/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/admin_tools/moderationqueue/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Moderation Queue</span>
+        </a>
+        <a href="/admin/email_intel/inboxemail/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/email_intel/inboxemail/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Inbox Emails</span>
+        </a>
+        <a href="/admin/search/searchlog/"
+           class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors
+                  {% if request.path == '/admin/search/searchlog/' %}!text-white !bg-white/10{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
+          <span class="sidebar-text">Search Logs</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="border-t border-white/5 mx-3"></div>
+
+    <!-- ALL MODELS (collapsible link to Django admin index) -->
+    <div>
       <a href="{% url 'admin:index' %}"
          class="flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg text-[13.5px]
                 text-white/55 hover:text-white/90 hover:bg-white/5 transition-colors
@@ -174,7 +381,7 @@
       </div>
       <div class="sidebar-text flex-1 min-w-0">
         <div class="text-[13px] text-white/80 font-medium truncate">
-          {{ request.user.first_name|default:request.user.email }}
+          {{ request.user.name|default:request.user.email }}
         </div>
         <div class="text-[11px] text-white/30 truncate">Administrator</div>
       </div>
@@ -188,4 +395,74 @@
       </form>
     </div>
   </div>
+
+  <!-- Sidebar section toggle JS -->
+  <script>
+    // Sidebar expandable sections — localStorage persistence
+    (function() {
+      const STORAGE_KEY = 'whydud-sidebar-sections';
+      const currentPath = window.location.pathname;
+
+      function getSavedState() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+        catch { return {}; }
+      }
+
+      function saveState(state) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      }
+
+      // Auto-expand section containing the active page
+      function getActiveSection() {
+        const sections = document.querySelectorAll('.nav-section');
+        for (const section of sections) {
+          const links = section.querySelectorAll('a[href]');
+          for (const link of links) {
+            if (currentPath.startsWith(link.getAttribute('href'))) {
+              return section.dataset.section;
+            }
+          }
+        }
+        return null;
+      }
+
+      // Initialize sections
+      const state = getSavedState();
+      const activeSection = getActiveSection();
+
+      document.querySelectorAll('.nav-section').forEach(section => {
+        const key = section.dataset.section;
+        const items = section.querySelector('.section-items');
+        const chevron = section.querySelector('.chevron');
+        if (!items || !chevron) return;
+
+        // Open if: saved as open, or contains active page
+        const shouldOpen = state[key] === true || key === activeSection;
+        if (shouldOpen) {
+          items.classList.remove('hidden');
+          chevron.classList.add('rotate-90');
+          if (key === activeSection) {
+            state[key] = true;
+            saveState(state);
+          }
+        }
+      });
+
+      // Toggle function
+      window.toggleSection = function(btn) {
+        const section = btn.closest('.nav-section');
+        const key = section.dataset.section;
+        const items = section.querySelector('.section-items');
+        const chevron = section.querySelector('.chevron');
+        if (!items || !chevron) return;
+
+        items.classList.toggle('hidden');
+        chevron.classList.toggle('rotate-90');
+
+        const st = getSavedState();
+        st[key] = !items.classList.contains('hidden');
+        saveState(st);
+      };
+    })();
+  </script>
 </aside>

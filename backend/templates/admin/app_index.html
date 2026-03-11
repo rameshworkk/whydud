@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block content %}
+
+<!-- Breadcrumbs -->
+<nav class="flex items-center gap-1.5 text-xs text-slate-400 mb-4">
+  <a href="{% url 'admin:index' %}" class="hover:text-emerald-500 transition-colors">Home</a>
+  <span class="text-slate-300">&rsaquo;</span>
+  <span class="text-slate-600 dark:text-slate-300 font-medium">{{ title }}</span>
+</nav>
+
+{% if app_list %}
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+  {% for app in app_list %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <span class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">
+        {{ app.name }}
+      </span>
+    </div>
+    <div class="divide-y divide-slate-100 dark:divide-slate-700/50">
+      {% for model in app.models %}
+      <div class="px-5 py-3 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+        <div class="text-[13px]">
+          {% if model.admin_url %}
+          <a href="{{ model.admin_url }}"
+             class="text-slate-700 dark:text-slate-200 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors font-medium">
+            {{ model.name }}
+          </a>
+          {% else %}
+          <span class="text-slate-500 dark:text-slate-400">{{ model.name }}</span>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+          {% if model.add_url %}
+          <a href="{{ model.add_url }}"
+             class="text-[11px] font-medium px-2 py-0.5 rounded-md
+                    bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400
+                    hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors">
+            {% translate 'Add' %}
+          </a>
+          {% endif %}
+          {% if model.admin_url %}
+          <a href="{{ model.admin_url }}"
+             class="text-[11px] font-medium px-2 py-0.5 rounded-md
+                    bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400
+                    hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors">
+            {% if model.view_only %}{% translate 'View' %}{% else %}{% translate 'Change' %}{% endif %}
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+            rounded-2xl p-8 text-center shadow-xs">
+  <i data-lucide="lock" class="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3"></i>
+  <p class="text-[13px] text-slate-400">{% translate "You don't have permission to view or edit anything." %}</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>lucide.createIcons();</script>
+{% endblock %}

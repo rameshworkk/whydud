@@ -188,13 +188,42 @@
     const cmdResults = document.getElementById('cmd-results');
 
     const cmdItems = [
+      // Overview
       { label: 'Dashboard', url: '{% url "admin:admin-dashboard" %}', icon: 'layout-dashboard' },
       { label: 'Analytics', url: '{% url "admin:analytics" %}', icon: 'bar-chart-3' },
+      // Operations
       { label: 'Backfill Console', url: '{% url "admin:backfill-console" %}', icon: 'database' },
       { label: 'Enrichment Console', url: '{% url "admin:enrichment-console" %}', icon: 'refresh-cw' },
       { label: 'Cluster Console', url: '{% url "admin:cluster-console" %}', icon: 'server' },
+      // Intelligence
       { label: 'Price Intelligence', url: '{% url "admin:price-intel" %}', icon: 'trending-up' },
       { label: 'System Health', url: '{% url "admin:system-health" %}', icon: 'activity' },
+      // Products
+      { label: 'Products', url: '/admin/products/product/', icon: 'package' },
+      { label: 'Product Listings', url: '/admin/products/productlisting/', icon: 'list' },
+      { label: 'Marketplaces', url: '/admin/products/marketplace/', icon: 'store' },
+      { label: 'Categories', url: '/admin/products/category/', icon: 'folder-tree' },
+      { label: 'Brands', url: '/admin/products/brand/', icon: 'award' },
+      { label: 'Sellers', url: '/admin/products/seller/', icon: 'user-check' },
+      // Users
+      { label: 'Users', url: '/admin/accounts/user/', icon: 'users' },
+      { label: 'Whydud Emails', url: '/admin/accounts/whydudemail/', icon: 'mail' },
+      { label: 'Notifications', url: '/admin/accounts/notification/', icon: 'bell' },
+      // Reviews
+      { label: 'Reviews', url: '/admin/reviews/review/', icon: 'message-square' },
+      { label: 'Reviewer Profiles', url: '/admin/reviews/reviewerprofile/', icon: 'user' },
+      { label: 'DudScore Config', url: '/admin/scoring/dudscoreconfig/', icon: 'shield-check' },
+      // Pricing
+      { label: 'Backfill Products', url: '/admin/pricing/backfillproduct/', icon: 'database' },
+      { label: 'Price Alerts', url: '/admin/pricing/pricealert/', icon: 'bell-ring' },
+      { label: 'Click Events', url: '/admin/pricing/clickevent/', icon: 'mouse-pointer-click' },
+      { label: 'Deals', url: '/admin/deals/deal/', icon: 'percent' },
+      // Scraping
+      { label: 'Scraper Jobs', url: '/admin/scraping/scraperjob/', icon: 'bug' },
+      // System
+      { label: 'Audit Logs', url: '/admin/admin_tools/auditlog/', icon: 'scroll-text' },
+      { label: 'Site Config', url: '/admin/admin_tools/siteconfig/', icon: 'settings' },
+      { label: 'Moderation Queue', url: '/admin/admin_tools/moderationqueue/', icon: 'shield' },
       { label: 'All Models', url: '{% url "admin:index" %}', icon: 'grid-3x3' },
     ];
 
