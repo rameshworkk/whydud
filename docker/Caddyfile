@@ -36,11 +36,9 @@ whydud.com, www.whydud.com {
     }
 
     # URL Path-Prefix Feature: whydud.com/amazon.in/... → /lookup?url=...
-    # Handles the case where users paste marketplace URLs after whydud.com/
+    # Top-level redir (evaluated BEFORE handle blocks in Caddy's directive order)
     @mp_prefix path_regexp mp ^/((?:www\.)?(?:amazon\.in|flipkart\.com|myntra\.com|nykaa\.com|snapdeal\.com|croma\.com|reliancedigital\.in|ajio\.com|meesho\.com|tatacliq\.com|jiomart\.com|vijaysales\.com|firstcry\.com|giva\.co))(/.*)?$
-    handle @mp_prefix {
-        redir https://whydud.com/lookup?url=https://{re.mp.1}{re.mp.2} 302
-    }
+    redir @mp_prefix https://whydud.com/lookup?url=https://{re.mp.1}{re.mp.2} 302
 
     # Next.js frontend: everything else
     handle {
