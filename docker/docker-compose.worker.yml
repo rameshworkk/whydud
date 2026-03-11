@@ -45,10 +45,15 @@ services:
       # --- Proxy config ---
       SCRAPING_PROXY_LIST: ${SCRAPING_PROXY_LIST:-}
       SCRAPING_PROXY_TYPE: ${SCRAPING_PROXY_TYPE:-rotating}
+    ulimits:
+      nproc: 4096
+      nofile:
+        soft: 65536
+        hard: 65536
     deploy:
       resources:
         limits:
-          memory: 1.5g
+          memory: 2g
     # No healthcheck dependencies — primary node services are external
     healthcheck:
       test: ["CMD-SHELL", "celery -A whydud inspect ping --destination=${CELERY_WORKER_ID:-remote-w1}@$$HOSTNAME 2>/dev/null | grep -q pong || exit 1"]
