@@ -238,9 +238,7 @@ class PHClient:
 
     @property
     def is_ip_burned(self) -> bool:
-        """True if all routes are exhausted — both direct IP and proxy burned."""
-        if self._proxy_strategy.enabled and self._proxy_strategy.is_proxy_burned:
-            return True
+        """True if consecutive 403s exceed abort threshold on direct IP."""
         return self._consecutive_403s >= BackfillConfig.ph_abort_threshold()
 
     @property
@@ -314,11 +312,15 @@ class PHClient:
 
     # ── HTML Metadata Extraction (Phase 1 + Phase 3) ─────────────
 
+    # Max free retries for proxy rotation / direct probes (safety cap)
+    _MAX_FREE_RETRIES = 10
+
     async def fetch_page_metadata(self, ph_code: str) -> dict:
         """Fetch a PH product page and extract metadata from JSON-LD.
 
         Includes retry with exponential backoff on 403/429 and
-        automatic proxy fallback when configured.
+        automatic proxy fallback when configured. Proxy 403s get
+        free retries (rotating proxy = new IP each request).
 
         Args:
             ph_code: The 8-char PH product code (e.g. ``"sy9uDEyp"``).
@@ -334,13 +336,15 @@ class PHClient:
         assert self._semaphore is not None
 
         url = f"{BackfillConfig.ph_base_url()}/p/{ph_code}"
+        attempt = 0
+        free_retries = 0
 
-        # Check for periodic direct IP retry (30-min window)
-        if self._proxy_strategy.should_retry_direct():
-            self._proxy_strategy.start_direct_probe()
+        while attempt < self._max_retries:
+            # Check for periodic direct IP retry (30-min window)
+            if self._proxy_strategy.should_retry_direct():
+                self._proxy_strategy.start_direct_probe()
 
-        for attempt in range(self._max_retries):
-            # Abort immediately if IP is burned (too many consecutive 403s)
+            # Abort immediately if IP is burned (direct mode only)
             if self.is_ip_burned:
                 raise RateLimitError(
                     f"IP burned ({self._consecutive_403s} consecutive 403s) — aborting {ph_code}"
@@ -361,32 +365,40 @@ class PHClient:
                 except httpx.HTTPStatusError as e:
                     status = e.response.status_code
                     if status in (403, 429):
-                        # Check proxy strategy first
                         action = self._proxy_strategy.on_request_403()
+
                         if action == "switched":
-                            # Direct→Proxy switch — reset counters, retry immediately
+                            # Direct→Proxy: reset counters, free retry
                             self._consecutive_403s = 0
                             self._html_delay = self._base_html_delay
                             self._api_delay = self._base_api_delay
                             self._rate_limited = False
-                            continue
-                        if action == "probe_failed":
-                            # Direct probe failed — retry with proxy, skip rate limit
+                            free_retries += 1
                             continue
 
-                        # Normal 403 handling
+                        if action in ("probe_failed", "proxy_retry", "probe_direct"):
+                            # Free retry: proxy rotation or direct probe
+                            free_retries += 1
+                            if free_retries > self._MAX_FREE_RETRIES:
+                                raise RateLimitError(
+                                    f"Max proxy retries ({free_retries}) for {ph_code}"
+                                ) from e
+                            continue
+
+                        # "normal" — direct mode 403 (no proxy configured)
                         self._on_rate_limit()
                         if self.is_ip_burned:
                             raise RateLimitError(
                                 f"IP burned ({self._consecutive_403s} consecutive 403s) "
                                 f"— aborting {ph_code}"
                             ) from e
-                        if attempt < self._max_retries - 1:
-                            wait = (attempt + 1) * 15
+                        attempt += 1
+                        if attempt < self._max_retries:
+                            wait = attempt * 15
                             logger.warning(
                                 "PH HTML 403 for %s, retry %d/%d in %ds "
                                 "(delay=%.1fs, mode=%s)",
-                                ph_code, attempt + 1, self._max_retries, wait,
+                                ph_code, attempt, self._max_retries, wait,
                                 self._html_delay, self._proxy_strategy.mode,
                             )
                             await asyncio.sleep(wait)
@@ -503,7 +515,8 @@ class PHClient:
         """Fetch full price history from PH API.
 
         Includes retry with exponential backoff on 403/429 and
-        automatic proxy fallback when configured.
+        automatic proxy fallback when configured. Proxy 403s get
+        free retries (rotating proxy = new IP each request).
 
         Args:
             ph_code: The 8-char PH product code.
@@ -524,11 +537,14 @@ class PHClient:
         if not token:
             raise AuthError(f"No token provided for {ph_code}")
 
-        # Check for periodic direct IP retry (30-min window)
-        if self._proxy_strategy.should_retry_direct():
-            self._proxy_strategy.start_direct_probe()
+        attempt = 0
+        free_retries = 0
 
-        for attempt in range(self._max_retries):
+        while attempt < self._max_retries:
+            # Check for periodic direct IP retry (30-min window)
+            if self._proxy_strategy.should_retry_direct():
+                self._proxy_strategy.start_direct_probe()
+
             # Abort immediately if IP is burned
             if self.is_ip_burned:
                 raise RateLimitError(
@@ -559,30 +575,38 @@ class PHClient:
                 except httpx.HTTPStatusError as e:
                     status = e.response.status_code
                     if status in (403, 429):
-                        # Check proxy strategy first
                         action = self._proxy_strategy.on_request_403()
+
                         if action == "switched":
                             self._consecutive_403s = 0
                             self._html_delay = self._base_html_delay
                             self._api_delay = self._base_api_delay
                             self._rate_limited = False
-                            continue
-                        if action == "probe_failed":
+                            free_retries += 1
                             continue
 
-                        # Normal 403 handling
+                        if action in ("probe_failed", "proxy_retry", "probe_direct"):
+                            free_retries += 1
+                            if free_retries > self._MAX_FREE_RETRIES:
+                                raise RateLimitError(
+                                    f"Max proxy retries ({free_retries}) for {ph_code}"
+                                ) from e
+                            continue
+
+                        # "normal" — direct mode 403 (no proxy configured)
                         self._on_rate_limit()
                         if self.is_ip_burned:
                             raise RateLimitError(
                                 f"IP burned ({self._consecutive_403s} consecutive 403s) "
                                 f"— aborting {ph_code}"
                             ) from e
-                        if attempt < self._max_retries - 1:
-                            wait = (attempt + 1) * 15
+                        attempt += 1
+                        if attempt < self._max_retries:
+                            wait = attempt * 15
                             logger.warning(
                                 "PH API 403 for %s, retry %d/%d in %ds "
                                 "(delay=%.1fs, mode=%s)",
-                                ph_code, attempt + 1, self._max_retries, wait,
+                                ph_code, attempt, self._max_retries, wait,
                                 self._api_delay, self._proxy_strategy.mode,
                             )
                             await asyncio.sleep(wait)

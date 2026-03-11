@@ -194,6 +194,11 @@ class BHClient:
         assert self._semaphore is not None
         assert self._client is not None
 
+        max_retries = BackfillConfig.bh_max_retries()
+        max_free_retries = 10  # safety cap for proxy rotation
+        attempt = 0
+        free_retries = 0
+
         async with self._semaphore:
             # Respect cooldown from previous 403 bursts
             now = asyncio.get_event_loop().time()
@@ -214,12 +219,11 @@ class BHClient:
                 )
                 await asyncio.sleep(self._burst_pause)
 
-            # Check for periodic direct IP retry (30-min window)
-            if self._proxy_strategy.should_retry_direct():
-                self._proxy_strategy.start_direct_probe()
+            while attempt < max_retries:
+                # Check for periodic direct IP retry (30-min window)
+                if self._proxy_strategy.should_retry_direct():
+                    self._proxy_strategy.start_direct_probe()
 
-            max_retries = BackfillConfig.bh_max_retries()
-            for attempt in range(max_retries):
                 client = self._get_client()
                 try:
                     resp = await client.get(
@@ -239,34 +243,37 @@ class BHClient:
 
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (429, 403):
-                        # Check proxy strategy first
                         action = self._proxy_strategy.on_request_403()
+
                         if action == "switched":
-                            # Direct→Proxy switch — reset counters, retry immediately
+                            # Direct→Proxy: reset counters, free retry
                             self._consecutive_403s = 0
                             self._delay = self._base_delay
-                            continue
-                        if action == "probe_failed":
-                            # Direct probe failed — retry with proxy
+                            free_retries += 1
                             continue
 
-                        # Normal 403 handling
+                        if action in ("probe_failed", "proxy_retry", "probe_direct"):
+                            # Free retry: proxy rotation or direct probe
+                            free_retries += 1
+                            if free_retries > max_free_retries:
+                                raise BHRateLimited(
+                                    f"Max proxy retries ({free_retries}) exceeded"
+                                ) from e
+                            continue
+
+                        # "normal" — direct mode 403 (no proxy configured)
                         self._consecutive_403s += 1
                         self._error_count += 1
                         self._delay = min(self._base_delay * (2 ** self._consecutive_403s), 30.0)
 
-                        if self._proxy_strategy.is_proxy_burned:
-                            raise BHRateLimited(
-                                "Both direct IP and proxy burned"
-                            ) from e
-
-                        if attempt < max_retries - 1:
-                            wait = (attempt + 1) * 15
+                        attempt += 1
+                        if attempt < max_retries:
+                            wait = attempt * 15
                             logger.warning(
                                 "BH rate limited (%d), waiting %ds, delay now %.1fs "
                                 "(attempt %d/%d, streak %d, mode=%s)",
                                 e.response.status_code, wait, self._delay,
-                                attempt + 1, max_retries, self._consecutive_403s,
+                                attempt, max_retries, self._consecutive_403s,
                                 self._proxy_strategy.mode,
                             )
                             await asyncio.sleep(wait)
@@ -289,8 +296,9 @@ class BHClient:
                     raise
 
                 except (httpx.TimeoutException, httpx.ConnectError):
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2 * (attempt + 1))
+                    attempt += 1
+                    if attempt < max_retries:
+                        await asyncio.sleep(2 * attempt)
                         continue
                     self._error_count += 1
                     raise

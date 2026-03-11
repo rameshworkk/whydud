@@ -3,13 +3,14 @@
 Strategy:
 1. Start with direct IP (no proxy)
 2. On first 403 → switch to rotating proxy
-3. On rotating proxy, 3 consecutive 403s → proxy burned
-4. Every 30 minutes → retry direct IP to check if unblocked
-5. If direct IP works → switch back to direct
-6. If direct IP still blocked → continue with proxy
+3. On proxy 403 → retry immediately (rotating = new IP each request)
+4. After N consecutive proxy 403s → probe direct IP to check if recovered
+5. Every 30 minutes → also probe direct IP
+6. If direct IP works → switch back to direct
+7. If direct IP still blocked → continue with proxy
 
-When no proxy URL is configured, all methods are no-ops and the
-client behaves exactly as before (direct IP only).
+Rotating proxy never "burns" — each request goes through a different IP.
+When no proxy URL is configured, all methods are no-ops.
 """
 from __future__ import annotations
 
@@ -24,6 +25,9 @@ class ProxyStrategy:
 
     Integrates with ``PHClient`` and ``BHClient`` to transparently
     switch between direct and proxied HTTP clients on 403 responses.
+
+    Rotating proxy gets a new IP per request, so 403 on proxy just
+    means "try again" — never abort or cooldown on proxy 403.
 
     When ``proxy_url`` is empty, :attr:`enabled` is ``False`` and all
     methods are effectively no-ops — existing behavior is preserved.
@@ -44,7 +48,6 @@ class ProxyStrategy:
 
         self._mode = self.MODE_DIRECT
         self._proxy_consecutive_403s = 0
-        self._proxy_burned = False
         self._probing_direct = False
         self._last_direct_retry_time: float = time.monotonic()
 
@@ -72,11 +75,6 @@ class ProxyStrategy:
     @property
     def proxy_url(self) -> str:
         return self._proxy_url
-
-    @property
-    def is_proxy_burned(self) -> bool:
-        """True if rotating proxy exhausted its consecutive 403 threshold."""
-        return self._proxy_burned
 
     # ── Periodic direct retry ─────────────────────────────────────
 
@@ -117,12 +115,17 @@ class ProxyStrategy:
 
         Returns:
             ``"switched"`` — just switched from direct to proxy; caller
-                should reset rate-limit counters and retry immediately
-                without backoff (new IP, clean slate).
+                should reset rate-limit counters and retry immediately.
             ``"probe_failed"`` — periodic direct probe failed; caller
-                should skip rate-limit bookkeeping and retry with proxy.
-            ``"normal"`` — regular 403 on current mode; caller proceeds
-                with standard exponential backoff.
+                should retry with proxy (free retry, no backoff).
+            ``"proxy_retry"`` — proxy got 403 but rotating proxy gives
+                new IP each request; caller should retry immediately
+                (free retry, no backoff, no rate-limit bookkeeping).
+            ``"probe_direct"`` — after N consecutive proxy 403s, probing
+                direct IP; caller should retry with direct client
+                (free retry, no backoff).
+            ``"normal"`` — regular 403 on direct mode (no proxy configured);
+                caller proceeds with standard exponential backoff.
         """
         if self._probing_direct:
             self._probing_direct = False
@@ -146,15 +149,23 @@ class ProxyStrategy:
                 return "switched"
             return "normal"
         else:
+            # Rotating proxy — each request is a new IP, never abort
             self._proxy_consecutive_403s += 1
             self._proxy_403_count += 1
             if self._proxy_consecutive_403s >= self._proxy_burn_threshold:
-                self._proxy_burned = True
-                logger.warning(
-                    "Proxy strategy: PROXY burned — %d consecutive 403s",
-                    self._proxy_consecutive_403s,
+                # After N consecutive proxy 403s, probe direct IP
+                # (maybe it recovered while we were on proxy)
+                self._proxy_consecutive_403s = 0
+                self._probing_direct = True
+                self._last_direct_retry_time = time.monotonic()
+                logger.info(
+                    "Proxy strategy: %d consecutive proxy 403s — probing "
+                    "direct IP (proxy 403s: %d)",
+                    self._proxy_burn_threshold,
+                    self._proxy_403_count,
                 )
-            return "normal"
+                return "probe_direct"
+            return "proxy_retry"
 
     # ── Stats ─────────────────────────────────────────────────────
 
@@ -166,6 +177,5 @@ class ProxyStrategy:
             "direct_403s": self._direct_403_count,
             "proxy_403s": self._proxy_403_count,
             "proxy_consecutive_403s": self._proxy_consecutive_403s,
-            "proxy_burned": self._proxy_burned,
             "mode_switches": self._mode_switches,
         }
