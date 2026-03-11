@@ -251,17 +251,31 @@
         <span class="text-[10px] text-slate-300 dark:text-slate-600">none = all categories</span>
       </div>
       {% if online_workers %}
-      <div class="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-        <span class="text-[11px] text-slate-400 font-medium">Nodes:</span>
-        {% for w in online_workers %}
-        <label class="flex items-center gap-1 cursor-pointer select-none">
-          <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
-                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
-          <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ w.prefix }}</span>
-        </label>
-        {% endfor %}
-        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = any</span>
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium shrink-0">Nodes:</span>
+        <div class="relative" id="node-dd-discover">
+          <button type="button" onclick="toggleNodeDD('node-dd-discover')"
+                  class="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 dark:border-slate-600
+                         rounded-lg text-[12px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700
+                         hover:border-slate-300 dark:hover:border-slate-500 transition-colors min-w-[120px]">
+            <i data-lucide="server" class="w-3 h-3 opacity-50 shrink-0"></i>
+            <span class="dd-label truncate">Any node</span>
+            <i data-lucide="chevron-down" class="w-3 h-3 opacity-40 ml-auto shrink-0 transition-transform"></i>
+          </button>
+          <div class="dd-panel hidden absolute left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-slate-700
+                      border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 py-1">
+            {% for w in online_workers %}
+            <label class="flex items-center gap-2.5 px-3 py-2 text-[12px] text-slate-600 dark:text-slate-300
+                          hover:bg-slate-50 dark:hover:bg-slate-600/50 cursor-pointer select-none transition-colors">
+              <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
+                     onchange="updateNodeDDLabel('node-dd-discover')"
+                     class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                            focus:ring-emerald-500/20 bg-white dark:bg-slate-800">
+              <span>{{ w.prefix }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
       </div>
       {% endif %}
     </form>
@@ -306,17 +320,31 @@
         </button>
       </div>
       {% if online_workers %}
-      <div class="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-        <span class="text-[11px] text-slate-400 font-medium">Nodes:</span>
-        {% for w in online_workers %}
-        <label class="flex items-center gap-1 cursor-pointer select-none">
-          <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
-                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
-          <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ w.prefix }}</span>
-        </label>
-        {% endfor %}
-        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = any</span>
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium shrink-0">Nodes:</span>
+        <div class="relative" id="node-dd-bh">
+          <button type="button" onclick="toggleNodeDD('node-dd-bh')"
+                  class="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 dark:border-slate-600
+                         rounded-lg text-[12px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700
+                         hover:border-slate-300 dark:hover:border-slate-500 transition-colors min-w-[120px]">
+            <i data-lucide="server" class="w-3 h-3 opacity-50 shrink-0"></i>
+            <span class="dd-label truncate">Any node</span>
+            <i data-lucide="chevron-down" class="w-3 h-3 opacity-40 ml-auto shrink-0 transition-transform"></i>
+          </button>
+          <div class="dd-panel hidden absolute left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-slate-700
+                      border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 py-1">
+            {% for w in online_workers %}
+            <label class="flex items-center gap-2.5 px-3 py-2 text-[12px] text-slate-600 dark:text-slate-300
+                          hover:bg-slate-50 dark:hover:bg-slate-600/50 cursor-pointer select-none transition-colors">
+              <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
+                     onchange="updateNodeDDLabel('node-dd-bh')"
+                     class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                            focus:ring-emerald-500/20 bg-white dark:bg-slate-800">
+              <span>{{ w.prefix }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
       </div>
       {% endif %}
     </form>
@@ -361,17 +389,31 @@
         </button>
       </div>
       {% if online_workers %}
-      <div class="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-        <span class="text-[11px] text-slate-400 font-medium">Nodes:</span>
-        {% for w in online_workers %}
-        <label class="flex items-center gap-1 cursor-pointer select-none">
-          <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
-                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
-          <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ w.prefix }}</span>
-        </label>
-        {% endfor %}
-        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = any</span>
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium shrink-0">Nodes:</span>
+        <div class="relative" id="node-dd-ph">
+          <button type="button" onclick="toggleNodeDD('node-dd-ph')"
+                  class="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 dark:border-slate-600
+                         rounded-lg text-[12px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700
+                         hover:border-slate-300 dark:hover:border-slate-500 transition-colors min-w-[120px]">
+            <i data-lucide="server" class="w-3 h-3 opacity-50 shrink-0"></i>
+            <span class="dd-label truncate">Any node</span>
+            <i data-lucide="chevron-down" class="w-3 h-3 opacity-40 ml-auto shrink-0 transition-transform"></i>
+          </button>
+          <div class="dd-panel hidden absolute left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-slate-700
+                      border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 py-1">
+            {% for w in online_workers %}
+            <label class="flex items-center gap-2.5 px-3 py-2 text-[12px] text-slate-600 dark:text-slate-300
+                          hover:bg-slate-50 dark:hover:bg-slate-600/50 cursor-pointer select-none transition-colors">
+              <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
+                     onchange="updateNodeDDLabel('node-dd-ph')"
+                     class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                            focus:ring-emerald-500/20 bg-white dark:bg-slate-800">
+              <span>{{ w.prefix }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
       </div>
       {% endif %}
     </form>
@@ -427,17 +469,31 @@
         </button>
       </div>
       {% if online_workers %}
-      <div class="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-        <span class="text-[11px] text-slate-400 font-medium">Nodes:</span>
-        {% for w in online_workers %}
-        <label class="flex items-center gap-1 cursor-pointer select-none">
-          <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
-                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
-          <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ w.prefix }}</span>
-        </label>
-        {% endfor %}
-        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = any</span>
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium shrink-0">Nodes:</span>
+        <div class="relative" id="node-dd-enrich">
+          <button type="button" onclick="toggleNodeDD('node-dd-enrich')"
+                  class="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 dark:border-slate-600
+                         rounded-lg text-[12px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700
+                         hover:border-slate-300 dark:hover:border-slate-500 transition-colors min-w-[120px]">
+            <i data-lucide="server" class="w-3 h-3 opacity-50 shrink-0"></i>
+            <span class="dd-label truncate">Any node</span>
+            <i data-lucide="chevron-down" class="w-3 h-3 opacity-40 ml-auto shrink-0 transition-transform"></i>
+          </button>
+          <div class="dd-panel hidden absolute left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-slate-700
+                      border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 py-1">
+            {% for w in online_workers %}
+            <label class="flex items-center gap-2.5 px-3 py-2 text-[12px] text-slate-600 dark:text-slate-300
+                          hover:bg-slate-50 dark:hover:bg-slate-600/50 cursor-pointer select-none transition-colors">
+              <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
+                     onchange="updateNodeDDLabel('node-dd-enrich')"
+                     class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                            focus:ring-emerald-500/20 bg-white dark:bg-slate-800">
+              <span>{{ w.prefix }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
       </div>
       {% endif %}
     </form>
@@ -791,6 +847,44 @@ if (snapshotData.labels.length > 0) {
 
 // Re-init Lucide icons
 lucide.createIcons();
+
+// Node dropdown multiselect
+function toggleNodeDD(id) {
+  var dd = document.getElementById(id);
+  if (!dd) return;
+  var panel = dd.querySelector('.dd-panel');
+  // Close all other open dropdowns first
+  document.querySelectorAll('.dd-panel').forEach(function(p) {
+    if (p !== panel) p.classList.add('hidden');
+  });
+  panel.classList.toggle('hidden');
+}
+
+function updateNodeDDLabel(id) {
+  var dd = document.getElementById(id);
+  if (!dd) return;
+  var checked = dd.querySelectorAll('input[type="checkbox"]:checked');
+  var label = dd.querySelector('.dd-label');
+  if (checked.length === 0) {
+    label.textContent = 'Any node';
+    label.classList.remove('text-slate-700', 'dark:text-slate-200');
+    label.classList.add('text-slate-500', 'dark:text-slate-400');
+  } else {
+    var names = Array.from(checked).map(function(c) { return c.value; });
+    label.textContent = names.join(', ');
+    label.classList.remove('text-slate-500', 'dark:text-slate-400');
+    label.classList.add('text-slate-700', 'dark:text-slate-200');
+  }
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+  document.querySelectorAll('.dd-panel:not(.hidden)').forEach(function(panel) {
+    if (!panel.parentElement.contains(e.target)) {
+      panel.classList.add('hidden');
+    }
+  });
+});
 </script>
 
 <!-- Auto-refresh every 30s (if enabled) -->

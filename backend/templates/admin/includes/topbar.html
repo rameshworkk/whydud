@@ -19,13 +19,13 @@
     <button onclick="document.getElementById('command-palette').classList.toggle('hidden');
                      document.getElementById('command-palette').classList.toggle('flex');
                      document.getElementById('cmd-search').focus();"
-            class="flex items-center gap-2 px-3 py-1.5 border border-slate-200 dark:border-slate-600
+            class="inline-flex items-center gap-2 px-3 py-1.5 border border-slate-200 dark:border-slate-600
                    rounded-lg text-[13px] text-slate-400 hover:text-slate-600 bg-slate-50
                    dark:bg-slate-700 transition-colors">
-      <i data-lucide="search" class="w-3.5 h-3.5"></i>
-      Search
+      <i data-lucide="search" class="w-3.5 h-3.5 shrink-0"></i>
+      <span class="leading-none">Search</span>
       <kbd class="text-[10px] px-1.5 py-0.5 border border-slate-200 dark:border-slate-600
-                  rounded bg-white dark:bg-slate-800 font-mono">Ctrl+K</kbd>
+                  rounded bg-white dark:bg-slate-800 font-mono leading-none">Ctrl+K</kbd>
     </button>
 
     <!-- Theme toggle -->
