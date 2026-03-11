@@ -26,6 +26,7 @@ from decimal import Decimal
 import httpx
 
 from apps.pricing.backfill.config import BackfillConfig
+from apps.pricing.backfill.proxy_strategy import ProxyStrategy
 from apps.pricing.backfill.utils import inr_to_paisa, ist_to_utc, validate_price
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,13 @@ class BHClient:
         self._ua_idx = 0
         self._cooldown_until: float = 0  # monotonic timestamp
 
+        # Rotating proxy fallback (direct IP → proxy → periodic direct retry)
+        self._proxy_strategy = ProxyStrategy(
+            proxy_url=BackfillConfig.proxy_url(),
+            retry_interval=BackfillConfig.proxy_retry_interval(),
+            proxy_burn_threshold=BackfillConfig.proxy_burn_threshold(),
+        )
+
     async def __aenter__(self) -> BHClient:
         self._semaphore = asyncio.Semaphore(self._concurrency)
         self._client = httpx.AsyncClient(
@@ -115,16 +123,38 @@ class BHClient:
             follow_redirects=True,
             headers={"User-Agent": _USER_AGENTS[0]},
         )
+        # Proxy client (only if proxy URL configured)
+        self._proxy_client: httpx.AsyncClient | None = None
+        if self._proxy_strategy.enabled:
+            self._proxy_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(self._timeout),
+                follow_redirects=True,
+                headers={"User-Agent": _USER_AGENTS[0]},
+                proxy=self._proxy_strategy.proxy_url,
+            )
         return self
 
     async def __aexit__(self, *args: object) -> None:
         if self._client:
             await self._client.aclose()
+        if self._proxy_client:
+            await self._proxy_client.aclose()
+        proxy_info = ""
+        if self._proxy_strategy.enabled:
+            proxy_info = f", proxy={self._proxy_strategy.stats}"
         logger.info(
-            "BHClient closed: %d requests, %d errors",
+            "BHClient closed: %d requests, %d errors%s",
             self._request_count,
             self._error_count,
+            proxy_info,
         )
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Return the appropriate HTTP client based on proxy strategy mode."""
+        assert self._client is not None
+        if self._proxy_client and not self._proxy_strategy.use_direct:
+            return self._proxy_client
+        return self._client
 
     def _next_ua(self) -> str:
         """Round-robin User-Agent rotation."""
@@ -184,10 +214,15 @@ class BHClient:
                 )
                 await asyncio.sleep(self._burst_pause)
 
+            # Check for periodic direct IP retry (30-min window)
+            if self._proxy_strategy.should_retry_direct():
+                self._proxy_strategy.start_direct_probe()
+
             max_retries = BackfillConfig.bh_max_retries()
             for attempt in range(max_retries):
+                client = self._get_client()
                 try:
-                    resp = await self._client.get(
+                    resp = await client.get(
                         f"{BackfillConfig.bh_base_url()}/getPredictedData.php",
                         params=params,
                         headers={"User-Agent": self._next_ua()},
@@ -195,6 +230,7 @@ class BHClient:
                     resp.raise_for_status()
 
                     # Success — decay delay back toward base
+                    self._proxy_strategy.on_request_success()
                     self._consecutive_403s = 0
                     if self._delay > self._base_delay:
                         self._delay = max(self._base_delay, self._delay * 0.9)
@@ -203,18 +239,35 @@ class BHClient:
 
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (429, 403):
+                        # Check proxy strategy first
+                        action = self._proxy_strategy.on_request_403()
+                        if action == "switched":
+                            # Direct→Proxy switch — reset counters, retry immediately
+                            self._consecutive_403s = 0
+                            self._delay = self._base_delay
+                            continue
+                        if action == "probe_failed":
+                            # Direct probe failed — retry with proxy
+                            continue
+
+                        # Normal 403 handling
                         self._consecutive_403s += 1
                         self._error_count += 1
-
-                        # Adaptive: increase delay based on consecutive 403s
                         self._delay = min(self._base_delay * (2 ** self._consecutive_403s), 30.0)
+
+                        if self._proxy_strategy.is_proxy_burned:
+                            raise BHRateLimited(
+                                "Both direct IP and proxy burned"
+                            ) from e
 
                         if attempt < max_retries - 1:
                             wait = (attempt + 1) * 15
                             logger.warning(
-                                "BH rate limited (%d), waiting %ds, delay now %.1fs (attempt %d/%d, streak %d)",
+                                "BH rate limited (%d), waiting %ds, delay now %.1fs "
+                                "(attempt %d/%d, streak %d, mode=%s)",
                                 e.response.status_code, wait, self._delay,
                                 attempt + 1, max_retries, self._consecutive_403s,
+                                self._proxy_strategy.mode,
                             )
                             await asyncio.sleep(wait)
                             continue
@@ -223,10 +276,11 @@ class BHClient:
                         cooldown = min(60 * self._consecutive_403s, 300)
                         self._cooldown_until = asyncio.get_event_loop().time() + cooldown
                         logger.warning(
-                            "BH blocked after %d consecutive 403s, cooldown %ds, delay %.1fs",
+                            "BH blocked after %d consecutive 403s, cooldown %ds, "
+                            "delay %.1fs, mode=%s",
                             self._consecutive_403s, cooldown, self._delay,
+                            self._proxy_strategy.mode,
                         )
-                        # Raise RateLimited so caller can distinguish from real failures
                         raise BHRateLimited(
                             f"403 after {self._consecutive_403s} consecutive rate limits"
                         ) from e
@@ -345,7 +399,7 @@ class BHClient:
                 await asyncio.sleep(self._burst_pause)
 
             try:
-                resp = await self._client.get(
+                resp = await self._get_client().get(
                     f"{BackfillConfig.bh_base_url()}/getPopular.php",
                     params={"pos": str(pos), "pid": pid},
                     headers={"User-Agent": self._next_ua()},
@@ -382,7 +436,7 @@ class BHClient:
                 await asyncio.sleep(self._burst_pause)
 
             try:
-                resp = await self._client.get(
+                resp = await self._get_client().get(
                     f"{BackfillConfig.bh_compare_url()}/buyhatke/comparePrice",
                     params={"PID": pid, "pos": str(pos)},
                     headers={"User-Agent": self._next_ua()},
@@ -397,6 +451,9 @@ class BHClient:
                 return CompareResult(found=False)
 
     @property
-    def stats(self) -> dict[str, int]:
+    def stats(self) -> dict:
         """Request/error counters."""
-        return {"requests": self._request_count, "errors": self._error_count}
+        result: dict = {"requests": self._request_count, "errors": self._error_count}
+        if self._proxy_strategy.enabled:
+            result["proxy"] = self._proxy_strategy.stats
+        return result

@@ -5066,3 +5066,22 @@ All admin display methods that format prices/amounts now divide by 100 before di
 **Pattern:** View returns page shell only (title + active_page) → JS `fetch('/admin/api/*-data/')` → populates all elements by ID → `lucide.createIcons()` reinit
 
 **Tested:** 6-product batch on primary — all 200 OK, 648 price points injected, zero failures. Deployed to all nodes.
+
+### Rotating Proxy Fallback for PH-Extend and BH-Fill (2026-03-12)
+
+**Problem:** When direct IP gets 403-blocked by PriceHistory.app or BuyHatke, the entire pipeline stalls until manual intervention or IP cooldown.
+
+**Solution:** Automatic proxy fallback strategy: start with direct IP → on first 403 switch to rotating proxy → if proxy gets 3 consecutive 403s consider it burned → every 30 minutes retry direct IP to check if unblocked → if recovered switch back to direct.
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/pricing/backfill/proxy_strategy.py` | **NEW** — `ProxyStrategy` class: state machine (DIRECT→PROXY→periodic DIRECT retry), `on_request_403()` returns action hint ("switched"/"probe_failed"/"normal"), `on_request_success()` handles probe recovery, `should_retry_direct()` checks 30-min window |
+| `backend/apps/pricing/backfill/config.py` | Added 3 config methods: `proxy_url()` (env `BACKFILL_PROXY_URL`, default empty=disabled), `proxy_retry_interval()` (default 1800s=30min), `proxy_burn_threshold()` (default 3 consecutive 403s) |
+| `backend/apps/pricing/backfill/ph_client.py` | Dual httpx clients (`_client` direct + `_proxy_client` proxied), `_get_client()` picks based on strategy mode. `fetch_page_metadata()` and `fetch_price_history()` check proxy strategy on 403: "switched"→reset counters+retry immediately, "probe_failed"→retry with proxy, "normal"→existing backoff. `is_ip_burned` now also checks `proxy_strategy.is_proxy_burned`. Periodic `should_retry_direct()` check at start of each fetch. Proxy stats in close log |
+| `backend/apps/pricing/backfill/bh_client.py` | Same dual-client pattern. `fetch_price_history()` integrates proxy strategy in retry loop. `fetch_popularity()` and `fetch_compare_prices()` use `_get_client()`. Proxy burn triggers `BHRateLimited` immediately |
+
+**Config:** Set `BACKFILL_PROXY_URL=http://user:pass@proxy:port` as env var to enable. Empty = disabled (existing behavior unchanged).
+
+**Behavior when disabled (no proxy URL):** `ProxyStrategy.enabled=False`, all methods are no-ops, `use_direct` always True, zero overhead — exact same behavior as before.

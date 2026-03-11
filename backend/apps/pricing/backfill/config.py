@@ -101,6 +101,26 @@ class BackfillConfig:
         """Long cooldown pause duration in seconds."""
         return float(_get("BACKFILL_PH_COOLDOWN_LONG", 30.0))
 
+    # ── Rotating proxy fallback ───────────────────────────────────
+
+    @classmethod
+    def proxy_url(cls) -> str:
+        """Rotating proxy URL (e.g. http://user:pass@proxy:port).
+
+        Empty string = disabled (direct IP only, existing behavior).
+        """
+        return _get("BACKFILL_PROXY_URL", "")
+
+    @classmethod
+    def proxy_retry_interval(cls) -> float:
+        """Seconds between periodic direct IP retry attempts (default 30 min)."""
+        return float(_get("BACKFILL_PROXY_RETRY_INTERVAL", 1800.0))
+
+    @classmethod
+    def proxy_burn_threshold(cls) -> int:
+        """Consecutive 403s on rotating proxy before considering it burned."""
+        return int(_get("BACKFILL_PROXY_BURN_THRESHOLD", 3))
+
     # ── Batch sizes ──────────────────────────────────────────────
 
     @classmethod
