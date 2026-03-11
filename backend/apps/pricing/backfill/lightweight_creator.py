@@ -237,13 +237,17 @@ def create_lightweight_records(batch_size: int = 1000) -> dict:
             if not external_url:
                 external_url = bp.marketplace_url or ""
 
-            # 8. Create Product (is_lightweight=True)
+            # 8. Infer category from title (enrichment may refine later)
+            from apps.products.category_mapper import match_by_keywords
+            category = match_by_keywords(bp.title.lower())
+
+            # 9. Create Product (is_lightweight=True)
             images = [bp.image_url] if bp.image_url else []
             product = Product.objects.create(
                 slug=slug,
                 title=bp.title,
                 brand=brand,
-                category=None,  # filled by enrichment
+                category=category,  # inferred from title; enrichment may correct
                 description="",
                 specs={},
                 images=images,
@@ -255,7 +259,7 @@ def create_lightweight_records(batch_size: int = 1000) -> dict:
                 status=Product.Status.ACTIVE,
             )
 
-            # 9. Compute discount_pct using max historical price as MRP proxy
+            # 10. Compute discount_pct using max historical price as MRP proxy
             mrp = bp.max_price
             discount_pct = None
             if mrp and current_price and mrp > 0:
@@ -263,7 +267,7 @@ def create_lightweight_records(batch_size: int = 1000) -> dict:
                 if pct > 0:
                     discount_pct = pct
 
-            # 10. Create ProductListing
+            # 11. Create ProductListing
             listing = ProductListing.objects.create(
                 product=product,
                 marketplace=marketplace,
@@ -278,10 +282,10 @@ def create_lightweight_records(batch_size: int = 1000) -> dict:
                 match_method="backfill_lightweight",
             )
 
-            # 11. Inject price history
+            # 12. Inject price history
             injected = _inject_history(bp, listing, marketplace)
 
-            # 12. Update BackfillProduct — link to listing
+            # 13. Update BackfillProduct — link to listing
             bp.product_listing = listing
             bp.save(update_fields=["product_listing", "updated_at"])
 

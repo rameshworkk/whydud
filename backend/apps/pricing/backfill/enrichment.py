@@ -223,6 +223,18 @@ def enrich_via_http(backfill_product_id: str) -> dict:
                         product_updates[field_name] = specs[key][:max_len]
                         break
 
+        # Category — assign from title if still uncategorized
+        if not product.category_id or (
+            product.category and product.category.slug == "uncategorized"
+        ):
+            from apps.products.category_mapper import match_by_keywords
+            search_text = (data.get("title") or bp.title or "").lower()
+            if data.get("breadcrumbs"):
+                search_text = " ".join(data["breadcrumbs"]) + " " + search_text
+            inferred_cat = match_by_keywords(search_text)
+            if inferred_cat:
+                product_updates["category_id"] = inferred_cat.id
+
         Product.objects.filter(id=product.id).update(**product_updates)
 
     # Mark enrichment complete

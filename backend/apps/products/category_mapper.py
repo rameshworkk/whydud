@@ -351,7 +351,7 @@ def resolve_canonical_category(
 
     # ---- Step 2: Keyword-based matching ----
     search_text = f"{breadcrumb_path} {title} {raw_category or ''}".lower()
-    category = _match_by_keywords(search_text)
+    category = match_by_keywords(search_text)
     if category:
         _auto_create_mapping(marketplace_slug, breadcrumb_path, leaf_slug, category)
         return category
@@ -377,7 +377,7 @@ def resolve_canonical_category(
     return uncategorized
 
 
-def _match_by_keywords(search_text: str):
+def match_by_keywords(search_text: str):
     """Match text against CANONICAL_KEYWORD_MAP (longest phrase first)."""
     from apps.products.models import Category
 

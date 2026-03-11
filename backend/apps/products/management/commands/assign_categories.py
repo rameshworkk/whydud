@@ -1,25 +1,26 @@
 """Management command to auto-assign categories to products missing them.
 
-Uses keyword matching on product titles to map to the correct category.
-Run after scraping to backfill products that were ingested without category info.
+Uses the canonical keyword mapper (273 keywords → level-2 subcategories) plus
+regex fallback rules for broader matches.
 
 Usage:
     python manage.py assign_categories          # assign + print summary
     python manage.py assign_categories --dry-run # preview without saving
+    python manage.py assign_categories --force   # re-assign even if already categorized
     python manage.py assign_categories --reindex # also trigger Meilisearch reindex
 """
 import re
+
 from django.core.management.base import BaseCommand
 
+
 # ---------------------------------------------------------------------------
-# Keyword → category slug mapping
-#
-# Order matters: more specific patterns are checked first.
-# Each tuple: (compiled_regex, category_slug)
+# Fallback regex rules — broader patterns for products that don't match the
+# canonical keyword mapper. Maps to level-2 subcategory slugs.
 # ---------------------------------------------------------------------------
 
-_CATEGORY_RULES: list[tuple[re.Pattern, str]] = [
-    # ── Smartphones & Accessories ──────────────────────────────────────
+_FALLBACK_RULES: list[tuple[re.Pattern, str]] = [
+    # Smartphones & mobile accessories
     (re.compile(
         r"\b(smartphone|mobile phone|iphone|galaxy [sazm]\d|redmi|realme \d|"
         r"oneplus \d|poco|pixel \d|vivo [tvyx]|oppo [afr]|iqoo|moto [gex]|"
@@ -28,169 +29,209 @@ _CATEGORY_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(
         r"\b(phone case|phone cover|back cover|screen protector|tempered glass|"
         r"mobile charger|charging cable|usb[-\s]c cable|lightning cable|"
-        r"car charger|wireless charger|phone holder|phone stand|sim card|"
-        r"otg adapter|phone grip|pop socket)"
-        , re.IGNORECASE), "smartphones"),
+        r"car charger|wireless charger|phone holder|phone stand|phone grip|pop socket)"
+        , re.IGNORECASE), "mobile-accessories"),
     (re.compile(
         r"\b(power bank|portable charger|battery pack)"
-        , re.IGNORECASE), "smartphones"),
+        , re.IGNORECASE), "mobile-accessories"),
 
-    # ── Laptops ────────────────────────────────────────────────────────
+    # Laptops (specific models)
     (re.compile(
         r"\b(laptop|notebook|macbook|chromebook|thinkpad|ideapad|vivobook|"
         r"zenbook|inspiron|pavilion|probook|elitebook|surface pro|surface laptop|"
-        r"gaming laptop|ultrabook)"
+        r"ultrabook)"
         , re.IGNORECASE), "laptops"),
 
-    # ── Tablets ────────────────────────────────────────────────────────
+    # Tablets
     (re.compile(
         r"\b(tablet|ipad|galaxy tab|fire\s*hd|kindle fire|lenovo tab|"
-        r"realme pad|oneplus pad|xiaomi pad|stylus pen|tablet cover|tablet case)"
+        r"realme pad|oneplus pad|xiaomi pad)"
         , re.IGNORECASE), "tablets"),
 
-    # ── Audio ──────────────────────────────────────────────────────────
+    # Audio
     (re.compile(
-        r"\b(headphone|earphone|earbud|earbuds|tws|neckband|headset|"
-        r"bluetooth speaker|portable speaker|soundbar|sound bar|"
-        r"home theatre|home theater|subwoofer|wired earphone|"
-        r"over.ear|on.ear|in.ear|true wireless|anc headphone|"
-        r"noise cancell|party speaker|microphone|karaoke|"
-        r"jbl|boat |boats |boAt |sony wh-|sony wf-|sennheiser|"
-        r"audio.technica|marshall speaker|bose |harman)"
-        , re.IGNORECASE), "audio"),
+        r"\b(headphone|over.ear|on.ear|anc headphone|noise cancell)"
+        , re.IGNORECASE), "headphones"),
+    (re.compile(
+        r"\b(earphone|earbud|earbuds|tws|neckband|true wireless|in.ear)"
+        , re.IGNORECASE), "earphones-earbuds"),
+    (re.compile(
+        r"\b(bluetooth speaker|portable speaker|party speaker|smart speaker)"
+        , re.IGNORECASE), "speakers"),
+    (re.compile(
+        r"\b(soundbar|sound bar|home theatre|home theater|subwoofer)"
+        , re.IGNORECASE), "soundbars"),
 
-    # ── Smartwatches & Fitness ─────────────────────────────────────────
+    # Smartwatches & fitness
     (re.compile(
-        r"\b(smartwatch|smart watch|fitness band|fitness tracker|"
-        r"apple watch|galaxy watch|amazfit|noise colorfit|fire.bolt|"
-        r"garmin|fitbit|samsung watch|activity tracker)"
+        r"\b(smartwatch|smart watch|apple watch|galaxy watch|amazfit|"
+        r"noise colorfit|fire.bolt|garmin|fitbit|samsung watch)"
         , re.IGNORECASE), "smartwatches"),
+    (re.compile(
+        r"\b(fitness band|fitness tracker|activity tracker)"
+        , re.IGNORECASE), "fitness-bands"),
 
-    # ── Televisions ────────────────────────────────────────────────────
+    # Televisions
     (re.compile(
         r"\b(television|smart tv|led tv|oled tv|qled tv|uhd tv|"
-        r"4k tv|android tv|google tv|fire tv stick|streaming device|"
-        r"chromecast|roku|projector|tv wall mount|tv stand|"
-        r"\d{2,3}\s*inch.*tv|\d{2,3}\s*cm.*tv)"
+        r"4k tv|android tv|google tv|\d{2,3}\s*inch.*tv|\d{2,3}\s*cm.*tv)"
         , re.IGNORECASE), "televisions"),
 
-    # ── Cameras ────────────────────────────────────────────────────────
+    # Streaming devices
     (re.compile(
-        r"\b(camera|dslr|mirrorless|action camera|gopro|webcam|"
-        r"camera lens|tripod|gimbal|ring light|sd card.*camera|"
-        r"instant camera|polaroid|cctv|security camera|ip camera|"
-        r"baby monitor|video doorbell|dash cam)"
-        , re.IGNORECASE), "cameras"),
+        r"\b(fire tv stick|streaming device|chromecast|roku)"
+        , re.IGNORECASE), "streaming-devices"),
 
-    # ── Air Conditioners ───────────────────────────────────────────────
+    # Projectors
+    (re.compile(r"\b(projector)", re.IGNORECASE), "projectors"),
+
+    # Cameras
+    (re.compile(
+        r"\b(dslr|mirrorless|camera lens|camera)"
+        , re.IGNORECASE), "dslr-mirrorless"),
+    (re.compile(
+        r"\b(action camera|gopro)"
+        , re.IGNORECASE), "action-cameras"),
+
+    # Air conditioners
     (re.compile(
         r"\b(air conditioner|split ac|window ac|inverter ac|"
         r"portable ac|ac \d+\.?\d*\s*ton|tower ac|"
         r"\d+\.?\d*\s*ton\s*(split|window|inverter))"
         , re.IGNORECASE), "air-conditioners"),
 
-    # ── Refrigerators ──────────────────────────────────────────────────
+    # Refrigerators
     (re.compile(
         r"\b(refrigerator|fridge|double door|single door|"
-        r"side.by.side|french door fridge|mini fridge|"
-        r"\d+\s*litr?e?\s*(refrigerator|fridge|double|single))"
+        r"side.by.side|french door fridge|mini fridge)"
         , re.IGNORECASE), "refrigerators"),
 
-    # ── Washing Machines ───────────────────────────────────────────────
+    # Washing machines
     (re.compile(
         r"\b(washing machine|washer dryer|front load|top load|"
-        r"semi.automatic wash|fully.automatic wash|"
-        r"\d+\.?\d*\s*kg\s*(washing|front|top|semi|fully))"
+        r"semi.automatic wash|fully.automatic wash)"
         , re.IGNORECASE), "washing-machines"),
 
-    # ── Appliances (general — after specific sub-categories) ───────────
-    (re.compile(
-        r"\b(air purifier|water purifier|vacuum cleaner|robot vacuum|"
-        r"geyser|water heater|chimney|kitchen chimney|"
-        r"microwave|oven|otg oven|dishwasher|room heater|"
-        r"dehumidifier|humidifier|fan\s|ceiling fan|table fan|tower fan|"
-        r"exhaust fan|pedestal fan|cooler|air cooler|desert cooler)"
-        , re.IGNORECASE), "appliances"),
+    # Water purifiers
+    (re.compile(r"\b(water purifier|ro purifier)", re.IGNORECASE), "water-purifiers"),
 
-    # ── Kitchen Tools ──────────────────────────────────────────────────
+    # Air purifiers
+    (re.compile(r"\b(air purifier)", re.IGNORECASE), "air-purifiers"),
+
+    # Vacuum cleaners
+    (re.compile(r"\b(vacuum cleaner|robot vacuum)", re.IGNORECASE), "vacuum-cleaners"),
+
+    # Fans & coolers
+    (re.compile(
+        r"\b(ceiling fan|table fan|tower fan|exhaust fan|pedestal fan|"
+        r"air cooler|desert cooler)"
+        , re.IGNORECASE), "fans-coolers"),
+
+    # Geysers & heaters
+    (re.compile(r"\b(geyser|water heater|room heater)", re.IGNORECASE), "geysers-heaters"),
+
+    # Irons
+    (re.compile(r"\b(steam iron|garment steamer|\biron\b)", re.IGNORECASE), "irons-steamers"),
+
+    # Kitchen appliances
     (re.compile(
         r"\b(mixer grinder|juicer|blender|food processor|hand blender|"
-        r"induction cooktop|electric kettle|air fryer|coffee maker|"
-        r"coffee machine|espresso|toaster|sandwich maker|roti maker|"
-        r"rice cooker|pressure cooker|slow cooker|instant pot|"
-        r"iron |steam iron|garment steamer|hand mixer|egg boiler|"
-        r"choppers?|vegetable|slicer|peeler)"
-        , re.IGNORECASE), "kitchen-tools"),
+        r"air fryer|coffee maker|coffee machine|espresso|rice cooker|"
+        r"pressure cooker|slow cooker|instant pot|egg boiler|chimney|"
+        r"kitchen chimney|dishwasher)"
+        , re.IGNORECASE), "kitchen-appliances"),
 
-    # ── Computers peripherals → laptops (closest match) ────────────────
-    (re.compile(
-        r"\b(monitor\b|computer monitor|gaming monitor|curved monitor|"
-        r"keyboard|mechanical keyboard|wireless keyboard|mouse\b|"
-        r"gaming mouse|wireless mouse|mousepad|laptop bag|laptop stand|"
-        r"laptop sleeve|docking station|usb hub|kvm switch|"
-        r"external hard|portable ssd|pen drive|flash drive|"
-        r"graphics card|gpu|ram\s*\d+\s*gb|ssd\s*\d+|nvme|"
-        r"router|wifi|mesh router|range extender|ethernet|"
-        r"ups |uninterruptible|surge protector|printer|scanner)"
-        , re.IGNORECASE), "laptops"),
+    # Induction
+    (re.compile(r"\b(induction cooktop|induction)", re.IGNORECASE), "induction-cooktops"),
 
-    # ── Gaming → laptops (no separate gaming category) ─────────────────
-    (re.compile(
-        r"\b(gaming chair|gaming controller|gamepad|joystick|"
-        r"gaming headset|gaming desk|ps5|playstation|xbox|nintendo)"
-        , re.IGNORECASE), "laptops"),
+    # Electric kettles
+    (re.compile(r"\b(electric kettle)", re.IGNORECASE), "electric-kettles"),
 
-    # ── Personal care / grooming / beauty → closest: kitchen-tools or appliances
-    (re.compile(
-        r"\b(trimmer|electric shaver|hair dryer|hair straightener|"
-        r"curling iron|epilator|electric toothbrush|massager|"
-        r"body groomer|nose trimmer|beard trimmer)"
-        , re.IGNORECASE), "appliances"),
+    # Microwave ovens
+    (re.compile(r"\b(microwave|otg oven)", re.IGNORECASE), "microwave-ovens"),
 
-    # ── Fitness / sports equipment ─────────────────────────────────────
-    (re.compile(
-        r"\b(treadmill|exercise bike|elliptical|dumbbell|weight|"
-        r"yoga mat|resistance band|pull.up bar|gym|bench press|"
-        r"cycling|skipping rope|boxing glove)"
-        , re.IGNORECASE), "appliances"),
+    # Sandwich makers
+    (re.compile(r"\b(sandwich maker|toaster)", re.IGNORECASE), "sandwich-makers-grills"),
 
-    # ── Home & furniture → home-kitchen ────────────────────────────────
+    # Personal care
     (re.compile(
-        r"\b(mattress|office chair|study table|bed\b|sofa|"
-        r"shoe rack|bookshelf|wardrobe|desk\b|pillow|"
-        r"bedsheet|curtain|rug\b|carpet|bean bag)"
-        , re.IGNORECASE), "home-kitchen"),
+        r"\b(trimmer|electric shaver|beard trimmer|body groomer|nose trimmer)"
+        , re.IGNORECASE), "trimmers-shavers"),
+    (re.compile(
+        r"\b(hair dryer|hair straightener|curling iron)"
+        , re.IGNORECASE), "hair-dryers-stylers"),
+    (re.compile(r"\b(electric toothbrush)", re.IGNORECASE), "electric-toothbrushes"),
 
-    # ── Smart home → electronics ───────────────────────────────────────
+    # Computers peripherals
     (re.compile(
-        r"\b(smart plug|smart bulb|smart light|smart lock|"
-        r"smart door|alexa|echo dot|google home|google nest|"
-        r"smart display|smart speaker)"
-        , re.IGNORECASE), "electronics"),
+        r"\b(computer monitor|gaming monitor|curved monitor|\bmonitor\b)"
+        , re.IGNORECASE), "monitors"),
+    (re.compile(r"\b(printer|scanner)", re.IGNORECASE), "printers-scanners"),
+    (re.compile(r"\b(router|wifi|mesh router)", re.IGNORECASE), "networking"),
+    (re.compile(
+        r"\b(keyboard|mechanical keyboard|mouse\b|gaming mouse|mousepad|"
+        r"webcam|graphics card|gpu|usb hub|docking station)"
+        , re.IGNORECASE), "computer-accessories"),
+    (re.compile(
+        r"\b(external hard|portable ssd|pen drive|flash drive|"
+        r"ssd\s*\d+|nvme|memory card|nas storage)"
+        , re.IGNORECASE), "storage-devices"),
+    (re.compile(r"\b(desktop|mini pc)", re.IGNORECASE), "desktops"),
 
-    # ── Baby / kids ────────────────────────────────────────────────────
+    # Gaming
     (re.compile(
-        r"\b(baby stroller|car seat.*baby|baby monitor|high chair|"
-        r"diaper|baby bottle|sterilizer)"
-        , re.IGNORECASE), "home-kitchen"),
+        r"\b(ps5|playstation|xbox|nintendo|gaming console)"
+        , re.IGNORECASE), "gaming-consoles"),
+    (re.compile(
+        r"\b(gaming controller|gamepad|joystick|gaming chair|gaming desk)"
+        , re.IGNORECASE), "gaming-accessories"),
 
-    # ── Car accessories → electronics ──────────────────────────────────
-    (re.compile(
-        r"\b(dash cam|car charger|car air purifier|tyre inflator|"
-        r"car vacuum|car mount|gps tracker|car stereo)"
-        , re.IGNORECASE), "electronics"),
+    # Fitness
+    (re.compile(r"\b(treadmill|exercise bike|elliptical)", re.IGNORECASE), "treadmills-cycles"),
+    (re.compile(r"\b(dumbbell|weight|gym equipment)", re.IGNORECASE), "dumbbells-weights"),
+    (re.compile(r"\b(yoga mat|yoga)", re.IGNORECASE), "yoga-accessories"),
 
-    # ── Musical instruments → electronics ──────────────────────────────
-    (re.compile(
-        r"\b(guitar|keyboard.*piano|digital piano|ukulele|"
-        r"cajon|drum pad|synthesizer)"
-        , re.IGNORECASE), "electronics"),
+    # Furniture
+    (re.compile(r"\b(mattress|bed\b|wardrobe|pillow)", re.IGNORECASE), "bedroom-furniture"),
+    (re.compile(r"\b(office chair|study table|desk\b)", re.IGNORECASE), "office-furniture"),
+    (re.compile(r"\b(sofa|bean bag|dining table)", re.IGNORECASE), "living-room-furniture"),
+    (re.compile(r"\b(shoe rack|bookshelf)", re.IGNORECASE), "storage-furniture"),
+    (re.compile(r"\b(bedsheet|curtain|rug\b|carpet)", re.IGNORECASE), "bedsheets"),
 
-    # ── Luggage / bags → fashion ───────────────────────────────────────
-    (re.compile(
-        r"\b(laptop bag|backpack|suitcase|trolley bag|duffle|"
-        r"messenger bag|briefcase|travel bag|luggage)"
-        , re.IGNORECASE), "fashion"),
+    # Bags & luggage
+    (re.compile(r"\b(backpack|laptop bag|school bag)", re.IGNORECASE), "backpacks"),
+    (re.compile(r"\b(suitcase|trolley bag|luggage)", re.IGNORECASE), "suitcases"),
+    (re.compile(r"\b(wallet)", re.IGNORECASE), "wallets"),
+
+    # Books
+    (re.compile(r"\b(book|novel|fiction|non.fiction|autobiography)", re.IGNORECASE), "fiction"),
+
+    # Baby
+    (re.compile(r"\b(baby stroller|stroller)", re.IGNORECASE), "strollers"),
+    (re.compile(r"\b(car seat.*baby|child seat)", re.IGNORECASE), "car-seats"),
+
+    # Automotive
+    (re.compile(r"\b(dash cam|car charger|car accessor)", re.IGNORECASE), "car-electronics"),
+    (re.compile(r"\b(helmet)", re.IGNORECASE), "helmets"),
+
+    # Musical instruments
+    (re.compile(r"\b(guitar)", re.IGNORECASE), "acoustic-guitars"),
+    (re.compile(r"\b(piano|keyboard.*piano)", re.IGNORECASE), "digital-pianos"),
+
+    # Health & nutrition
+    (re.compile(r"\b(protein|whey)", re.IGNORECASE), "protein-fitness"),
+    (re.compile(r"\b(vitamin|supplement)", re.IGNORECASE), "vitamins-minerals"),
+
+    # Beauty
+    (re.compile(r"\b(perfume|cologne|fragrance)", re.IGNORECASE), "perfumes"),
+    (re.compile(r"\b(deodorant|body spray)", re.IGNORECASE), "deodorants"),
+
+    # Pets
+    (re.compile(r"\b(dog food|puppy food)", re.IGNORECASE), "dog-food"),
+    (re.compile(r"\b(cat food|kitten food)", re.IGNORECASE), "cat-food"),
+
+    # Plants
+    (re.compile(r"\b(indoor plant|artificial plant|money plant)", re.IGNORECASE), "indoor-plants"),
 ]
 
 
@@ -210,25 +251,36 @@ class Command(BaseCommand):
             "--force", action="store_true",
             help="Re-assign categories even for products that already have one.",
         )
+        parser.add_argument(
+            "--batch-size", type=int, default=500,
+            help="Chunk size for iterator (default 500).",
+        )
 
     def handle(self, *args, **options):
+        from apps.products.category_mapper import match_by_keywords
         from apps.products.models import Category, Product
 
         dry_run = options["dry_run"]
         force = options["force"]
 
-        # Load category map
+        # Load category map (for fallback regex rules + product count update)
         categories = {c.slug: c for c in Category.objects.all()}
         if not categories:
             self.stderr.write(self.style.ERROR(
-                "No categories in DB. Run 'python manage.py seed_data' first."
+                "No categories in DB. Run 'python manage.py seed_category_hierarchy' first."
             ))
             return
 
         # Get products to process
+        from django.db.models import Q
         qs = Product.objects.filter(status=Product.Status.ACTIVE)
         if not force:
-            qs = qs.filter(category__isnull=True)
+            # Include products with no category OR with "uncategorized"
+            uncat = categories.get("uncategorized")
+            if uncat:
+                qs = qs.filter(Q(category__isnull=True) | Q(category=uncat))
+            else:
+                qs = qs.filter(category__isnull=True)
 
         total = qs.count()
         self.stdout.write(f"Processing {total} products (dry_run={dry_run}, force={force})...")
@@ -237,14 +289,22 @@ class Command(BaseCommand):
         unmatched = 0
         category_counts: dict[str, int] = {}
 
-        for product in qs.iterator(chunk_size=500):
-            matched_slug = self._match_category(product.title)
-            if matched_slug and matched_slug in categories:
+        for product in qs.iterator(chunk_size=options["batch_size"]):
+            # Step 1: Try canonical keyword mapper (273 keywords, precise)
+            cat = match_by_keywords(product.title.lower())
+
+            # Step 2: Fallback to regex rules (broader patterns)
+            if not cat:
+                matched_slug = self._match_fallback(product.title)
+                if matched_slug and matched_slug in categories:
+                    cat = categories[matched_slug]
+
+            if cat:
                 if not dry_run:
-                    product.category = categories[matched_slug]
+                    product.category = cat
                     product.save(update_fields=["category", "updated_at"])
                 assigned += 1
-                category_counts[matched_slug] = category_counts.get(matched_slug, 0) + 1
+                category_counts[cat.slug] = category_counts.get(cat.slug, 0) + 1
             else:
                 unmatched += 1
                 if options["verbosity"] >= 2:
@@ -262,7 +322,8 @@ class Command(BaseCommand):
 
         # Summary
         self.stdout.write(self.style.SUCCESS(
-            f"\n{'[DRY RUN] ' if dry_run else ''}Done: {assigned} assigned, {unmatched} unmatched out of {total}"
+            f"\n{'[DRY RUN] ' if dry_run else ''}Done: {assigned} assigned, "
+            f"{unmatched} unmatched out of {total}"
         ))
         for slug, count in sorted(category_counts.items(), key=lambda x: -x[1]):
             self.stdout.write(f"  {slug}: {count}")
@@ -278,9 +339,9 @@ class Command(BaseCommand):
                 self.stderr.write(self.style.WARNING(f"Meilisearch reindex failed: {exc}"))
 
     @staticmethod
-    def _match_category(title: str) -> str | None:
-        """Match a product title against category rules. Returns category slug or None."""
-        for pattern, category_slug in _CATEGORY_RULES:
+    def _match_fallback(title: str) -> str | None:
+        """Match a product title against fallback regex rules."""
+        for pattern, category_slug in _FALLBACK_RULES:
             if pattern.search(title):
                 return category_slug
         return None

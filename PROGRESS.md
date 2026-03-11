@@ -4985,3 +4985,26 @@ All admin display methods that format prices/amounts now divide by 100 before di
 - `backend/whydud/settings/base.py` — `TIME_ZONE = "Asia/Kolkata"` (with `USE_TZ=True`, storage stays UTC, display converts to IST)
 - All custom `strftime` calls across 12 admin files wrapped with `timezone.localtime()` for correct IST display
 - Backfill console + enrichment console timestamp serialization wrapped with `localtime()`
+
+### FIX-5: Auto-Assign Categories from Product Titles (2026-03-11)
+
+**Problem:** Most products from the backfill pipeline were "Uncategorized" because:
+1. Lightweight creator set `category=None` (deferred to enrichment)
+2. curl_cffi enrichment (P2/P3) never assigned categories (only Playwright path did)
+3. Even Playwright enrichment could fail to map if breadcrumbs didn't match
+
+**Fix — title-based category inference at every stage:**
+
+| File | Change |
+|---|---|
+| `backend/apps/pricing/backfill/lightweight_creator.py` | Now calls `match_by_keywords(title)` to assign category at Product creation |
+| `backend/apps/pricing/backfill/enrichment.py` | curl_cffi path now assigns category if product is still uncategorized |
+| `backend/apps/products/category_mapper.py` | Renamed `_match_by_keywords` → `match_by_keywords` (public API) |
+| `backend/apps/products/management/commands/assign_categories.py` | Upgraded: uses canonical 273-keyword mapper as primary, regex fallback rules with proper level-2 subcategory slugs, also processes "uncategorized" products |
+
+**Category resolution order:**
+1. **Creation** — `match_by_keywords(title)` assigns best-guess category from 273 keywords
+2. **curl_cffi enrichment** — if still uncategorized, tries again with title + any breadcrumbs from HTTP extraction
+3. **Playwright enrichment** — `resolve_canonical_category()` uses marketplace breadcrumbs (most accurate)
+
+**Backfill existing products:** `python manage.py assign_categories --reindex`
