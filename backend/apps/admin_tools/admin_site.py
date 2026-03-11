@@ -718,6 +718,15 @@ class WhydudAdminSite(AdminSite):
             "data": [by_scrape.get(s, 0) for s in scrape_labels],
         })
 
+        # --- Category list for filter dropdowns (distinct values from BackfillProduct) ---
+        backfill_categories = list(
+            BackfillProduct.objects
+            .exclude(category_name="")
+            .values_list("category_name", flat=True)
+            .distinct()
+            .order_by("category_name")
+        )
+
         # --- Online workers for node targeting dropdown ---
         online_workers = self._get_online_workers()
 
@@ -753,6 +762,7 @@ class WhydudAdminSite(AdminSite):
             "online_workers": online_workers,
             "active_tasks": active_tasks,
             "recent_task_results": recent_task_results,
+            "backfill_categories": backfill_categories,
         }
         return render(request, "admin/backfill_console.html", context)
 
@@ -872,11 +882,16 @@ class WhydudAdminSite(AdminSite):
                 if err:
                     return err
 
+                category_names = post_data.getlist("category_names")
+
                 task_kwargs = {"batch_size": batch, "repeat": repeat}
                 if delay is not None:
                     task_kwargs["delay"] = delay
+                if category_names:
+                    task_kwargs["category_names"] = category_names
                 rpt = " repeat=ON" if repeat else ""
                 dly = f" delay={delay}s" if delay else ""
+                cat = f" categories={','.join(category_names)}" if category_names else ""
 
                 task_ids = []
                 if nodes_map:
@@ -887,12 +902,12 @@ class WhydudAdminSite(AdminSite):
                             r = run_phase2_buyhatke.apply_async(kwargs=task_kwargs, queue=queue_name)
                             task_ids.append(f"{prefix}:{r.id[:8]}")
                     nodes_str = ",".join(nodes_map.keys())
-                    return f"BH-Fill → {nodes_str} ({workers}x each, batch {batch}{rpt}{dly}). Tasks: {', '.join(task_ids)}"
+                    return f"BH-Fill → {nodes_str} ({workers}x each, batch {batch}{rpt}{dly}{cat}). Tasks: {', '.join(task_ids)}"
                 else:
                     for _ in range(workers):
                         r = run_phase2_buyhatke.delay(**task_kwargs)
                         task_ids.append(r.id[:8])
-                    return f"BH-Fill dispatched ({workers} workers, batch {batch}{rpt}{dly}). Tasks: {', '.join(task_ids)}"
+                    return f"BH-Fill dispatched ({workers} workers, batch {batch}{rpt}{dly}{cat}). Tasks: {', '.join(task_ids)}"
 
             elif action == "ph-extend":
                 from apps.pricing.tasks import run_phase3_extend
@@ -908,11 +923,16 @@ class WhydudAdminSite(AdminSite):
                 if err:
                     return err
 
+                category_names = post_data.getlist("category_names")
+
                 task_kwargs = {"limit": limit, "repeat": repeat}
                 if delay is not None:
                     task_kwargs["delay"] = delay
+                if category_names:
+                    task_kwargs["category_names"] = category_names
                 rpt = " repeat=ON" if repeat else ""
                 dly = f" delay={delay}s" if delay else ""
+                cat = f" categories={','.join(category_names)}" if category_names else ""
 
                 task_ids = []
                 if nodes_map:
@@ -923,12 +943,12 @@ class WhydudAdminSite(AdminSite):
                             r = run_phase3_extend.apply_async(kwargs=task_kwargs, queue=queue_name)
                             task_ids.append(f"{prefix}:{r.id[:8]}")
                     nodes_str = ",".join(nodes_map.keys())
-                    return f"PH-Extend → {nodes_str} ({workers}x each, limit {limit}{rpt}{dly}). Tasks: {', '.join(task_ids)}"
+                    return f"PH-Extend → {nodes_str} ({workers}x each, limit {limit}{rpt}{dly}{cat}). Tasks: {', '.join(task_ids)}"
                 else:
                     for _ in range(workers):
                         r = run_phase3_extend.delay(**task_kwargs)
                         task_ids.append(r.id[:8])
-                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}{dly}). Tasks: {', '.join(task_ids)}"
+                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}{dly}{cat}). Tasks: {', '.join(task_ids)}"
 
             elif action == "create-lightweight":
                 from apps.pricing.backfill.lightweight_creator import (

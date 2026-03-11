@@ -203,6 +203,7 @@ def run_phase2_buyhatke(
     marketplace_slug: str | None = None,
     delay: float | None = None,
     repeat: bool = False,
+    category_names: list[str] | None = None,
 ) -> dict:
     """Phase 2: BuyHatke bulk price history fill for discovered products.
 
@@ -210,6 +211,7 @@ def run_phase2_buyhatke(
     batch via SELECT ... FOR UPDATE SKIP LOCKED.
 
     If repeat=True, keeps claiming new batches until no items remain.
+    If category_names provided, only processes products with matching category_name.
     """
     import asyncio
 
@@ -223,6 +225,7 @@ def run_phase2_buyhatke(
                 batch_size=batch_size,
                 marketplace_slug=marketplace_slug,
                 delay=delay,
+                category_names=category_names,
             )
         )
         all_stats["rounds"] += 1
@@ -245,6 +248,7 @@ def run_phase3_extend(
     marketplace_slug: str | None = None,
     delay: float | None = None,
     repeat: bool = False,
+    category_names: list[str] | None = None,
 ) -> dict:
     """Phase 3: Extend top products with PH deep history.
 
@@ -252,6 +256,7 @@ def run_phase3_extend(
     batch via SELECT ... FOR UPDATE SKIP LOCKED.
 
     If repeat=True, keeps claiming new batches until no items remain.
+    If category_names provided, only processes products with matching category_name.
     """
     import asyncio
 
@@ -265,6 +270,7 @@ def run_phase3_extend(
                 limit=limit,
                 marketplace_slug=marketplace_slug,
                 delay=delay,
+                category_names=category_names,
             )
         )
         all_stats["rounds"] += 1

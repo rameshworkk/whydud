@@ -33,52 +33,58 @@
 {% endif %}
 {% endblock %}
 
-<div id="changelist">
-  {% block search %}{% search_form cl %}{% endblock %}
+<div class="changelist-layout">
+  <div class="changelist-main">
+    <div id="changelist">
+      {% block search %}{% search_form cl %}{% endblock %}
 
-  {% block date_hierarchy %}{% if cl.date_hierarchy %}{% date_hierarchy cl %}{% endif %}{% endblock %}
+      {% block date_hierarchy %}{% if cl.date_hierarchy %}{% date_hierarchy cl %}{% endif %}{% endblock %}
 
-  <form id="changelist-form" method="post"{% if cl.formset and cl.formset.is_multipart %} enctype="multipart/form-data"{% endif %} novalidate>
-    {% csrf_token %}
+      <form id="changelist-form" method="post"{% if cl.formset and cl.formset.is_multipart %} enctype="multipart/form-data"{% endif %} novalidate>
+        {% csrf_token %}
 
-    {% if cl.formset %}
-    <div>{{ cl.formset.management_form }}</div>
-    {% endif %}
+        {% if cl.formset %}
+        <div>{{ cl.formset.management_form }}</div>
+        {% endif %}
 
-    {% block result_list %}
-    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
-                rounded-2xl overflow-hidden shadow-xs mb-4">
-      {% if action_form and actions_on_top and cl.full_result_count %}
-      {% admin_actions %}
-      {% endif %}
-      {% result_list cl %}
-      {% if action_form and actions_on_bottom and cl.full_result_count %}
-      {% admin_actions %}
-      {% endif %}
+        {% block result_list %}
+        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                    rounded-2xl overflow-hidden shadow-xs mb-4">
+          {% if action_form and actions_on_top and cl.full_result_count %}
+          {% admin_actions %}
+          {% endif %}
+          {% result_list cl %}
+          {% if action_form and actions_on_bottom and cl.full_result_count %}
+          {% admin_actions %}
+          {% endif %}
+        </div>
+        {% endblock %}
+
+        {% block pagination %}{% pagination cl %}{% endblock %}
+      </form>
     </div>
-    {% endblock %}
+  </div>
 
-    {% block pagination %}{% pagination cl %}{% endblock %}
-  </form>
-</div>
-
-{% block filters %}
-{% if cl.has_filters %}
-<div id="changelist-filter">
-  <h2>{% translate 'Filter' %}</h2>
-  {% if cl.has_active_filters %}
-  <h3>
-    <a href="{{ cl.clear_all_filters_qs }}">
-      &#10006; {% translate "Clear all filters" %}
-    </a>
-  </h3>
+  {% block filters %}
+  {% if cl.has_filters %}
+  <div class="changelist-sidebar">
+    <div id="changelist-filter">
+      <h2>{% translate 'Filter' %}</h2>
+      {% if cl.has_active_filters %}
+      <h3>
+        <a href="{{ cl.clear_all_filters_qs }}">
+          &#10006; {% translate "Clear all filters" %}
+        </a>
+      </h3>
+      {% endif %}
+      {% for spec in cl.filter_specs %}
+      {% admin_list_filter cl spec %}
+      {% endfor %}
+    </div>
+  </div>
   {% endif %}
-  {% for spec in cl.filter_specs %}
-  {% admin_list_filter cl spec %}
-  {% endfor %}
+  {% endblock %}
 </div>
-{% endif %}
-{% endblock %}
 
 {% endblock %}
 

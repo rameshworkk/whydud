@@ -45,7 +45,9 @@ def _write_db() -> str:
 
 
 def _claim_batch(
-    batch_size: int, marketplace_slug: str | None
+    batch_size: int,
+    marketplace_slug: str | None,
+    category_names: list[str] | None = None,
 ) -> list[str]:
     """Atomically claim a batch of DISCOVERED products for this worker.
 
@@ -71,6 +73,9 @@ def _claim_batch(
 
         if marketplace_slug:
             qs = qs.filter(marketplace_slug=marketplace_slug)
+
+        if category_names:
+            qs = qs.filter(category_name__in=category_names)
 
         # select_for_update(skip_locked=True) skips rows locked by other workers
         claimed_ids = list(
@@ -186,6 +191,7 @@ async def buyhatke_bulk_fill(
     batch_size: int | None = None,
     marketplace_slug: str | None = None,
     delay: float | None = None,
+    category_names: list[str] | None = None,
 ) -> dict:
     """Phase 2: For all discovered products, fetch BuyHatke price history.
 
@@ -197,6 +203,7 @@ async def buyhatke_bulk_fill(
         batch_size: Max products to process in this run.
         marketplace_slug: Filter by marketplace slug.
         delay: Override BH request delay.
+        category_names: Filter by category names (e.g. ['smartphone', 'laptop']).
 
     Returns:
         Stats dict with counts.
@@ -204,7 +211,7 @@ async def buyhatke_bulk_fill(
     batch_size = batch_size or BackfillConfig.phase2_batch_size()
 
     # Atomically claim a batch — other workers will skip these rows
-    claimed_ids = await sync_to_async(_claim_batch)(batch_size, marketplace_slug)
+    claimed_ids = await sync_to_async(_claim_batch)(batch_size, marketplace_slug, category_names)
 
     if not claimed_ids:
         logger.info("Phase 2: no discovered products to fill (or all claimed by other workers)")

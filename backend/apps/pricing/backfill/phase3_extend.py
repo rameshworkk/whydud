@@ -50,7 +50,9 @@ def _write_db() -> str:
 
 
 def _claim_batch(
-    limit: int, marketplace_slug: str | None
+    limit: int,
+    marketplace_slug: str | None,
+    category_names: list[str] | None = None,
 ) -> list[str]:
     """Atomically claim a batch of BH_FILLED products for this worker.
 
@@ -73,6 +75,9 @@ def _claim_batch(
 
         if marketplace_slug:
             qs = qs.filter(marketplace_slug=marketplace_slug)
+
+        if category_names:
+            qs = qs.filter(category_name__in=category_names)
 
         # Prioritize: products with existing listings first, then by data point count
         claimed_ids = list(
@@ -224,6 +229,7 @@ async def extend_with_pricehistory(
     limit: int | None = None,
     marketplace_slug: str | None = None,
     delay: float | None = None,
+    category_names: list[str] | None = None,
 ) -> dict:
     """Phase 3: Extend BH-filled products with PH deep history.
 
@@ -235,6 +241,7 @@ async def extend_with_pricehistory(
         limit: Max products to process in this run.
         marketplace_slug: Filter by marketplace slug.
         delay: Override PH request delay.
+        category_names: Filter by category names (e.g. ['smartphone', 'laptop']).
 
     Returns:
         Stats dict with counts.
@@ -242,7 +249,7 @@ async def extend_with_pricehistory(
     limit = limit or BackfillConfig.phase3_limit()
 
     # Atomically claim a batch — other workers will skip these rows
-    claimed_ids = await sync_to_async(_claim_batch)(limit, marketplace_slug)
+    claimed_ids = await sync_to_async(_claim_batch)(limit, marketplace_slug, category_names)
 
     if not claimed_ids:
         logger.info("Phase 3: no BH-filled products to extend (or all claimed by other workers)")
