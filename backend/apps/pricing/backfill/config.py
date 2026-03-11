@@ -73,6 +73,26 @@ class BackfillConfig:
     def ph_timeout(cls) -> float:
         return float(_get("BACKFILL_PH_TIMEOUT", 30.0))
 
+    @classmethod
+    def ph_max_retries(cls) -> int:
+        """Max retry attempts on 403/429 before giving up."""
+        return int(_get("BACKFILL_PH_MAX_RETRIES", 3))
+
+    @classmethod
+    def ph_cooldown_interval(cls) -> float:
+        """Seconds between alternating cooldown pauses."""
+        return float(_get("BACKFILL_PH_COOLDOWN_INTERVAL", 180.0))
+
+    @classmethod
+    def ph_cooldown_short(cls) -> float:
+        """Short cooldown pause duration in seconds."""
+        return float(_get("BACKFILL_PH_COOLDOWN_SHORT", 15.0))
+
+    @classmethod
+    def ph_cooldown_long(cls) -> float:
+        """Long cooldown pause duration in seconds."""
+        return float(_get("BACKFILL_PH_COOLDOWN_LONG", 30.0))
+
     # ── Batch sizes ──────────────────────────────────────────────
 
     @classmethod

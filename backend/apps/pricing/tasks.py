@@ -249,6 +249,7 @@ def run_phase3_extend(
     delay: float | None = None,
     repeat: bool = False,
     category_names: list[str] | None = None,
+    include_discovered: bool = False,
 ) -> dict:
     """Phase 3: Extend top products with PH deep history.
 
@@ -257,12 +258,16 @@ def run_phase3_extend(
 
     If repeat=True, keeps claiming new batches until no items remain.
     If category_names provided, only processes products with matching category_name.
+    If include_discovered=True, also processes DISCOVERED products (skips bh-fill).
     """
     import asyncio
 
     from apps.pricing.backfill.phase3_extend import extend_with_pricehistory
 
-    all_stats = {"total": 0, "extended": 0, "injected": 0, "token_failed": 0, "api_failed": 0, "points": 0, "rounds": 0}
+    all_stats = {
+        "total": 0, "extended": 0, "injected": 0, "token_failed": 0,
+        "api_failed": 0, "rate_limited": 0, "points": 0, "rounds": 0,
+    }
 
     while True:
         result = asyncio.run(
@@ -271,11 +276,18 @@ def run_phase3_extend(
                 marketplace_slug=marketplace_slug,
                 delay=delay,
                 category_names=category_names,
+                include_discovered=include_discovered,
             )
         )
         all_stats["rounds"] += 1
-        for key in ("total", "extended", "injected", "token_failed", "api_failed", "points"):
+        for key in ("total", "extended", "injected", "token_failed", "api_failed", "rate_limited", "points"):
             all_stats[key] += result.get(key, 0)
+
+        # Stop if rate limited (back off entirely)
+        if result.get("rate_limited", 0) > 0:
+            logger.warning("Phase 3: stopping repeat due to rate limiting (%d rate-limited items)",
+                           result["rate_limited"])
+            break
 
         if not repeat or result.get("total", 0) == 0:
             break

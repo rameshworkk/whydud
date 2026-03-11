@@ -8,6 +8,8 @@ Two operating modes:
    for full 3-5 year history + sale events.
 
 Rate limits are stricter than BuyHatke due to Cloudflare protection.
+Includes retry with exponential backoff on 403/429 and alternating
+cooldown pauses (15s/30s every 3 minutes) to stay under detection.
 
 Usage::
 
@@ -27,6 +29,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import datetime
 from decimal import Decimal
 from xml.etree import ElementTree
@@ -79,8 +82,18 @@ class APIError(Exception):
     """PriceHistory.app returned an API error."""
 
 
+class RateLimitError(Exception):
+    """PriceHistory.app rate-limited us (403/429)."""
+
+
 class PHClient:
-    """Async context manager for PriceHistory.app API calls."""
+    """Async context manager for PriceHistory.app API calls.
+
+    Includes:
+    - Retry with exponential backoff on 403/429
+    - Alternating cooldown pauses (15s/30s every 3 min)
+    - Adaptive delay increase on consecutive rate limits
+    """
 
     def __init__(
         self,
@@ -90,13 +103,29 @@ class PHClient:
     ) -> None:
         self._html_delay = delay if delay is not None else BackfillConfig.ph_html_delay()
         self._api_delay = BackfillConfig.ph_api_delay()
+        self._base_html_delay = self._html_delay
+        self._base_api_delay = self._api_delay
         self._concurrency = concurrency or BackfillConfig.ph_concurrency()
         self._timeout = timeout or BackfillConfig.ph_timeout()
+        self._max_retries = BackfillConfig.ph_max_retries()
         self._semaphore: asyncio.Semaphore | None = None
         self._client: httpx.AsyncClient | None = None
         self._request_count = 0
         self._error_count = 0
         self._ua_idx = 0
+
+        # Rate limit tracking
+        self._consecutive_403s = 0
+        self._cooldown_until: float = 0
+        self._rate_limited = False
+
+        # Alternating cooldown pause state
+        self._start_time: float = 0
+        self._last_cooldown_time: float = 0
+        self._cooldown_cycle = 0  # alternates 0 (short) / 1 (long)
+        self._cooldown_interval = BackfillConfig.ph_cooldown_interval()
+        self._cooldown_short = BackfillConfig.ph_cooldown_short()
+        self._cooldown_long = BackfillConfig.ph_cooldown_long()
 
     async def __aenter__(self) -> PHClient:
         self._semaphore = asyncio.Semaphore(self._concurrency)
@@ -109,21 +138,80 @@ class PHClient:
                 "Accept-Language": "en-US,en;q=0.9",
             },
         )
+        self._start_time = time.monotonic()
+        self._last_cooldown_time = self._start_time
         return self
 
     async def __aexit__(self, *args: object) -> None:
         if self._client:
             await self._client.aclose()
         logger.info(
-            "PHClient closed: %d requests, %d errors",
+            "PHClient closed: %d requests, %d errors, %d consecutive_403s",
             self._request_count,
             self._error_count,
+            self._consecutive_403s,
         )
 
     def _next_ua(self) -> str:
         ua = _USER_AGENTS[self._ua_idx % len(_USER_AGENTS)]
         self._ua_idx += 1
         return ua
+
+    async def _maybe_cooldown_pause(self) -> None:
+        """Check if we need an alternating cooldown pause (15s/30s every 3 min)."""
+        now = time.monotonic()
+        elapsed_since_last = now - self._last_cooldown_time
+        if elapsed_since_last >= self._cooldown_interval:
+            if self._cooldown_cycle % 2 == 0:
+                pause = self._cooldown_short
+            else:
+                pause = self._cooldown_long
+            self._cooldown_cycle += 1
+            self._last_cooldown_time = now
+            logger.info(
+                "PH cooldown pause: %.0fs (cycle %d, elapsed %.0fs)",
+                pause, self._cooldown_cycle, now - self._start_time,
+            )
+            await asyncio.sleep(pause)
+
+    async def _wait_for_cooldown(self) -> None:
+        """Wait if we're in a global cooldown period after exhausting retries."""
+        now = time.monotonic()
+        if now < self._cooldown_until:
+            wait = self._cooldown_until - now
+            logger.warning("PH global cooldown: waiting %.1fs", wait)
+            await asyncio.sleep(wait)
+
+    def _on_success(self) -> None:
+        """Decay delay back toward base on successful request."""
+        if self._consecutive_403s > 0:
+            self._consecutive_403s = max(0, self._consecutive_403s - 1)
+            self._html_delay = max(self._base_html_delay, self._html_delay * 0.9)
+            self._api_delay = max(self._base_api_delay, self._api_delay * 0.9)
+            if self._consecutive_403s == 0:
+                self._rate_limited = False
+
+    def _on_rate_limit(self) -> None:
+        """Increase delay adaptively on rate limit hit."""
+        self._consecutive_403s += 1
+        self._error_count += 1
+        self._rate_limited = True
+        # Exponential backoff on delays, capped at 30s
+        self._html_delay = min(self._base_html_delay * (2 ** self._consecutive_403s), 30.0)
+        self._api_delay = min(self._base_api_delay * (2 ** self._consecutive_403s), 30.0)
+        logger.warning(
+            "PH rate limit: consecutive_403s=%d, html_delay=%.1fs, api_delay=%.1fs",
+            self._consecutive_403s, self._html_delay, self._api_delay,
+        )
+
+    @property
+    def is_rate_limited(self) -> bool:
+        """True if we're currently experiencing rate limiting."""
+        return self._rate_limited
+
+    @property
+    def consecutive_403s(self) -> int:
+        return self._consecutive_403s
 
     # ── Sitemap Parsing (Phase 1) ────────────────────────────────
 
@@ -190,36 +278,65 @@ class PHClient:
     async def fetch_page_metadata(self, ph_code: str) -> dict:
         """Fetch a PH product page and extract metadata from JSON-LD.
 
+        Includes retry with exponential backoff on 403/429.
+
         Args:
             ph_code: The 8-char PH product code (e.g. ``"sy9uDEyp"``).
 
         Returns:
             Dict with keys: ``external_id``, ``marketplace_slug``, ``title``,
             ``current_price`` (paisa), ``image_url``, ``token``, ``brand_name``.
+
+        Raises:
+            RateLimitError: If all retries exhausted on 403/429.
         """
         assert self._client is not None
         assert self._semaphore is not None
 
-        # We need the full slug URL, but we can construct a minimal one
-        # PH redirects /p/CODE to the full slug URL
         url = f"{BackfillConfig.ph_base_url()}/p/{ph_code}"
 
-        async with self._semaphore:
-            await asyncio.sleep(self._html_delay)
-            self._request_count += 1
-            try:
-                resp = await self._client.get(
-                    url, headers={"User-Agent": self._next_ua()}
-                )
-                resp.raise_for_status()
-            except httpx.HTTPStatusError:
-                self._error_count += 1
-                return {"external_id": "", "marketplace_slug": "", "token": ""}
+        for attempt in range(self._max_retries):
+            async with self._semaphore:
+                await self._wait_for_cooldown()
+                await self._maybe_cooldown_pause()
+                await asyncio.sleep(self._html_delay)
+                self._request_count += 1
+                try:
+                    resp = await self._client.get(
+                        url, headers={"User-Agent": self._next_ua()}
+                    )
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    status = e.response.status_code
+                    if status in (403, 429):
+                        self._on_rate_limit()
+                        if attempt < self._max_retries - 1:
+                            wait = (attempt + 1) * 15
+                            logger.warning(
+                                "PH HTML 403 for %s, retry %d/%d in %ds (delay=%.1fs)",
+                                ph_code, attempt + 1, self._max_retries, wait, self._html_delay,
+                            )
+                            await asyncio.sleep(wait)
+                            continue
+                        # All retries exhausted — enter global cooldown
+                        cooldown = min(60 * self._consecutive_403s, 300)
+                        self._cooldown_until = time.monotonic() + cooldown
+                        raise RateLimitError(
+                            f"PH HTML rate limited after {self._max_retries} retries "
+                            f"(cooldown {cooldown}s)"
+                        ) from e
+                    self._error_count += 1
+                    return {"external_id": "", "marketplace_slug": "", "token": ""}
 
-        html = resp.text
-        result = self._extract_jsonld_metadata(html)
-        result["token"] = self._extract_token(html)
-        return result
+            # Success
+            self._on_success()
+            html = resp.text
+            result = self._extract_jsonld_metadata(html)
+            result["token"] = self._extract_token(html)
+            return result
+
+        # Should not reach here, but safety fallback
+        return {"external_id": "", "marketplace_slug": "", "token": ""}
 
     @staticmethod
     def _extract_token(html: str) -> str:
@@ -311,7 +428,7 @@ class PHClient:
     async def fetch_price_history(self, ph_code: str, token: str) -> dict:
         """Fetch full price history from PH API.
 
-        Requires a fresh token extracted from the HTML page.
+        Includes retry with exponential backoff on 403/429.
 
         Args:
             ph_code: The 8-char PH product code.
@@ -323,7 +440,8 @@ class PHClient:
 
         Raises:
             AuthError: If the token is invalid/expired.
-            APIError: If the API returns an error.
+            APIError: If the API returns a non-rate-limit error.
+            RateLimitError: If all retries exhausted on 403/429.
         """
         assert self._client is not None
         assert self._semaphore is not None
@@ -331,36 +449,62 @@ class PHClient:
         if not token:
             raise AuthError(f"No token provided for {ph_code}")
 
-        async with self._semaphore:
-            await asyncio.sleep(self._api_delay)
-            self._request_count += 1
-            try:
-                resp = await self._client.post(
-                    f"{BackfillConfig.ph_base_url()}/api/price/{ph_code}",
-                    headers={
-                        "User-Agent": self._next_ua(),
-                        "Content-Type": "application/json",
-                        "page": ph_code,
-                        "token": token,
-                        "Referer": f"{BackfillConfig.ph_base_url()}/p/{ph_code}",
-                        "Origin": BackfillConfig.ph_base_url(),
-                    },
-                    json={},
-                )
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                self._error_count += 1
-                raise APIError(f"PH API error {e.response.status_code}") from e
+        for attempt in range(self._max_retries):
+            async with self._semaphore:
+                await self._wait_for_cooldown()
+                await self._maybe_cooldown_pause()
+                await asyncio.sleep(self._api_delay)
+                self._request_count += 1
+                try:
+                    resp = await self._client.post(
+                        f"{BackfillConfig.ph_base_url()}/api/price/{ph_code}",
+                        headers={
+                            "User-Agent": self._next_ua(),
+                            "Content-Type": "application/json",
+                            "page": ph_code,
+                            "token": token,
+                            "Referer": f"{BackfillConfig.ph_base_url()}/p/{ph_code}",
+                            "Origin": BackfillConfig.ph_base_url(),
+                        },
+                        json={},
+                    )
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    status = e.response.status_code
+                    if status in (403, 429):
+                        self._on_rate_limit()
+                        if attempt < self._max_retries - 1:
+                            wait = (attempt + 1) * 15
+                            logger.warning(
+                                "PH API 403 for %s, retry %d/%d in %ds (delay=%.1fs)",
+                                ph_code, attempt + 1, self._max_retries, wait, self._api_delay,
+                            )
+                            await asyncio.sleep(wait)
+                            continue
+                        # All retries exhausted
+                        cooldown = min(60 * self._consecutive_403s, 300)
+                        self._cooldown_until = time.monotonic() + cooldown
+                        raise RateLimitError(
+                            f"PH API rate limited after {self._max_retries} retries "
+                            f"(cooldown {cooldown}s)"
+                        ) from e
+                    self._error_count += 1
+                    raise APIError(f"PH API error {status}") from e
 
-        body = resp.json()
+            # Success
+            self._on_success()
+            body = resp.json()
 
-        if body.get("status") is False:
-            msg = body.get("message", "Unknown error")
-            if "Authentication" in msg:
-                raise AuthError(msg)
-            raise APIError(msg)
+            if body.get("status") is False:
+                msg = body.get("message", "Unknown error")
+                if "Authentication" in msg:
+                    raise AuthError(msg)
+                raise APIError(msg)
 
-        return self._parse_api_response(body)
+            return self._parse_api_response(body)
+
+        # Should not reach here
+        raise APIError(f"PH API failed for {ph_code} after {self._max_retries} retries")
 
     @staticmethod
     def _parse_api_response(body: dict) -> dict:
@@ -419,4 +563,8 @@ class PHClient:
 
     @property
     def stats(self) -> dict[str, int]:
-        return {"requests": self._request_count, "errors": self._error_count}
+        return {
+            "requests": self._request_count,
+            "errors": self._error_count,
+            "consecutive_403s": self._consecutive_403s,
+        }

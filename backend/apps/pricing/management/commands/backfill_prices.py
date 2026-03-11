@@ -101,6 +101,7 @@ class Command(BaseCommand):
         p3.add_argument("--celery", action="store_true", help="Dispatch to Celery workers instead of running in-process")
         p3.add_argument("--workers", type=int, default=2, help="Number of Celery tasks to dispatch (default: 2)")
         p3.add_argument("--repeat", action="store_true", help="Keep claiming new batches until nothing left")
+        p3.add_argument("--include-discovered", action="store_true", help="Also process DISCOVERED products (skip bh-fill)")
 
         # ── Phase 4a: scrape ─────────────────────────────────────
         ps = sub.add_parser("scrape", help="Targeted scrape of backfill product ASINs/FPIDs")
@@ -363,12 +364,17 @@ class Command(BaseCommand):
 
         from apps.pricing.backfill.phase3_extend import extend_with_pricehistory
 
-        self.stdout.write(self.style.MIGRATE_HEADING("Phase 3: PH deep history extension"))
+        include_discovered = options.get("include_discovered", False)
+        mode = " (including DISCOVERED)" if include_discovered else ""
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"Phase 3: PH deep history extension{mode}"
+        ))
         result = asyncio.run(
             extend_with_pricehistory(
                 limit=options.get("limit", 5000),
                 marketplace_slug=options.get("marketplace"),
                 delay=options.get("delay"),
+                include_discovered=include_discovered,
             )
         )
         self._print_result("Phase 3", result)
@@ -381,10 +387,12 @@ class Command(BaseCommand):
         marketplace = options.get("marketplace")
         delay = options.get("delay")
         repeat = options.get("repeat", False)
+        include_discovered = options.get("include_discovered", False)
 
         mode = "repeat" if repeat else "single-batch"
+        disc_note = " +discovered" if include_discovered else ""
         self.stdout.write(self.style.MIGRATE_HEADING(
-            f"Phase 3: Dispatching {workers} Celery tasks (limit={limit}, mode={mode})"
+            f"Phase 3: Dispatching {workers} Celery tasks (limit={limit}, mode={mode}{disc_note})"
         ))
 
         task_ids = []
@@ -395,6 +403,7 @@ class Command(BaseCommand):
                     "marketplace_slug": marketplace,
                     "delay": delay,
                     "repeat": repeat,
+                    "include_discovered": include_discovered,
                 },
             )
             task_ids.append(result.id)

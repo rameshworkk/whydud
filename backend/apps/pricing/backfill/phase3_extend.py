@@ -1,15 +1,20 @@
 """Phase 3: Extend top products with PriceHistory.app deep history.
 
-For BH-filled BackfillProducts that have a ph_code, fetch full 3-5 year
-price history from PriceHistory.app's authenticated API. This extends
-backwards from the ~17 months BuyHatke provides.
+For BH-filled (or optionally discovered) BackfillProducts that have a
+ph_code, fetch full 3-5 year price history from PriceHistory.app's
+authenticated API. This extends backwards from the ~17 months BuyHatke
+provides.
 
 The PH flow is two-step per product:
   1. Fetch HTML page → extract per-page auth token
   2. POST /api/price/{code} with token → get full history + sale events
 
-Rate limits are stricter than BuyHatke (Cloudflare protection), so we
-use a slower default: 4s API delay, 3 concurrent requests.
+Includes:
+- Retry with exponential backoff on 403/429
+- Alternating cooldown pauses (15s/30s every 3 min)
+- Wave-based processing (50 at a time) for data safety on cancel
+- Rate-limited products released back for retry (not marked FAILED)
+- Optional --include-discovered to skip bh-fill
 
 Products are prioritized by those with existing listings (injected first)
 and highest data point counts.
@@ -21,6 +26,7 @@ Usage::
 
     python manage.py backfill_prices ph-extend --limit 5000
     python manage.py backfill_prices ph-extend --marketplace amazon-in
+    python manage.py backfill_prices ph-extend --include-discovered
 """
 from __future__ import annotations
 
@@ -30,14 +36,17 @@ import logging
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 
 from apps.pricing.backfill.config import BackfillConfig
 from apps.pricing.backfill.injector import inject_price_points
-from apps.pricing.backfill.ph_client import AuthError, PHClient
+from apps.pricing.backfill.ph_client import AuthError, PHClient, RateLimitError
 from apps.pricing.models import BackfillProduct
 
 logger = logging.getLogger(__name__)
+
+# Process this many products per wave before checking for interrupts
+_WAVE_SIZE = 50
 
 
 def _write_db() -> str:
@@ -53,22 +62,31 @@ def _claim_batch(
     limit: int,
     marketplace_slug: str | None,
     category_names: list[str] | None = None,
-) -> list[str]:
-    """Atomically claim a batch of BH_FILLED products for this worker.
+    include_discovered: bool = False,
+) -> tuple[list[str], dict[str, str]]:
+    """Atomically claim a batch of products for this worker.
 
     Uses SELECT ... FOR UPDATE SKIP LOCKED to prevent overlap between
     parallel workers. Claimed items get status='ph_extending' so they
     won't appear in other workers' queries.
 
-    Routes to the write database so this works on replica nodes too.
+    Args:
+        include_discovered: If True, also claim DISCOVERED products
+            (skip bh-fill, go directly to ph-extend).
 
-    Returns list of claimed BackfillProduct IDs.
+    Returns:
+        Tuple of (claimed_ids, original_status_map) where original_status_map
+        maps product ID → original status string before claiming.
     """
     db = _write_db()
 
     with transaction.atomic(using=db):
+        status_filter = Q(status=BackfillProduct.Status.BH_FILLED)
+        if include_discovered:
+            status_filter |= Q(status=BackfillProduct.Status.DISCOVERED)
+
         qs = BackfillProduct.objects.using(db).filter(
-            status=BackfillProduct.Status.BH_FILLED,
+            status_filter,
         ).exclude(
             ph_code="",
         )
@@ -80,22 +98,26 @@ def _claim_batch(
             qs = qs.filter(category_name__in=category_names)
 
         # Prioritize: products with existing listings first, then by data point count
-        claimed_ids = list(
+        # Fetch id + status so we can record original status before overwriting
+        claimed_rows = list(
             qs.order_by(
                 F("product_listing_id").asc(nulls_last=True),
                 "-price_data_points",
                 "created_at",
             )
             .select_for_update(skip_locked=True)
-            .values_list("id", flat=True)[:limit]
+            .values_list("id", "status")[:limit]
         )
+
+        claimed_ids = [row[0] for row in claimed_rows]
+        original_status_map = {row[0]: row[1] for row in claimed_rows}
 
         if claimed_ids:
             BackfillProduct.objects.using(db).filter(id__in=claimed_ids).update(
                 status=BackfillProduct.Status.PH_EXTENDING
             )
 
-    return claimed_ids
+    return claimed_ids, original_status_map
 
 
 def _load_batch_and_listings(claimed_ids: list[str]) -> tuple[list, dict]:
@@ -192,37 +214,81 @@ def _save_bp_empty(bp):
     bp.save(update_fields=["status", "updated_at"])
 
 
-def _save_bp_token_failed(bp, error_msg):
+def _save_bp_token_failed(bp, error_msg, revert_status: str | None = None):
     """Synchronous save for token extraction failure.
 
-    Reverts status to BH_FILLED so the product can be retried.
+    Reverts status to original (BH_FILLED or DISCOVERED) so the product
+    can be retried.
     """
-    bp.status = BackfillProduct.Status.BH_FILLED
+    bp.status = revert_status or BackfillProduct.Status.BH_FILLED
     bp.error_message = error_msg[:500]
     bp.retry_count += 1
     bp.save(update_fields=["status", "error_message", "retry_count", "updated_at"])
 
 
+def _save_bp_rate_limited(bp, error_msg, revert_status: str | None = None):
+    """Release a rate-limited product back for retry (NOT failed).
+
+    Reverts to original status (BH_FILLED or DISCOVERED).
+    """
+    bp.status = revert_status or BackfillProduct.Status.BH_FILLED
+    bp.error_message = error_msg[:500]
+    bp.save(update_fields=["status", "error_message", "updated_at"])
+
+
 def _save_bp_failed(bp, error_msg):
-    """Synchronous save for API failure."""
+    """Synchronous save for API failure (non-rate-limit)."""
     bp.status = BackfillProduct.Status.FAILED
     bp.error_message = error_msg[:500]
     bp.retry_count += 1
     bp.save(update_fields=["status", "error_message", "retry_count", "updated_at"])
 
 
-def _release_unclaimed(claimed_ids: list[str], processed_ids: set[str]) -> int:
-    """Release any claimed items that weren't processed back to BH_FILLED."""
+def _release_unclaimed(
+    claimed_ids: list[str],
+    processed_ids: set[str],
+    original_status_map: dict[str, str] | None = None,
+) -> int:
+    """Release any claimed items that weren't processed back to their original status.
+
+    Only releases items still in PH_EXTENDING status (items that were
+    saved with another status like PH_EXTENDED won't be touched).
+
+    Uses original_status_map to revert each product to its correct
+    pre-claim status (BH_FILLED or DISCOVERED).
+    """
     unprocessed = set(claimed_ids) - processed_ids
-    if unprocessed:
-        db = _write_db()
-        count = BackfillProduct.objects.using(db).filter(
+    if not unprocessed:
+        return 0
+
+    db = _write_db()
+    total_released = 0
+
+    if original_status_map:
+        # Group by original status for efficient bulk updates
+        by_status: dict[str, list[str]] = {}
+        for bp_id in unprocessed:
+            orig = original_status_map.get(bp_id, BackfillProduct.Status.BH_FILLED)
+            by_status.setdefault(orig, []).append(bp_id)
+
+        for status, ids in by_status.items():
+            count = BackfillProduct.objects.using(db).filter(
+                id__in=ids, status=BackfillProduct.Status.PH_EXTENDING
+            ).update(status=status)
+            if count:
+                logger.warning(
+                    "Released %d unclaimed ph_extending items back to %s", count, status,
+                )
+                total_released += count
+    else:
+        # Fallback: no map available, default to BH_FILLED
+        total_released = BackfillProduct.objects.using(db).filter(
             id__in=list(unprocessed), status=BackfillProduct.Status.PH_EXTENDING
         ).update(status=BackfillProduct.Status.BH_FILLED)
-        if count:
-            logger.warning("Released %d unclaimed ph_extending items back to bh_filled", count)
-        return count
-    return 0
+        if total_released:
+            logger.warning("Released %d unclaimed ph_extending items back to bh_filled", total_released)
+
+    return total_released
 
 
 async def extend_with_pricehistory(
@@ -230,18 +296,24 @@ async def extend_with_pricehistory(
     marketplace_slug: str | None = None,
     delay: float | None = None,
     category_names: list[str] | None = None,
+    include_discovered: bool = False,
 ) -> dict:
-    """Phase 3: Extend BH-filled products with PH deep history.
+    """Phase 3: Extend products with PH deep history.
 
-    Uses SELECT ... FOR UPDATE SKIP LOCKED for safe parallel execution
-    across multiple worker nodes. Processes products concurrently via
-    asyncio.gather() with semaphore-based rate limiting.
+    Processes products in waves of 50 for data safety. Each wave runs
+    concurrently (semaphore-limited), and all saves complete before the
+    next wave starts. On cancel/interrupt, only the current wave's
+    in-progress items may be lost — all previous waves are persisted.
+
+    Rate-limited products are released back to BH_FILLED for retry
+    instead of being marked FAILED.
 
     Args:
         limit: Max products to process in this run.
         marketplace_slug: Filter by marketplace slug.
         delay: Override PH request delay.
-        category_names: Filter by category names (e.g. ['smartphone', 'laptop']).
+        category_names: Filter by category names.
+        include_discovered: Also claim DISCOVERED products (skip bh-fill).
 
     Returns:
         Stats dict with counts.
@@ -249,30 +321,43 @@ async def extend_with_pricehistory(
     limit = limit or BackfillConfig.phase3_limit()
 
     # Atomically claim a batch — other workers will skip these rows
-    claimed_ids = await sync_to_async(_claim_batch)(limit, marketplace_slug, category_names)
+    claimed_ids, original_status_map = await sync_to_async(_claim_batch)(
+        limit, marketplace_slug, category_names, include_discovered
+    )
 
     if not claimed_ids:
-        logger.info("Phase 3: no BH-filled products to extend (or all claimed by other workers)")
+        msg = "no products to extend (or all claimed by other workers)"
+        if include_discovered:
+            msg = "no BH_FILLED or DISCOVERED products to extend"
+        logger.info("Phase 3: %s", msg)
         return {
             "total": 0, "extended": 0, "injected": 0,
-            "token_failed": 0, "api_failed": 0, "points": 0,
+            "token_failed": 0, "api_failed": 0, "rate_limited": 0,
+            "points": 0,
         }
 
     # Load full objects + listings for claimed batch
     batch, listing_map = await sync_to_async(_load_batch_and_listings)(claimed_ids)
     total = len(batch)
 
-    logger.info("Phase 3: PH deep extend for %d products (claimed from pool)", total)
+    logger.info(
+        "Phase 3: PH deep extend for %d products (claimed from pool%s)",
+        total, ", includes discovered" if include_discovered else "",
+    )
     stats = {
         "total": total, "extended": 0, "injected": 0,
-        "token_failed": 0, "api_failed": 0, "points": 0,
+        "token_failed": 0, "api_failed": 0, "rate_limited": 0,
+        "points": 0,
     }
     processed_ids: set[str] = set()
     _done_count = 0
+    _stop_requested = False
 
     async def _process_one(bp, client):
-        """Fetch token + history for one product. Semaphore inside PHClient limits concurrency."""
-        nonlocal _done_count
+        """Fetch token + history for one product."""
+        nonlocal _done_count, _stop_requested
+        # Look up the original status so we revert correctly on failure
+        revert_status = original_status_map.get(bp.id, BackfillProduct.Status.BH_FILLED)
         try:
             # Step 1: Fetch HTML page for token
             meta = await client.fetch_page_metadata(bp.ph_code)
@@ -280,7 +365,7 @@ async def extend_with_pricehistory(
 
             if not token:
                 await sync_to_async(_save_bp_token_failed)(
-                    bp, "No token extracted from HTML"
+                    bp, "No token extracted from HTML", revert_status
                 )
                 stats["token_failed"] += 1
                 processed_ids.add(bp.id)
@@ -316,10 +401,25 @@ async def extend_with_pricehistory(
             stats["extended"] += 1
             processed_ids.add(bp.id)
 
+        except RateLimitError as e:
+            # Release back for retry — NOT failed
+            await sync_to_async(_save_bp_rate_limited)(bp, str(e), revert_status)
+            stats["rate_limited"] += 1
+            processed_ids.add(bp.id)
+            _stop_requested = True  # Stop processing more waves
+
         except AuthError as e:
-            await sync_to_async(_save_bp_token_failed)(bp, f"Auth: {e}")
+            await sync_to_async(_save_bp_token_failed)(bp, f"Auth: {e}", revert_status)
             stats["token_failed"] += 1
             processed_ids.add(bp.id)
+
+        except asyncio.CancelledError:
+            # On cancel, release back — don't lose data
+            await sync_to_async(_save_bp_rate_limited)(
+                bp, "Cancelled during processing", revert_status
+            )
+            processed_ids.add(bp.id)
+            raise
 
         except Exception as e:
             await sync_to_async(_save_bp_failed)(bp, str(e))
@@ -330,20 +430,59 @@ async def extend_with_pricehistory(
         if _done_count % 100 == 0:
             logger.info(
                 "  Phase 3: %d/%d — %d extended (%s points), %d injected, "
-                "%d token_failed, %d api_failed",
+                "%d token_failed, %d api_failed, %d rate_limited",
                 _done_count, total,
                 stats["extended"], f"{stats['points']:,}",
-                stats["injected"], stats["token_failed"], stats["api_failed"],
+                stats["injected"], stats["token_failed"],
+                stats["api_failed"], stats["rate_limited"],
             )
 
     try:
         async with PHClient(delay=delay) as client:
-            # Fire all tasks concurrently — PHClient semaphore limits to N in-flight
-            tasks = [_process_one(bp, client) for bp in batch]
-            await asyncio.gather(*tasks)
+            # Process in waves for data safety
+            for wave_start in range(0, total, _WAVE_SIZE):
+                if _stop_requested:
+                    logger.warning(
+                        "Phase 3: stopping early due to rate limiting "
+                        "(wave %d/%d, %d processed so far)",
+                        wave_start // _WAVE_SIZE + 1,
+                        (total + _WAVE_SIZE - 1) // _WAVE_SIZE,
+                        _done_count,
+                    )
+                    break
+
+                wave = batch[wave_start:wave_start + _WAVE_SIZE]
+                tasks = [_process_one(bp, client) for bp in wave]
+
+                # Wait for entire wave to complete before next wave
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Check for CancelledError in results
+                for r in results:
+                    if isinstance(r, asyncio.CancelledError):
+                        raise r
+
+                # Log wave completion
+                wave_num = wave_start // _WAVE_SIZE + 1
+                total_waves = (total + _WAVE_SIZE - 1) // _WAVE_SIZE
+                logger.info(
+                    "  Phase 3: wave %d/%d complete (%d/%d processed)",
+                    wave_num, total_waves, _done_count, total,
+                )
+
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.warning(
+            "Phase 3: interrupted after %d/%d products. "
+            "All completed products are saved.",
+            _done_count, total,
+        )
     finally:
         # Release any items we claimed but didn't process (e.g. crash/interrupt)
-        await sync_to_async(_release_unclaimed)(claimed_ids, processed_ids)
+        released = await sync_to_async(_release_unclaimed)(
+            claimed_ids, processed_ids, original_status_map
+        )
+        if released:
+            stats["released_back"] = released
 
     logger.info("Phase 3 complete: %s", stats)
     return stats

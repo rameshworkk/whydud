@@ -924,15 +924,19 @@ class WhydudAdminSite(AdminSite):
                     return err
 
                 category_names = post_data.getlist("category_names")
+                include_discovered = post_data.get("include_discovered") == "on"
 
                 task_kwargs = {"limit": limit, "repeat": repeat}
                 if delay is not None:
                     task_kwargs["delay"] = delay
                 if category_names:
                     task_kwargs["category_names"] = category_names
+                if include_discovered:
+                    task_kwargs["include_discovered"] = True
                 rpt = " repeat=ON" if repeat else ""
                 dly = f" delay={delay}s" if delay else ""
                 cat = f" categories={','.join(category_names)}" if category_names else ""
+                disc = " +discovered" if include_discovered else ""
 
                 task_ids = []
                 if nodes_map:
@@ -943,12 +947,12 @@ class WhydudAdminSite(AdminSite):
                             r = run_phase3_extend.apply_async(kwargs=task_kwargs, queue=queue_name)
                             task_ids.append(f"{prefix}:{r.id[:8]}")
                     nodes_str = ",".join(nodes_map.keys())
-                    return f"PH-Extend → {nodes_str} ({workers}x each, limit {limit}{rpt}{dly}{cat}). Tasks: {', '.join(task_ids)}"
+                    return f"PH-Extend → {nodes_str} ({workers}x each, limit {limit}{rpt}{dly}{cat}{disc}). Tasks: {', '.join(task_ids)}"
                 else:
                     for _ in range(workers):
                         r = run_phase3_extend.delay(**task_kwargs)
                         task_ids.append(r.id[:8])
-                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}{dly}{cat}). Tasks: {', '.join(task_ids)}"
+                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}{dly}{cat}{disc}). Tasks: {', '.join(task_ids)}"
 
             elif action == "create-lightweight":
                 from apps.pricing.backfill.lightweight_creator import (
