@@ -824,22 +824,39 @@ class WhydudAdminSite(AdminSite):
 
                 start = int(post_data.get("sitemap_start", 1))
                 end = int(post_data.get("sitemap_end", 5))
+                filters = post_data.getlist("discover_filters")
+                filter_electronics = "electronics" in filters
+                max_products_val = post_data.get("max_products", "").strip()
+                max_products = int(max_products_val) if max_products_val else None
+
+                task_kwargs = {
+                    "sitemap_start": start,
+                    "sitemap_end": end,
+                    "filter_electronics": filter_electronics,
+                    "max_products": max_products,
+                }
 
                 nodes_map, err = WhydudAdminSite._resolve_target_nodes(post_data, celery_app)
                 if err:
                     return err
 
+                filter_desc = ""
+                if filter_electronics:
+                    filter_desc += ", electronics-only"
+                if max_products:
+                    filter_desc += f", max {max_products}"
+
                 if nodes_map:
                     dispatched = WhydudAdminSite._dispatch_to_nodes(
                         run_phase1_discover,
-                        {"sitemap_start": start, "sitemap_end": end},
+                        task_kwargs,
                         "discover", nodes_map, celery_app,
                     )
                     parts = [f"{n}:{tid}" for n, tid in dispatched]
-                    return f"Discovery → {', '.join(n for n, _ in dispatched)} (sitemaps {start}-{end}). Tasks: {', '.join(parts)}"
+                    return f"Discovery → {', '.join(n for n, _ in dispatched)} (sitemaps {start}-{end}{filter_desc}). Tasks: {', '.join(parts)}"
                 else:
-                    result = run_phase1_discover.delay(sitemap_start=start, sitemap_end=end)
-                    return f"Discovery started (sitemaps {start}-{end}). Task: {result.id}"
+                    result = run_phase1_discover.delay(**task_kwargs)
+                    return f"Discovery started (sitemaps {start}-{end}{filter_desc}). Task: {result.id}"
 
             elif action == "bh-fill":
                 from apps.pricing.tasks import run_phase2_buyhatke

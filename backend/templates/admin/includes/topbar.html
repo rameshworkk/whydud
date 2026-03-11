@@ -36,12 +36,40 @@
       <i data-lucide="sun" class="w-4 h-4 hidden dark:block"></i>
     </button>
 
-    <!-- Auto-refresh indicator -->
-    {% if auto_refresh %}
-    <span class="text-[11px] text-slate-400 px-2.5 py-1 bg-slate-50 dark:bg-slate-700 rounded-full">
-      Auto-refreshes every {{ auto_refresh }}s
-    </span>
-    {% endif %}
+    <!-- Auto-refresh toggle -->
+    <button id="auto-refresh-toggle" onclick="toggleAutoRefresh()"
+            class="flex items-center gap-1.5 px-2.5 py-1 border border-slate-200 dark:border-slate-600
+                   rounded-lg text-[11px] transition-colors cursor-pointer select-none"
+            title="Toggle auto-refresh on live pages">
+      <span id="ar-dot" class="w-2 h-2 rounded-full"></span>
+      <span id="ar-label"></span>
+    </button>
+    <script>
+      function _arEnabled() { return localStorage.getItem('whydud_auto_refresh') === 'on'; }
+      function _arRender() {
+        var on = _arEnabled();
+        var dot = document.getElementById('ar-dot');
+        var lbl = document.getElementById('ar-label');
+        var btn = document.getElementById('auto-refresh-toggle');
+        if (on) {
+          dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+          lbl.textContent = 'Auto-refresh ON';
+          btn.className = btn.className.replace(/text-slate-\d+/g, '').replace(/\s+/g, ' ') +
+            ' text-emerald-600 dark:text-emerald-400';
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600';
+          lbl.textContent = 'Auto-refresh OFF';
+          btn.className = btn.className.replace(/text-emerald-\d+/g, '').replace(/dark:text-emerald-\d+/g, '').replace(/\s+/g, ' ') +
+            ' text-slate-400';
+        }
+      }
+      function toggleAutoRefresh() {
+        localStorage.setItem('whydud_auto_refresh', _arEnabled() ? 'off' : 'on');
+        _arRender();
+        if (_arEnabled()) location.reload();
+      }
+      _arRender();
+    </script>
 
     <!-- User avatar -->
     <div class="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center

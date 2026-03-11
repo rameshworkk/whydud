@@ -212,25 +212,58 @@
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run Discovery</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Discover products from PriceHistory sitemaps (Phase 1)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='discover' %}" class="flex items-end gap-2 flex-wrap">
+    <form method="post" action="{% url 'admin:backfill-action' action='discover' %}">
       {% csrf_token %}
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Start</label>
-        <input type="number" name="sitemap_start" value="1" min="1"
-               class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      <div class="flex items-end gap-2 flex-wrap mb-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Start</label>
+          <input type="number" name="sitemap_start" value="1" min="1"
+                 class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">End</label>
+          <input type="number" name="sitemap_end" value="5" min="1"
+                 class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Max Products</label>
+          <input type="number" name="max_products" min="1" placeholder="unlimited"
+                 class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Run Discovery
+        </button>
       </div>
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">End</label>
-        <input type="number" name="sitemap_end" value="5" min="1"
-               class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      <div class="flex items-center gap-3 mb-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium">Filters:</span>
+        <label class="flex items-center gap-1 cursor-pointer select-none">
+          <input type="checkbox" name="discover_filters" value="electronics"
+                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+          <span class="text-[11px] text-slate-500 dark:text-slate-400">Electronics only</span>
+        </label>
+        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = all categories</span>
       </div>
-      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Run Discovery
-      </button>
+      {% if online_workers %}
+      <div class="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium">Nodes:</span>
+        {% for w in online_workers %}
+        <label class="flex items-center gap-1 cursor-pointer select-none">
+          <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
+                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+          <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ w.prefix }}</span>
+        </label>
+        {% endfor %}
+        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = any</span>
+      </div>
+      {% endif %}
     </form>
   </div>
 
@@ -238,41 +271,54 @@
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run BH-Fill</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">BuyHatke price history fill (Phase 2) via Celery workers</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='bh-fill' %}" class="flex items-end gap-2 flex-wrap">
+    <form method="post" action="{% url 'admin:backfill-action' action='bh-fill' %}">
       {% csrf_token %}
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
-        <input type="number" name="batch_size" value="5000" min="100"
-               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      <div class="flex items-end gap-2 flex-wrap mb-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
+          <input type="number" name="batch_size" value="5000" min="100"
+                 class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Workers</label>
+          <input type="number" name="workers" value="2" min="1" max="8"
+                 class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Delay (s)</label>
+          <input type="text" name="delay" placeholder="0.5"
+                 class="w-16 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <div class="flex items-center gap-1.5 pb-0.5">
+          <input type="checkbox" name="repeat" id="bh-repeat"
+                 class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+          <label for="bh-repeat" class="text-[11px] text-slate-400 cursor-pointer select-none">Repeat</label>
+        </div>
+        <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Run BH-Fill
+        </button>
       </div>
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Workers</label>
-        <input type="number" name="workers" value="2" min="1" max="8"
-               class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      {% if online_workers %}
+      <div class="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium">Nodes:</span>
+        {% for w in online_workers %}
+        <label class="flex items-center gap-1 cursor-pointer select-none">
+          <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
+                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+          <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ w.prefix }}</span>
+        </label>
+        {% endfor %}
+        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = any</span>
       </div>
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Target Node</label>
-        <select name="target_node"
-                class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
-          <option value="">Any</option>
-          {% for w in online_workers %}<option value="{{ w.prefix }}">{{ w.prefix }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="flex items-center gap-1.5 pb-0.5">
-        <input type="checkbox" name="repeat" id="bh-repeat"
-               class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                      focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
-        <label for="bh-repeat" class="text-[11px] text-slate-400 cursor-pointer select-none">Repeat</label>
-      </div>
-      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Run BH-Fill
-      </button>
+      {% endif %}
     </form>
   </div>
 
@@ -280,41 +326,54 @@
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run PH-Extend</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">PriceHistory.app deep history extension (Phase 3)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='ph-extend' %}" class="flex items-end gap-2 flex-wrap">
+    <form method="post" action="{% url 'admin:backfill-action' action='ph-extend' %}">
       {% csrf_token %}
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Limit</label>
-        <input type="number" name="limit" value="5000" min="100"
-               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      <div class="flex items-end gap-2 flex-wrap mb-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Limit</label>
+          <input type="number" name="limit" value="5000" min="100"
+                 class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Workers</label>
+          <input type="number" name="workers" value="2" min="1" max="8"
+                 class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Delay (s)</label>
+          <input type="text" name="delay" placeholder="1.0"
+                 class="w-16 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <div class="flex items-center gap-1.5 pb-0.5">
+          <input type="checkbox" name="repeat" id="ph-repeat"
+                 class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+          <label for="ph-repeat" class="text-[11px] text-slate-400 cursor-pointer select-none">Repeat</label>
+        </div>
+        <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Run PH-Extend
+        </button>
       </div>
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Workers</label>
-        <input type="number" name="workers" value="2" min="1" max="8"
-               class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      {% if online_workers %}
+      <div class="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium">Nodes:</span>
+        {% for w in online_workers %}
+        <label class="flex items-center gap-1 cursor-pointer select-none">
+          <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
+                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+          <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ w.prefix }}</span>
+        </label>
+        {% endfor %}
+        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = any</span>
       </div>
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Target Node</label>
-        <select name="target_node"
-                class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
-          <option value="">Any</option>
-          {% for w in online_workers %}<option value="{{ w.prefix }}">{{ w.prefix }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="flex items-center gap-1.5 pb-0.5">
-        <input type="checkbox" name="repeat" id="ph-repeat"
-               class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                      focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
-        <label for="ph-repeat" class="text-[11px] text-slate-400 cursor-pointer select-none">Repeat</label>
-      </div>
-      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Run PH-Extend
-      </button>
+      {% endif %}
     </form>
   </div>
 
@@ -353,28 +412,34 @@
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Start Enrichment</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Enrich a batch of products by priority (Phase 4)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='enrich' %}" class="flex items-end gap-2 flex-wrap">
+    <form method="post" action="{% url 'admin:backfill-action' action='enrich' %}">
       {% csrf_token %}
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
-        <input type="number" name="batch_size" value="100" min="1" max="500"
-               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      <div class="flex items-end gap-2 flex-wrap mb-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
+          <input type="number" name="batch_size" value="100" min="1" max="500"
+                 class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
+        <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Enrich
+        </button>
       </div>
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Target Node</label>
-        <select name="target_node"
-                class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
-          <option value="">Any</option>
-          {% for w in online_workers %}<option value="{{ w.prefix }}">{{ w.prefix }}</option>{% endfor %}
-        </select>
+      {% if online_workers %}
+      <div class="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+        <span class="text-[11px] text-slate-400 font-medium">Nodes:</span>
+        {% for w in online_workers %}
+        <label class="flex items-center gap-1 cursor-pointer select-none">
+          <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
+                 class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                        focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+          <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ w.prefix }}</span>
+        </label>
+        {% endfor %}
+        <span class="text-[10px] text-slate-300 dark:text-slate-600">none = any</span>
       </div>
-      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Enrich
-      </button>
+      {% endif %}
     </form>
   </div>
 
@@ -728,8 +793,10 @@ if (snapshotData.labels.length > 0) {
 lucide.createIcons();
 </script>
 
-<!-- Auto-refresh every 30s -->
+<!-- Auto-refresh every 30s (if enabled) -->
 <script>
-  setTimeout(function() { location.reload(); }, 30000);
+  if (localStorage.getItem('whydud_auto_refresh') === 'on') {
+    setTimeout(function() { location.reload(); }, 30000);
+  }
 </script>
 {% endblock %}

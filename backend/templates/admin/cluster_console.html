@@ -252,8 +252,10 @@ if (queueData.labels.length > 0 && !(queueData.labels.length === 1 && queueData.
 lucide.createIcons();
 </script>
 
-<!-- Auto-refresh every 15s -->
+<!-- Auto-refresh every 15s (if enabled) -->
 <script>
-  setTimeout(function() { location.reload(); }, 15000);
+  if (localStorage.getItem('whydud_auto_refresh') === 'on') {
+    setTimeout(function() { location.reload(); }, 15000);
+  }
 </script>
 {% endblock %}

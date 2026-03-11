@@ -520,8 +520,10 @@ new Chart(document.getElementById('reviewChart'), {
 lucide.createIcons();
 </script>
 
-<!-- Auto-refresh every 30s -->
+<!-- Auto-refresh every 30s (if enabled) -->
 <script>
-  setTimeout(function() { location.reload(); }, 30000);
+  if (localStorage.getItem('whydud_auto_refresh') === 'on') {
+    setTimeout(function() { location.reload(); }, 30000);
+  }
 </script>
 {% endblock %}
