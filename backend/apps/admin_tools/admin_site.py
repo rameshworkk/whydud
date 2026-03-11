@@ -717,6 +717,15 @@ class WhydudAdminSite(AdminSite):
             "data": [by_scrape.get(s, 0) for s in scrape_labels],
         })
 
+        # --- Online workers for node targeting dropdown ---
+        online_workers = self._get_online_workers()
+
+        # --- Active Celery tasks ---
+        _, _, active_tasks = self._get_cluster_data()
+
+        # --- Recent task history from django-celery-results ---
+        recent_task_results = self._get_recent_backfill_tasks(limit=20)
+
         context = {
             **self.each_context(request),
             "active_page": "backfill",
@@ -740,6 +749,9 @@ class WhydudAdminSite(AdminSite):
             "priority_chart": priority_chart,
             "snapshot_chart": snapshot_chart,
             "scrape_chart": scrape_chart,
+            "online_workers": online_workers,
+            "active_tasks": active_tasks,
+            "recent_task_results": recent_task_results,
         }
         return render(request, "admin/backfill_console.html", context)
 
@@ -776,25 +788,77 @@ class WhydudAdminSite(AdminSite):
 
             elif action == "bh-fill":
                 from apps.pricing.tasks import run_phase2_buyhatke
+                from whydud.celery import app as celery_app
 
                 batch = int(post_data.get("batch_size", 5000))
                 workers = int(post_data.get("workers", 2))
+                repeat = post_data.get("repeat") == "on"
+                target_node = post_data.get("target_node", "").strip()
+
                 task_ids = []
-                for _ in range(workers):
-                    r = run_phase2_buyhatke.delay(batch_size=batch)
-                    task_ids.append(r.id[:8])
-                return f"BH-Fill dispatched ({workers} workers, batch {batch}). Tasks: {', '.join(task_ids)}"
+                if target_node:
+                    ping_result = celery_app.control.ping(timeout=3)
+                    online = {}
+                    for resp in ping_result:
+                        for wn in resp:
+                            online[wn.split("@")[0]] = wn
+                    full_name = online.get(target_node)
+                    if not full_name:
+                        avail = ", ".join(online.keys()) or "none"
+                        return f"Error: Worker '{target_node}' not online. Available: {avail}"
+                    queue_name = f"bh-fill-{target_node}"
+                    celery_app.control.add_consumer(queue_name, destination=[full_name])
+                    for _ in range(workers):
+                        r = run_phase2_buyhatke.apply_async(
+                            kwargs={"batch_size": batch, "repeat": repeat},
+                            queue=queue_name,
+                        )
+                        task_ids.append(r.id[:8])
+                    rpt = " repeat=ON" if repeat else ""
+                    return f"BH-Fill → {target_node} ({workers} tasks, batch {batch}{rpt}). Tasks: {', '.join(task_ids)}"
+                else:
+                    for _ in range(workers):
+                        r = run_phase2_buyhatke.delay(batch_size=batch, repeat=repeat)
+                        task_ids.append(r.id[:8])
+                    rpt = " repeat=ON" if repeat else ""
+                    return f"BH-Fill dispatched ({workers} workers, batch {batch}{rpt}). Tasks: {', '.join(task_ids)}"
 
             elif action == "ph-extend":
                 from apps.pricing.tasks import run_phase3_extend
+                from whydud.celery import app as celery_app
 
                 limit = int(post_data.get("limit", 5000))
                 workers = int(post_data.get("workers", 2))
+                repeat = post_data.get("repeat") == "on"
+                target_node = post_data.get("target_node", "").strip()
+
                 task_ids = []
-                for _ in range(workers):
-                    r = run_phase3_extend.delay(limit=limit)
-                    task_ids.append(r.id[:8])
-                return f"PH-Extend dispatched ({workers} workers, limit {limit}). Tasks: {', '.join(task_ids)}"
+                if target_node:
+                    ping_result = celery_app.control.ping(timeout=3)
+                    online = {}
+                    for resp in ping_result:
+                        for wn in resp:
+                            online[wn.split("@")[0]] = wn
+                    full_name = online.get(target_node)
+                    if not full_name:
+                        avail = ", ".join(online.keys()) or "none"
+                        return f"Error: Worker '{target_node}' not online. Available: {avail}"
+                    queue_name = f"ph-extend-{target_node}"
+                    celery_app.control.add_consumer(queue_name, destination=[full_name])
+                    for _ in range(workers):
+                        r = run_phase3_extend.apply_async(
+                            kwargs={"limit": limit, "repeat": repeat},
+                            queue=queue_name,
+                        )
+                        task_ids.append(r.id[:8])
+                    rpt = " repeat=ON" if repeat else ""
+                    return f"PH-Extend → {target_node} ({workers} tasks, limit {limit}{rpt}). Tasks: {', '.join(task_ids)}"
+                else:
+                    for _ in range(workers):
+                        r = run_phase3_extend.delay(limit=limit, repeat=repeat)
+                        task_ids.append(r.id[:8])
+                    rpt = " repeat=ON" if repeat else ""
+                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}). Tasks: {', '.join(task_ids)}"
 
             elif action == "create-lightweight":
                 from apps.pricing.backfill.lightweight_creator import (
@@ -826,11 +890,31 @@ class WhydudAdminSite(AdminSite):
                 from whydud.celery import app as celery_app
 
                 batch = int(post_data.get("batch_size", 100))
-                result = celery_app.send_task(
-                    "apps.pricing.backfill.enrichment.enrich_batch",
-                    kwargs={"batch_size": batch},
-                )
-                return f"Enrichment batch queued ({batch} products). Task: {result.id}"
+                target_node = post_data.get("target_node", "").strip()
+
+                if target_node:
+                    ping_result = celery_app.control.ping(timeout=3)
+                    online = {}
+                    for resp in ping_result:
+                        for wn in resp:
+                            online[wn.split("@")[0]] = wn
+                    full_name = online.get(target_node)
+                    if not full_name:
+                        return f"Error: Worker '{target_node}' not online."
+                    queue_name = f"enrich-{target_node}"
+                    celery_app.control.add_consumer(queue_name, destination=[full_name])
+                    result = celery_app.send_task(
+                        "apps.pricing.backfill.enrichment.enrich_batch",
+                        kwargs={"batch_size": batch},
+                        queue=queue_name,
+                    )
+                    return f"Enrichment → {target_node} ({batch} products). Task: {result.id}"
+                else:
+                    result = celery_app.send_task(
+                        "apps.pricing.backfill.enrichment.enrich_batch",
+                        kwargs={"batch_size": batch},
+                    )
+                    return f"Enrichment batch queued ({batch} products). Task: {result.id}"
 
             elif action == "run-overnight":
                 from django.core.management import call_command
@@ -877,6 +961,15 @@ class WhydudAdminSite(AdminSite):
                     scrape_status="failed", retry_count__lt=3
                 ).update(scrape_status="pending", error_message="")
                 return f"Retried {count} failed enrichments (retry_count < 3)."
+
+            elif action == "revoke":
+                from whydud.celery import app as celery_app
+
+                task_id = post_data.get("task_id", "").strip()
+                if not task_id:
+                    return "Error: No task ID provided."
+                celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+                return f"Revoke signal sent to task {task_id[:12]}… (SIGTERM)"
 
             else:
                 return f"Error: Unknown action '{action}'."
@@ -1966,12 +2059,28 @@ class WhydudAdminSite(AdminSite):
 
                 # Collect active task details
                 for task in worker_active:
+                    import time as _time
+
+                    time_start = task.get("time_start")
+                    if time_start:
+                        elapsed = _time.time() - time_start
+                        if elapsed < 60:
+                            runtime_display = f"{elapsed:.0f}s"
+                        elif elapsed < 3600:
+                            runtime_display = f"{elapsed / 60:.1f}m"
+                        else:
+                            runtime_display = f"{elapsed / 3600:.1f}h"
+                    else:
+                        runtime_display = "—"
+
                     active_tasks.append({
                         "worker": worker_name,
                         "name": task.get("name", "?").split(".")[-1],
                         "full_name": task.get("name", "?"),
                         "id": task.get("id", "?")[:12],
+                        "full_id": task.get("id", "?"),
                         "runtime": round(task.get("time_start", 0) or 0, 1),
+                        "runtime_display": runtime_display,
                         "args": str(task.get("args", []))[:80],
                         "kwargs": str(task.get("kwargs", {}))[:80],
                     })
@@ -1994,6 +2103,66 @@ class WhydudAdminSite(AdminSite):
             pass
 
         return workers, queues, active_tasks
+
+    @staticmethod
+    def _get_online_workers():
+        """Quick ping to discover online Celery workers for node targeting dropdown."""
+        try:
+            from whydud.celery import app
+
+            ping_result = app.control.ping(timeout=3)
+            workers = []
+            seen = set()
+            for resp in ping_result:
+                for worker_name in resp:
+                    prefix = worker_name.split("@")[0]
+                    if prefix not in seen:
+                        seen.add(prefix)
+                        workers.append({"prefix": prefix, "full_name": worker_name})
+            return sorted(workers, key=lambda w: w["prefix"])
+        except Exception:
+            return []
+
+    @staticmethod
+    def _get_recent_backfill_tasks(limit=20):
+        """Query django-celery-results for recent backfill task history."""
+        try:
+            from django_celery_results.models import TaskResult
+
+            backfill_task_names = [
+                "apps.pricing.tasks.run_phase1_discover",
+                "apps.pricing.tasks.run_phase2_buyhatke",
+                "apps.pricing.tasks.run_phase3_extend",
+                "apps.pricing.tasks.run_phase4_inject",
+                "apps.pricing.tasks.refresh_price_daily_aggregate",
+                "apps.pricing.tasks.scrape_backfill_products_task",
+                "apps.pricing.backfill.enrichment.enrich_batch",
+            ]
+
+            results = list(
+                TaskResult.objects.filter(task_name__in=backfill_task_names)
+                .order_by("-date_done")
+                .values(
+                    "task_id", "task_name", "status", "result",
+                    "date_done", "date_created", "worker", "traceback",
+                )[:limit]
+            )
+
+            for r in results:
+                r["short_name"] = (
+                    r["task_name"].split(".")[-1] if r["task_name"] else "?"
+                )
+                r["date_done_str"] = (
+                    r["date_done"].strftime("%Y-%m-%d %H:%M:%S")
+                    if r["date_done"]
+                    else "—"
+                )
+                r["result_short"] = (r["result"] or "")[:120]
+                r["traceback_short"] = (r["traceback"] or "")[:200]
+
+            return results
+        except Exception:
+            return []
 
     # ------------------------------------------------------------------
     # AJAX API endpoints

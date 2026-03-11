@@ -254,6 +254,22 @@
                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
       </div>
+      <div>
+        <label class="text-[11px] text-slate-400 block mb-1">Target Node</label>
+        <select name="target_node"
+                class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+          <option value="">Any</option>
+          {% for w in online_workers %}<option value="{{ w.prefix }}">{{ w.prefix }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-1.5 pb-0.5">
+        <input type="checkbox" name="repeat" id="bh-repeat"
+               class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                      focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+        <label for="bh-repeat" class="text-[11px] text-slate-400 cursor-pointer select-none">Repeat</label>
+      </div>
       <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
         Run BH-Fill
       </button>
@@ -279,6 +295,22 @@
                class="w-20 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      </div>
+      <div>
+        <label class="text-[11px] text-slate-400 block mb-1">Target Node</label>
+        <select name="target_node"
+                class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+          <option value="">Any</option>
+          {% for w in online_workers %}<option value="{{ w.prefix }}">{{ w.prefix }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-1.5 pb-0.5">
+        <input type="checkbox" name="repeat" id="ph-repeat"
+               class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-500
+                      focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
+        <label for="ph-repeat" class="text-[11px] text-slate-400 cursor-pointer select-none">Repeat</label>
       </div>
       <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
         Run PH-Extend
@@ -329,6 +361,16 @@
                class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      </div>
+      <div>
+        <label class="text-[11px] text-slate-400 block mb-1">Target Node</label>
+        <select name="target_node"
+                class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+          <option value="">Any</option>
+          {% for w in online_workers %}<option value="{{ w.prefix }}">{{ w.prefix }}</option>{% endfor %}
+        </select>
       </div>
       <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
         Enrich
@@ -396,6 +438,139 @@
   </div>
 
 </div>
+
+<!-- Active Tasks Panel -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Active Tasks ({{ active_tasks|length }})</div>
+{% if active_tasks %}
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Runtime</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Kwargs</th>
+          <th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in active_tasks %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">
+            {{ task.worker|truncatechars:30 }}
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ task.name }}</code>
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ task.id }}</code>
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 font-medium tabular-nums border-b border-slate-100 dark:border-slate-700/50">
+            {{ task.runtime_display }}
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <div class="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-slate-400" title="{{ task.kwargs }}">
+              {{ task.kwargs|truncatechars:50 }}
+            </div>
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50 text-center">
+            <form method="post" action="{% url 'admin:backfill-action' action='revoke' %}" class="inline"
+                  onsubmit="return confirm('Revoke task {{ task.id }}?')">
+              {% csrf_token %}
+              <input type="hidden" name="task_id" value="{{ task.full_id }}">
+              <button type="submit" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-[11px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+                Revoke
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs mb-6 text-center">
+  <i data-lucide="coffee" class="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+  <div class="text-[13px] text-slate-400">No tasks currently running.</div>
+</div>
+{% endif %}
+
+<!-- Task Log Viewer -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Recent Task History</div>
+{% if recent_task_results %}
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Completed</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tr in recent_task_results %}
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ tr.short_name }}</code>
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            {% if tr.status == "SUCCESS" %}
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Success
+            </span>
+            {% elif tr.status == "FAILURE" %}
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Failed
+            </span>
+            {% elif tr.status == "STARTED" %}
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Running
+            </span>
+            {% elif tr.status == "REVOKED" %}
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Revoked
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> {{ tr.status }}
+            </span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12px] text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-700/50">
+            {{ tr.worker|default:"—"|truncatechars:20 }}
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ tr.task_id|truncatechars:12 }}</code>
+          </td>
+          <td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">
+            {{ tr.date_done_str }}
+          </td>
+          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
+            <div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px]
+                        {% if tr.status == 'FAILURE' %}text-red-500{% else %}text-slate-500 dark:text-slate-400{% endif %}"
+                 title="{{ tr.result_short }}">
+              {% if tr.status == "FAILURE" %}{{ tr.traceback_short|truncatechars:80 }}{% else %}{{ tr.result_short|truncatechars:80 }}{% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs mb-6 text-center">
+  <i data-lucide="scroll" class="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+  <div class="text-[13px] text-slate-400">No recent task history.</div>
+</div>
+{% endif %}
 
 <!-- Failed Products Table -->
 <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Failed Products (Last 50)</div>
