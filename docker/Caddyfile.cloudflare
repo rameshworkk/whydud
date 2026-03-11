@@ -39,6 +39,10 @@ whydud.com, www.whydud.com {
 		reverse_proxy flower:5555
 	}
 
+	# URL Path-Prefix Feature: whydud.com/amazon.in/... → /lookup?url=...
+	@mp_prefix path_regexp mp ^/((?:www\.)?(?:amazon\.in|flipkart\.com|myntra\.com|nykaa\.com|snapdeal\.com|croma\.com|reliancedigital\.in|ajio\.com|meesho\.com|tatacliq\.com|jiomart\.com|vijaysales\.com|firstcry\.com|giva\.co))(/.*)?$
+	redir @mp_prefix https://whydud.com/lookup?url=https://{re.mp.1}{re.mp.2} 302
+
 	# Next.js frontend: everything else
 	handle {
 		reverse_proxy frontend:3000
