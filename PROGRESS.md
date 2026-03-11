@@ -4592,3 +4592,124 @@ Custom User model uses `created_at` (not Django's default `date_joined`). Fixed 
 | File | Change |
 |---|---|
 | `backend/apps/admin_tools/admin_site.py` | Changed `date_joined__date=today` → `created_at__date=today` in `user_new_today` query |
+
+---
+
+### UI-1: Tailwind-based Apex design system + base template + components
+
+**Date:** 2026-03-11
+
+Replaced Django admin visual layer with Tailwind CSS Play CDN (Apex Dashboard style). Zero build step — all CDN-loaded.
+
+**Stack:** Tailwind Play CDN + Lucide Icons JS + Chart.js 4 + Inter font
+
+**Features:**
+- Dark sidebar (#0c0a09) with 5 nav groups, active page highlighting, badge counts
+- Sticky topbar with sidebar toggle, Ctrl+K command palette, dark/light theme toggle
+- ~90-line Django admin CSS overrides (changelist, result table, fieldset, forms, dark mode)
+- Reusable template includes: stat_card, chart_card, action_card, data_table
+- `each_context()` with sidebar badge counts (backfill pending, enrichment queue, flagged reviews)
+- `_format_count()` for K/M abbreviations
+- `active_page` context variable in all 7 custom admin views
+- Sidebar collapse with localStorage persistence
+- Page fade-in animation
+
+**Files created:**
+| File | Purpose |
+|---|---|
+| `backend/static/admin/css/whydud_overrides.css` | ~90 lines Django admin element overrides |
+| `backend/templates/admin/includes/sidebar.html` | Dark sidebar navigation |
+| `backend/templates/admin/includes/topbar.html` | Sticky top bar |
+| `backend/templates/admin/includes/stat_card.html` | Reusable stat card with sparkline |
+| `backend/templates/admin/includes/chart_card.html` | Chart.js container card |
+| `backend/templates/admin/includes/action_card.html` | Form action card |
+| `backend/templates/admin/includes/data_table.html` | Card-wrapped table |
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/templates/admin/base_site.html` | Complete rewrite — standalone HTML document with Tailwind layout |
+| `backend/apps/admin_tools/admin_site.py` | Added `each_context()`, `_format_count()`, `active_page` in all views |
+| `backend/whydud/settings/base.py` | Added `STATICFILES_DIRS = [BASE_DIR / "static"]` |
+
+---
+
+### UI-2: Dashboard + backfill console redesign (Tailwind)
+
+**Date:** 2026-03-11
+
+Redesigned both pages with pure Tailwind utility classes. All inline `<style>` blocks removed.
+
+**Dashboard:**
+- 4-column stat card grid with Chart.js sparklines (products, reviews, dudscore, snapshots)
+- 2-column row (listings, reviews with flagged count)
+- Backfill pipeline section with inline status/scrape breakdowns
+- Users section (total, new today, active 7d)
+- Marketplace listings table in card container
+- Auto-refresh every 60s
+
+**Backfill Console:**
+- 5 stat cards (total, pending, enriching, scraped, failed) with color-coded values
+- Pipeline + scrape status progress bars (h-2 rounded-full with percentage labels)
+- 3 time estimate cards (P1 Playwright, P2/P3 curl_cffi, Reviews) with color-coded backgrounds
+- 2 doughnut charts (priority distribution, snapshots by source) with cutout 65%
+- 3-column breakdown tables (enrichment method, review status, marketplace)
+- 10 action cards in responsive 3-column grid
+- Failed products table with status badges, error tooltips
+- Empty state with check icon
+- Auto-refresh every 30s
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/templates/admin/dashboard.html` | Full Tailwind redesign — removed all inline CSS |
+| `backend/templates/admin/backfill_console.html` | Full Tailwind redesign — removed all inline CSS |
+
+---
+
+### UI-4: Analytics + Price Intel + Index + Login Redesign (Tailwind)
+**Date:** 2026-03-11
+**Status:** Done
+
+Redesigned 4 admin pages with pure Tailwind utility classes matching the Apex Dashboard aesthetic.
+
+**Analytics:**
+- 2-column chart grid: products/snapshots/users/reviews line charts with gradient fills, smooth curves (tension 0.4), no dots
+- Marketplace doughnut + enrichment funnel horizontal bar chart
+- 3 velocity stat cards (pending enrichment, daily rate, est. days) with color-coded values
+- Discovery vs enrichment grouped bar chart
+- Top 10 tables (by reviews, by snapshots) in card containers with empty states
+- Category + brand horizontal bar charts
+- Meilisearch health cards with status badges + 2 action cards (reindex, sync)
+- Dark mode-aware chart grid/text colors
+
+**Price Intelligence:**
+- Snapshot stat cards (total, today, per source) in 4-column grid
+- Source doughnut + deal type doughnut charts with 60% cutout
+- TimescaleDB health: 5-column grid (chunks, compressed, table size, compression status badge, aggregate status badge)
+- Price alerts section (active, triggered today, avg trigger days)
+- Deal detection section with dynamic cards for each deal type
+- Anomaly stats (drops >30%, spikes >50%) with trend icons
+- 2-column anomaly tables (price drops, price spikes) with ₹ formatting and color-coded % change
+- 2 action cards (refresh aggregate, detect deals)
+
+**Index (Admin Home):**
+- Quick links as colored Tailwind pills with Lucide icons (8 links: Dashboard, Backfill, Enrichment, Cluster, Health, Price Intel, Analytics, Flower)
+- Models grouped by app in 3-column card grid
+- Each model row with Add (emerald badge) + Change/View (blue badge) actions
+- Empty state with lock icon for no-permission users
+
+**Login:**
+- Standalone page (no sidebar/topbar) — centered card layout
+- WHYDUD logo with emerald icon + "Admin Panel" subtitle
+- Styled form fields with emerald focus rings
+- Error display with red border-left alerts
+- Clean bottom footer text
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/templates/admin/analytics.html` | Full Tailwind redesign — removed all inline CSS, Chart.js with gradient fills |
+| `backend/templates/admin/price_intel.html` | Full Tailwind redesign — removed all inline CSS |
+| `backend/templates/admin/index.html` | Full Tailwind redesign — pills + card grid replacing old quick-links |
+| `backend/templates/admin/login.html` | NEW — standalone Tailwind login page |

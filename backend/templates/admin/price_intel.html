@@ -2,394 +2,518 @@
 {% load i18n %}
 
 {% block title %}Price Intelligence{% endblock %}
-{% block content_title %}<h1>Price Intelligence Console</h1>{% endblock %}
-
-{% block extrahead %}
-{{ block.super }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<style>
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .stat-card .label {
-    font-size: 12px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0;
-  }
-  .stat-card .value {
-    font-size: 28px;
-    font-weight: bold;
-    color: #1a1a2e;
-    margin-top: 4px;
-  }
-  .stat-card .sub {
-    font-size: 12px;
-    color: #999;
-    margin-top: 4px;
-  }
-  .stat-card .value.warn { color: #d97706; }
-  .stat-card .value.danger { color: #DC2626; }
-  .stat-card .value.ok { color: #16A34A; }
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 24px 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #F97316;
-    color: #1a1a2e;
-  }
-  .two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  .three-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  @media (max-width: 900px) {
-    .two-col, .three-col { grid-template-columns: 1fr; }
-  }
-  .chart-box {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .chart-box h3 {
-    font-size: 14px;
-    color: #333;
-    margin: 0 0 12px;
-  }
-  .anomaly-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  .anomaly-table th {
-    text-align: left;
-    padding: 8px 12px;
-    border-bottom: 2px solid #e2e8f0;
-    font-weight: 600;
-    color: #333;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .anomaly-table td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #f1f5f9;
-    color: #555;
-  }
-  .anomaly-table tr:hover { background: #fafbfc; }
-  .pct-drop {
-    color: #16A34A;
-    font-weight: 600;
-  }
-  .pct-spike {
-    color: #DC2626;
-    font-weight: 600;
-  }
-  .tsdb-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-  .tsdb-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 10px 14px;
-  }
-  .tsdb-item .ti-value {
-    font-weight: 700;
-    font-size: 18px;
-    color: #1a1a2e;
-    min-width: 40px;
-  }
-  .tsdb-item .ti-label {
-    font-size: 12px;
-    color: #666;
-  }
-  /* Actions */
-  .action-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .action-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 16px;
-  }
-  .action-card h4 {
-    margin: 0 0 8px;
-    font-size: 14px;
-    color: #1a1a2e;
-  }
-  .action-card .desc {
-    font-size: 12px;
-    color: #666;
-    margin-bottom: 12px;
-  }
-  .btn-action {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: opacity 0.2s;
-  }
-  .btn-action:hover { opacity: 0.85; }
-  .btn-primary { background: #F97316; color: white; }
-  .btn-secondary { background: #64748B; color: white; }
-</style>
-{% endblock %}
+{% block page_title %}Price Intelligence{% endblock %}
 
 {% block content %}
 
-<!-- Price Snapshots -->
-<div class="section-title">Price Snapshots</div>
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Total Snapshots</div>
-    <div class="value">{{ total_snapshots|default:"0" }}</div>
+<p class="text-sm text-slate-400 mb-6">Snapshot analytics, TimescaleDB health, anomaly detection, and deal tracking.</p>
+
+<!-- ============================================================ -->
+<!-- PRICE SNAPSHOTS -->
+<!-- ============================================================ -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Price Snapshots</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+  <!-- Total Snapshots -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Total Snapshots</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          {{ total_snapshots|default:"0" }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="database" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">New Today</div>
-    <div class="value">{{ snapshots_today|default:"0" }}</div>
+
+  <!-- New Today -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">New Today</div>
+        <div class="text-[28px] font-bold text-emerald-500 mt-1.5 leading-none">
+          {{ snapshots_today|default:"0" }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="plus-circle" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
+
   {% for s in by_source %}
-  <div class="stat-card">
-    <div class="label">{{ s.source }}</div>
-    <div class="value">{{ s.count }}</div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">{{ s.source }}</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          {{ s.count }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-500/10 text-violet-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="layers" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
   {% endfor %}
 </div>
 
-<div class="two-col">
-  <div class="chart-box">
-    <h3>Snapshots by Source</h3>
-    <canvas id="sourceChart" height="200"></canvas>
+<!-- Source & Deal Type Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-6 shadow-xs">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Snapshots by Source</div>
+    <div class="text-xs text-slate-400 mt-0.5">Distribution across data sources</div>
+    <div class="mt-4 relative" style="height: 250px">
+      <canvas id="sourceChart"></canvas>
+    </div>
   </div>
+
   {% if deals.type_labels %}
-  <div class="chart-box">
-    <h3>Active Deals by Type</h3>
-    <canvas id="dealTypeChart" height="200"></canvas>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-6 shadow-xs">
+    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Active Deals by Type</div>
+    <div class="text-xs text-slate-400 mt-0.5">Current deal breakdown</div>
+    <div class="mt-4 relative" style="height: 250px">
+      <canvas id="dealTypeChart"></canvas>
+    </div>
   </div>
   {% endif %}
 </div>
 
-<!-- TimescaleDB Health -->
-<div class="section-title">TimescaleDB Health</div>
+<!-- ============================================================ -->
+<!-- TIMESCALEDB HEALTH -->
+<!-- ============================================================ -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">TimescaleDB Health</div>
+
 {% if tsdb.error %}
-<div class="stat-card">
-  <div class="value warn">Unavailable</div>
-  <div class="sub">TimescaleDB extension may not be installed</div>
+<div class="flex items-center gap-2 px-4 py-3 rounded-xl mb-6 text-[13px]
+            bg-amber-50 dark:bg-amber-500/10 border-l-4 border-amber-500
+            text-amber-800 dark:text-amber-300">
+  <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+  TimescaleDB extension may not be installed or is unavailable.
 </div>
 {% else %}
-<div class="tsdb-grid">
-  <div class="tsdb-item">
-    <span class="ti-value">{{ tsdb.total_chunks|default:"—" }}</span>
-    <span class="ti-label">Total Chunks</span>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+  <!-- Total Chunks -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs">
+    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Total Chunks</div>
+    <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+      {{ tsdb.total_chunks|default:"&mdash;" }}
+    </div>
   </div>
-  <div class="tsdb-item">
-    <span class="ti-value">{{ tsdb.compressed_chunks|default:"—" }}</span>
-    <span class="ti-label">Compressed</span>
+
+  <!-- Compressed -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs">
+    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Compressed</div>
+    <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+      {{ tsdb.compressed_chunks|default:"&mdash;" }}
+    </div>
   </div>
-  <div class="tsdb-item">
-    <span class="ti-value">{{ tsdb.table_size|default:"—" }}</span>
-    <span class="ti-label">Table Size</span>
+
+  <!-- Table Size -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs">
+    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Table Size</div>
+    <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+      {{ tsdb.table_size|default:"&mdash;" }}
+    </div>
   </div>
-  <div class="tsdb-item">
-    <span class="ti-value{% if tsdb.compression_enabled %} ok{% endif %}">
-      {% if tsdb.compression_enabled %}On{% else %}Off{% endif %}
-    </span>
-    <span class="ti-label">Compression</span>
+
+  <!-- Compression -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs">
+    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Compression</div>
+    <div class="mt-1.5">
+      <span class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md
+                   {% if tsdb.compression_enabled %}bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400
+                   {% else %}bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400{% endif %}">
+        <span class="w-1.5 h-1.5 rounded-full {% if tsdb.compression_enabled %}bg-emerald-500{% else %}bg-slate-400{% endif %}"></span>
+        {% if tsdb.compression_enabled %}Enabled{% else %}Disabled{% endif %}
+      </span>
+    </div>
   </div>
-  <div class="tsdb-item">
-    <span class="ti-value{% if tsdb.has_aggregate %} ok{% else %} warn{% endif %}">
-      {% if tsdb.has_aggregate %}Yes{% else %}No{% endif %}
-    </span>
-    <span class="ti-label">price_daily Agg</span>
+
+  <!-- price_daily Aggregate -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs">
+    <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">price_daily Agg</div>
+    <div class="mt-1.5">
+      <span class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md
+                   {% if tsdb.has_aggregate %}bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400
+                   {% else %}bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400{% endif %}">
+        <span class="w-1.5 h-1.5 rounded-full {% if tsdb.has_aggregate %}bg-emerald-500{% else %}bg-amber-500{% endif %}"></span>
+        {% if tsdb.has_aggregate %}Active{% else %}Missing{% endif %}
+      </span>
+    </div>
   </div>
 </div>
 {% endif %}
 
-<!-- Price Alerts -->
-<div class="section-title">Price Alerts</div>
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Active Alerts</div>
-    <div class="value">{{ active_alerts|default:"0" }}</div>
+<!-- ============================================================ -->
+<!-- PRICE ALERTS -->
+<!-- ============================================================ -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Price Alerts</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Active Alerts</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          {{ active_alerts|default:"0" }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="bell" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Triggered Today</div>
-    <div class="value">{{ triggered_today|default:"0" }}</div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Triggered Today</div>
+        <div class="text-[28px] font-bold text-emerald-500 mt-1.5 leading-none">
+          {{ triggered_today|default:"0" }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="bell-ring" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Avg Days to Trigger</div>
-    <div class="value">{% if avg_trigger_days %}{{ avg_trigger_days }}{% else %}—{% endif %}</div>
-    <div class="sub">From alert creation to trigger</div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Avg Days to Trigger</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          {% if avg_trigger_days %}{{ avg_trigger_days }}{% else %}&mdash;{% endif %}
+        </div>
+        <div class="text-xs text-slate-400 mt-1.5">From alert creation to trigger</div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="clock" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- Deal Detection -->
-<div class="section-title">Deal Detection</div>
+<!-- ============================================================ -->
+<!-- DEAL DETECTION -->
+<!-- ============================================================ -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Deal Detection</div>
+
 {% if deals.error %}
-<div class="stat-card">
-  <div class="value warn">Unavailable</div>
+<div class="flex items-center gap-2 px-4 py-3 rounded-xl mb-6 text-[13px]
+            bg-amber-50 dark:bg-amber-500/10 border-l-4 border-amber-500
+            text-amber-800 dark:text-amber-300">
+  <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+  Deal detection data unavailable.
 </div>
 {% else %}
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Active Deals</div>
-    <div class="value">{{ deals.active|default:"0" }}</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Active Deals</div>
+        <div class="text-[28px] font-bold text-emerald-500 mt-1.5 leading-none">
+          {{ deals.active|default:"0" }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="tag" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Detected Today</div>
-    <div class="value">{{ deals.today|default:"0" }}</div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Detected Today</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          {{ deals.today|default:"0" }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="search" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
+
   {% for d in deals.by_type %}
-  <div class="stat-card">
-    <div class="label">{{ d.deal_type }}</div>
-    <div class="value">{{ d.count }}</div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">{{ d.deal_type }}</div>
+        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          {{ d.count }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="zap" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
   {% endfor %}
 </div>
 {% endif %}
 
-<!-- Price Anomalies -->
-<div class="section-title">Price Anomalies (Last 7 Days)</div>
+<!-- ============================================================ -->
+<!-- PRICE ANOMALIES -->
+<!-- ============================================================ -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Price Anomalies (Last 7 Days)</div>
+
 {% if anomalies.error %}
-<div class="stat-card">
-  <div class="value warn">Query failed</div>
-  <div class="sub">TimescaleDB may not be available</div>
+<div class="flex items-center gap-2 px-4 py-3 rounded-xl mb-6 text-[13px]
+            bg-amber-50 dark:bg-amber-500/10 border-l-4 border-amber-500
+            text-amber-800 dark:text-amber-300">
+  <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+  TimescaleDB may not be available for anomaly detection.
 </div>
 {% else %}
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="label">Price Drops &gt; 30%</div>
-    <div class="value{% if anomalies.drop_count %} ok{% endif %}">{{ anomalies.drop_count }}</div>
+
+<!-- Anomaly Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Price Drops &gt; 30%</div>
+        <div class="text-[28px] font-bold {% if anomalies.drop_count %}text-emerald-500{% else %}text-slate-900 dark:text-slate-100{% endif %} mt-1.5 leading-none">
+          {{ anomalies.drop_count }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="trending-down" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="label">Price Spikes &gt; 50%</div>
-    <div class="value{% if anomalies.spike_count %} danger{% endif %}">{{ anomalies.spike_count }}</div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
+              transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Price Spikes &gt; 50%</div>
+        <div class="text-[28px] font-bold {% if anomalies.spike_count %}text-red-500{% else %}text-slate-900 dark:text-slate-100{% endif %} mt-1.5 leading-none">
+          {{ anomalies.spike_count }}
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500
+                  flex items-center justify-center flex-shrink-0">
+        <i data-lucide="trending-up" class="w-5 h-5"></i>
+      </div>
+    </div>
   </div>
 </div>
 
-<div class="two-col">
-  <!-- Big price drops -->
-  <div>
-    <h3 style="font-size:14px;margin:0 0 8px;color:#333;">Top Price Drops</h3>
+<!-- Anomaly Tables -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+  <!-- Top Price Drops -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Top Price Drops</div>
+    </div>
     {% if anomalies.drops %}
-    <table class="anomaly-table">
+    <table class="w-full">
       <thead>
         <tr>
-          <th>Product</th>
-          <th>Old Price</th>
-          <th>New Price</th>
-          <th>Change</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                     px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+            Product
+          </th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                     px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+            Old
+          </th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                     px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+            New
+          </th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                     px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+            Change
+          </th>
         </tr>
       </thead>
       <tbody>
         {% for a in anomalies.drops %}
-        <tr>
-          <td title="{{ a.product_title }}">{{ a.product_title|truncatechars:40 }}</td>
-          <td>₹{{ a.old_price|floatformat:0 }}</td>
-          <td>₹{{ a.new_price|floatformat:0 }}</td>
-          <td class="pct-drop">{{ a.change_pct }}%</td>
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300
+                     border-b border-slate-100 dark:border-slate-700/50" title="{{ a.product_title }}">
+            {{ a.product_title|truncatechars:35 }}
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-500 dark:text-slate-400 text-right tabular-nums
+                     border-b border-slate-100 dark:border-slate-700/50">
+            &#8377;{{ a.old_price|floatformat:0 }}
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right tabular-nums
+                     border-b border-slate-100 dark:border-slate-700/50">
+            &#8377;{{ a.new_price|floatformat:0 }}
+          </td>
+          <td class="px-5 py-3 text-[13px] text-emerald-600 dark:text-emerald-400 text-right font-semibold tabular-nums
+                     border-b border-slate-100 dark:border-slate-700/50">
+            {{ a.change_pct }}%
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <p style="color:#999;font-size:13px;">No significant drops detected.</p>
+    <div class="px-5 py-8 text-center">
+      <i data-lucide="trending-down" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+      <div class="text-[13px] text-slate-400">No significant drops detected.</div>
+    </div>
     {% endif %}
   </div>
 
-  <!-- Big price spikes -->
-  <div>
-    <h3 style="font-size:14px;margin:0 0 8px;color:#333;">Top Price Spikes</h3>
+  <!-- Top Price Spikes -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl overflow-hidden shadow-xs">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Top Price Spikes</div>
+    </div>
     {% if anomalies.spikes %}
-    <table class="anomaly-table">
+    <table class="w-full">
       <thead>
         <tr>
-          <th>Product</th>
-          <th>Old Price</th>
-          <th>New Price</th>
-          <th>Change</th>
+          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                     px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+            Product
+          </th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                     px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+            Old
+          </th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                     px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+            New
+          </th>
+          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium
+                     px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+            Change
+          </th>
         </tr>
       </thead>
       <tbody>
         {% for a in anomalies.spikes %}
-        <tr>
-          <td title="{{ a.product_title }}">{{ a.product_title|truncatechars:40 }}</td>
-          <td>₹{{ a.old_price|floatformat:0 }}</td>
-          <td>₹{{ a.new_price|floatformat:0 }}</td>
-          <td class="pct-spike">+{{ a.change_pct }}%</td>
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300
+                     border-b border-slate-100 dark:border-slate-700/50" title="{{ a.product_title }}">
+            {{ a.product_title|truncatechars:35 }}
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-500 dark:text-slate-400 text-right tabular-nums
+                     border-b border-slate-100 dark:border-slate-700/50">
+            &#8377;{{ a.old_price|floatformat:0 }}
+          </td>
+          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right tabular-nums
+                     border-b border-slate-100 dark:border-slate-700/50">
+            &#8377;{{ a.new_price|floatformat:0 }}
+          </td>
+          <td class="px-5 py-3 text-[13px] text-red-600 dark:text-red-400 text-right font-semibold tabular-nums
+                     border-b border-slate-100 dark:border-slate-700/50">
+            +{{ a.change_pct }}%
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <p style="color:#999;font-size:13px;">No significant spikes detected.</p>
+    <div class="px-5 py-8 text-center">
+      <i data-lucide="trending-up" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+      <div class="text-[13px] text-slate-400">No significant spikes detected.</div>
+    </div>
     {% endif %}
   </div>
 </div>
 {% endif %}
 
-<!-- Actions -->
-<div class="section-title">Actions</div>
-<div class="action-grid">
-  <div class="action-card">
-    <h4>Refresh Aggregate</h4>
-    <div class="desc">Refresh the price_daily continuous aggregate (TimescaleDB)</div>
+<!-- ============================================================ -->
+<!-- ACTIONS -->
+<!-- ============================================================ -->
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Actions</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Refresh Aggregate</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">
+      Refresh the price_daily continuous aggregate (TimescaleDB)
+    </div>
     <form method="post" action="{% url 'admin:price-intel-action' action='refresh-aggregate' %}">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-primary">Refresh Aggregate</button>
+      <button type="submit"
+              class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white
+                     text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Refresh Aggregate
+      </button>
     </form>
   </div>
 
-  <div class="action-card">
-    <h4>Detect Deals</h4>
-    <div class="desc">Scan for error pricing, lowest-ever, flash sales, genuine discounts</div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Detect Deals</div>
+    <div class="text-xs text-slate-400 mt-1 mb-3">
+      Scan for error pricing, lowest-ever, flash sales, genuine discounts
+    </div>
     <form method="post" action="{% url 'admin:price-intel-action' action='detect-deals' %}">
       {% csrf_token %}
-      <button type="submit" class="btn-action btn-primary">Detect Deals</button>
+      <button type="submit"
+              class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white
+                     text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+        Detect Deals
+      </button>
     </form>
   </div>
 </div>
 
-<!-- Charts -->
+{% endblock %}
+
+{% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  const COLORS = ['#F97316', '#4DB6AC', '#FBBF24', '#16A34A', '#DC2626', '#64748B'];
+  const isDark = document.documentElement.classList.contains('dark');
+  const COLORS = ['#f97316', '#4db6ac', '#f59e0b', '#10b981', '#dc2626', '#64748b'];
+  const textColor = isDark ? '#94a3b8' : '#64748b';
 
-  // Source donut chart
+  // Source doughnut chart
   const srcCtx = document.getElementById('sourceChart');
   if (srcCtx) {
     new Chart(srcCtx, {
@@ -400,15 +524,19 @@ document.addEventListener('DOMContentLoaded', function() {
           data: {{ source_counts|safe }},
           backgroundColor: COLORS.slice(0, {{ by_source|length }}),
           borderWidth: 2,
-          borderColor: '#fff',
+          borderColor: isDark ? '#1e293b' : '#fff'
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        cutout: '60%',
         plugins: {
-          legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } },
-        },
+          legend: {
+            position: 'bottom',
+            labels: { padding: 16, font: { size: 11, family: 'Inter' }, usePointStyle: true, boxWidth: 10, color: textColor }
+          }
+        }
       }
     });
   }
@@ -425,20 +553,23 @@ document.addEventListener('DOMContentLoaded', function() {
           data: {{ deals.type_counts|safe }},
           backgroundColor: COLORS.slice(0, {{ deals.by_type|length }}),
           borderWidth: 2,
-          borderColor: '#fff',
+          borderColor: isDark ? '#1e293b' : '#fff'
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        cutout: '60%',
         plugins: {
-          legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } },
-        },
+          legend: {
+            position: 'bottom',
+            labels: { padding: 16, font: { size: 11, family: 'Inter' }, usePointStyle: true, boxWidth: 10, color: textColor }
+          }
+        }
       }
     });
   }
   {% endif %}
 });
 </script>
-
 {% endblock %}
