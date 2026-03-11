@@ -358,6 +358,17 @@ async def extend_with_pricehistory(
         nonlocal _done_count, _stop_requested
         # Look up the original status so we revert correctly on failure
         revert_status = original_status_map.get(bp.id, BackfillProduct.Status.BH_FILLED)
+
+        # If another product in this wave already triggered stop, skip immediately
+        if _stop_requested:
+            await sync_to_async(_save_bp_rate_limited)(
+                bp, "Skipped — IP burned / rate limited", revert_status
+            )
+            stats["rate_limited"] += 1
+            processed_ids.add(bp.id)
+            _done_count += 1
+            return
+
         try:
             # Step 1: Fetch HTML page for token
             meta = await client.fetch_page_metadata(bp.ph_code)
@@ -406,7 +417,7 @@ async def extend_with_pricehistory(
             await sync_to_async(_save_bp_rate_limited)(bp, str(e), revert_status)
             stats["rate_limited"] += 1
             processed_ids.add(bp.id)
-            _stop_requested = True  # Stop processing more waves
+            _stop_requested = True  # Stop current wave + future waves
 
         except AuthError as e:
             await sync_to_async(_save_bp_token_failed)(bp, f"Auth: {e}", revert_status)
@@ -442,9 +453,11 @@ async def extend_with_pricehistory(
             # Process in waves for data safety
             for wave_start in range(0, total, _WAVE_SIZE):
                 if _stop_requested:
+                    burned = " (IP burned)" if client.is_ip_burned else ""
                     logger.warning(
-                        "Phase 3: stopping early due to rate limiting "
+                        "Phase 3: stopping early due to rate limiting%s "
                         "(wave %d/%d, %d processed so far)",
+                        burned,
                         wave_start // _WAVE_SIZE + 1,
                         (total + _WAVE_SIZE - 1) // _WAVE_SIZE,
                         _done_count,

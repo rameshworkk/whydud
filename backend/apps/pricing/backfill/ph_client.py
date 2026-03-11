@@ -205,6 +205,11 @@ class PHClient:
         )
 
     @property
+    def is_ip_burned(self) -> bool:
+        """True if consecutive 403s exceed abort threshold — IP is burned."""
+        return self._consecutive_403s >= BackfillConfig.ph_abort_threshold()
+
+    @property
     def is_rate_limited(self) -> bool:
         """True if we're currently experiencing rate limiting."""
         return self._rate_limited
@@ -296,6 +301,12 @@ class PHClient:
         url = f"{BackfillConfig.ph_base_url()}/p/{ph_code}"
 
         for attempt in range(self._max_retries):
+            # Abort immediately if IP is burned (too many consecutive 403s)
+            if self.is_ip_burned:
+                raise RateLimitError(
+                    f"IP burned ({self._consecutive_403s} consecutive 403s) — aborting {ph_code}"
+                )
+
             async with self._semaphore:
                 await self._wait_for_cooldown()
                 await self._maybe_cooldown_pause()
@@ -310,6 +321,11 @@ class PHClient:
                     status = e.response.status_code
                     if status in (403, 429):
                         self._on_rate_limit()
+                        if self.is_ip_burned:
+                            raise RateLimitError(
+                                f"IP burned ({self._consecutive_403s} consecutive 403s) "
+                                f"— aborting {ph_code}"
+                            ) from e
                         if attempt < self._max_retries - 1:
                             wait = (attempt + 1) * 15
                             logger.warning(
@@ -450,6 +466,12 @@ class PHClient:
             raise AuthError(f"No token provided for {ph_code}")
 
         for attempt in range(self._max_retries):
+            # Abort immediately if IP is burned
+            if self.is_ip_burned:
+                raise RateLimitError(
+                    f"IP burned ({self._consecutive_403s} consecutive 403s) — aborting {ph_code}"
+                )
+
             async with self._semaphore:
                 await self._wait_for_cooldown()
                 await self._maybe_cooldown_pause()
@@ -473,6 +495,11 @@ class PHClient:
                     status = e.response.status_code
                     if status in (403, 429):
                         self._on_rate_limit()
+                        if self.is_ip_burned:
+                            raise RateLimitError(
+                                f"IP burned ({self._consecutive_403s} consecutive 403s) "
+                                f"— aborting {ph_code}"
+                            ) from e
                         if attempt < self._max_retries - 1:
                             wait = (attempt + 1) * 15
                             logger.warning(

@@ -5008,3 +5008,61 @@ All admin display methods that format prices/amounts now divide by 100 before di
 3. **Playwright enrichment** — `resolve_canonical_category()` uses marketplace breadcrumbs (most accurate)
 
 **Backfill existing products:** `python manage.py assign_categories --reindex`
+
+### PH-Extend: Retry/Backoff + Include Discovered + Dashboard Controls (2026-03-11)
+
+**Problem:** PH-extend (Phase 3) had zero retry/backoff logic — a single 403 from PriceHistory.app would fail products permanently. Data from successful 200s was lost on cancel. Could not skip bh-fill for discovered products.
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/pricing/backfill/ph_client.py` | Full rewrite: retry loop (3 attempts, exponential backoff 15s/30s/45s), alternating cooldown pauses (15s/30s every 3 min), adaptive delay, `RateLimitError` exception |
+| `backend/apps/pricing/backfill/phase3_extend.py` | Wave-based processing (50/wave), data persists on cancel, `--include-discovered` support, `original_status_map` tracking for correct status revert |
+| `backend/apps/pricing/backfill/config.py` | Added `ph_max_retries`, `ph_cooldown_interval`, `ph_cooldown_short`, `ph_cooldown_long` config methods |
+| `backend/apps/pricing/management/commands/backfill_prices.py` | Added `--include-discovered` flag to ph-extend subparser |
+| `backend/apps/pricing/tasks.py` | `run_phase3_extend` accepts `include_discovered`, stops repeat on rate limit |
+| `backend/templates/admin/backfill_console.html` | Added "Include Discovered" checkbox to PH-Extend card |
+| `backend/apps/admin_tools/admin_site.py` | Extracts `include_discovered` from POST, passes to Celery task |
+| `docs/OPERATIONS_GUIDE.md` | Documented PH rate limiting, retry config, `--include-discovered` flag |
+
+**Key design decisions:**
+- Rate-limited products revert to original status (DISCOVERED or BH_FILLED) — NOT marked FAILED
+- Each product's pre-claim status tracked via `original_status_map` for correct revert
+- Wave processing: 50 products at a time, all saves complete before next wave starts
+- `CancelledError` handler ensures in-flight products are released back, not lost
+- Progress logged every 100 products (configurable)
+
+### PH-Extend: IP Burned Abort Threshold (2026-03-11)
+
+**Problem:** PH-extend nodes get stuck at 80+ consecutive 403 Forbidden responses from PriceHistory.app Cloudflare. Existing backoff maxes at 30s delay but never aborts, wasting hours on a burned IP.
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/pricing/backfill/config.py` | Added `ph_abort_threshold()` config (default 20 consecutive 403s) |
+| `backend/apps/pricing/backfill/ph_client.py` | Added `is_ip_burned` property; abort checks at start of retry loops + after `_on_rate_limit()` in both `fetch_page_metadata()` and `fetch_price_history()` |
+| `backend/apps/pricing/backfill/phase3_extend.py` | Added `_stop_requested` check at start of `_process_one()` to skip remaining products in wave immediately; wave-stop log includes "(IP burned)" indicator |
+
+### Admin Async Loading + Live Clock + Loading Skeletons (2026-03-11)
+
+**Problem:** Admin pages (dashboard, backfill, enrichment) blocked 5-15s on server-side DB queries (15-18+ queries per page) before rendering. Users couldn't interact with page controls while waiting.
+
+**Solution:** Pages now render instantly with skeleton pulse animations. Data loads async via JS `fetch()` after page shell renders.
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Stripped all DB queries from `each_context()`, `dashboard_view()`, `backfill_view()`, `enrichment_view()`. Added 4 JSON API endpoints: `api_sidebar_badges`, `api_dashboard_data`, `api_backfill_data`, `api_enrichment_data` with all queries moved there |
+| `backend/templates/admin/includes/topbar.html` | Added live datetime clock (date + time, updates every second) |
+| `backend/templates/admin/base_site.html` | Added global JS: live clock updater, async sidebar badge fetch, helper functions (`fmtNum`, `fmtK`, `setText`, `setHTML`, skeleton templates) |
+| `backend/templates/admin/includes/sidebar.html` | Sidebar badges now empty spans with IDs, populated async via `/api/sidebar-badges/` |
+| `backend/templates/admin/dashboard.html` | Full rewrite: all stat cards have skeleton loaders + unique IDs, JS fetch populates values/sparklines/tables |
+| `backend/templates/admin/backfill_console.html` | Full rewrite: all stats/progress bars/charts/breakdown tables/active tasks/recent tasks/failed products loaded async via `/api/backfill-data/` |
+| `backend/templates/admin/enrichment_console.html` | Full rewrite: all stats/progress bars/charts/breakdowns/stale enrichments/recent failures loaded async via `/api/enrichment-data/` |
+
+**Pattern:** View returns page shell only (title + active_page) → JS `fetch('/admin/api/*-data/')` → populates all elements by ID → `lucide.createIcons()` reinit
+
+**Tested:** 6-product batch on primary — all 200 OK, 648 price points injected, zero failures. Deployed to all nodes.

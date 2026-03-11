@@ -3,19 +3,38 @@
 {% block title %}Backfill Pipeline{% endblock %}
 {% block content %}
 
+<!-- Page-level loading overlay -->
+<div id="bf-loading" class="flex items-center gap-3 mb-6 px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xs">
+  <svg class="animate-spin h-5 w-5 text-emerald-500" viewBox="0 0 24 24" fill="none">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+  </svg>
+  <span class="text-sm text-slate-500">Loading backfill data...</span>
+</div>
+
 <!-- Top-level Stats -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-6">
-  {% with label="Total BackfillProducts" value=total|default:"0" icon="database" color="emerald" %}
-    {% include "admin/includes/stat_card.html" %}
-  {% endwith %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Total BackfillProducts</div>
+        <div id="bf-total" class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          <div class="animate-pulse h-8 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="database" class="w-5 h-5"></i>
+      </div>
+    </div>
+  </div>
 
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
-              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
-              transition-all duration-200">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
     <div class="flex justify-between items-start">
       <div>
         <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Pending</div>
-        <div class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">{{ by_scrape.pending|default:"0" }}</div>
+        <div id="bf-pending" class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
+        </div>
       </div>
       <div class="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-500/10 text-slate-500 flex items-center justify-center flex-shrink-0">
         <i data-lucide="clock" class="w-5 h-5"></i>
@@ -23,13 +42,13 @@
     </div>
   </div>
 
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
-              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
-              transition-all duration-200">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
     <div class="flex justify-between items-start">
       <div>
         <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Enriching</div>
-        <div class="text-[28px] font-bold text-amber-500 mt-1.5 leading-none">{{ by_scrape.enriching|default:"0" }}</div>
+        <div id="bf-enriching" class="text-[28px] font-bold text-amber-500 mt-1.5 leading-none">
+          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
+        </div>
       </div>
       <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
         <i data-lucide="loader" class="w-5 h-5"></i>
@@ -37,17 +56,27 @@
     </div>
   </div>
 
-  {% with label="Scraped" value=by_scrape.scraped|default:"0" icon="check-circle" color="emerald" %}
-    {% include "admin/includes/stat_card.html" %}
-  {% endwith %}
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
+    <div class="flex justify-between items-start">
+      <div>
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Scraped</div>
+        <div id="bf-scraped" class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
+          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
+        </div>
+      </div>
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
+        <i data-lucide="check-circle" class="w-5 h-5"></i>
+      </div>
+    </div>
+  </div>
 
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
-              rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5
-              transition-all duration-200">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
     <div class="flex justify-between items-start">
       <div>
         <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Failed</div>
-        <div class="text-[28px] font-bold text-red-500 mt-1.5 leading-none">{{ by_scrape.failed|default:"0" }}</div>
+        <div id="bf-failed" class="text-[28px] font-bold text-red-500 mt-1.5 leading-none">
+          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
+        </div>
       </div>
       <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center flex-shrink-0">
         <i data-lucide="alert-circle" class="w-5 h-5"></i>
@@ -74,18 +103,18 @@
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
   <div class="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-5">
     <div class="text-[11px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-medium">P1 Playwright</div>
-    <div class="text-[24px] font-bold text-amber-800 dark:text-amber-300 mt-1.5 leading-none">{{ est_p1_hrs }} hrs</div>
-    <div class="text-xs text-amber-600 dark:text-amber-400/70 mt-1.5">{{ p1_pending|default:"0" }} products @ ~30s each</div>
+    <div id="bf-est-p1" class="text-[24px] font-bold text-amber-800 dark:text-amber-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-amber-200 dark:bg-amber-700 rounded"></span></div>
+    <div id="bf-est-p1-sub" class="text-xs text-amber-600 dark:text-amber-400/70 mt-1.5"><span class="animate-pulse inline-block h-3 w-28 bg-amber-200 dark:bg-amber-700 rounded"></span></div>
   </div>
   <div class="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-2xl p-5">
     <div class="text-[11px] uppercase tracking-wider text-blue-700 dark:text-blue-400 font-medium">P2/P3 curl_cffi</div>
-    <div class="text-[24px] font-bold text-blue-800 dark:text-blue-300 mt-1.5 leading-none">{{ est_p2p3_hrs }} hrs</div>
-    <div class="text-xs text-blue-600 dark:text-blue-400/70 mt-1.5">{{ p2p3_pending|default:"0" }} products @ ~2s each</div>
+    <div id="bf-est-p2p3" class="text-[24px] font-bold text-blue-800 dark:text-blue-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-blue-200 dark:bg-blue-700 rounded"></span></div>
+    <div id="bf-est-p2p3-sub" class="text-xs text-blue-600 dark:text-blue-400/70 mt-1.5"><span class="animate-pulse inline-block h-3 w-28 bg-blue-200 dark:bg-blue-700 rounded"></span></div>
   </div>
   <div class="bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 rounded-2xl p-5">
     <div class="text-[11px] uppercase tracking-wider text-violet-700 dark:text-violet-400 font-medium">Reviews</div>
-    <div class="text-[24px] font-bold text-violet-800 dark:text-violet-300 mt-1.5 leading-none">{{ est_reviews_hrs }} hrs</div>
-    <div class="text-xs text-violet-600 dark:text-violet-400/70 mt-1.5">{{ reviews_pending|default:"0" }} products @ ~15s each</div>
+    <div id="bf-est-reviews" class="text-[24px] font-bold text-violet-800 dark:text-violet-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-violet-200 dark:bg-violet-700 rounded"></span></div>
+    <div id="bf-est-reviews-sub" class="text-xs text-violet-600 dark:text-violet-400/70 mt-1.5"><span class="animate-pulse inline-block h-3 w-28 bg-violet-200 dark:bg-violet-700 rounded"></span></div>
   </div>
 </div>
 
@@ -115,15 +144,8 @@
           <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
         </tr>
       </thead>
-      <tbody>
-        {% for method, count in by_method.items %}
-        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 capitalize">{{ method }}</td>
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ count }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>
-        {% endfor %}
+      <tbody id="bf-method-tbody">
+        <tr><td colspan="2" class="px-5 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -140,15 +162,8 @@
           <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
         </tr>
       </thead>
-      <tbody>
-        {% for status, count in by_review.items %}
-        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 capitalize">{{ status }}</td>
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ count }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>
-        {% endfor %}
+      <tbody id="bf-review-tbody">
+        <tr><td colspan="2" class="px-5 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -165,23 +180,15 @@
           <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
         </tr>
       </thead>
-      <tbody>
-        {% for row in by_marketplace %}
-        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ row.marketplace_slug }}</td>
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ row.count }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>
-        {% endfor %}
+      <tbody id="bf-marketplace-tbody">
+        <tr><td colspan="2" class="px-5 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
 <!-- Snapshots by Source -->
-{% if snapshots_by_source %}
-<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6 max-w-md">
+<div id="bf-snapshots-section" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6 max-w-md">
   <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
     <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Price Snapshots by Source</div>
   </div>
@@ -192,17 +199,11 @@
         <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
       </tr>
     </thead>
-    <tbody>
-      {% for row in snapshots_by_source %}
-      <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-        <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ row.source }}</td>
-        <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">{{ row.count }}</td>
-      </tr>
-      {% endfor %}
+    <tbody id="bf-snapshots-tbody">
+      <tr><td colspan="2" class="px-5 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
     </tbody>
   </table>
 </div>
-{% endif %}
 
 <!-- Actions -->
 <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Actions</div>
@@ -651,208 +652,46 @@
 </div>
 
 <!-- Active Tasks Panel -->
-<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Active Tasks ({{ active_tasks|length }})</div>
-{% if active_tasks %}
-<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
-  <div class="overflow-x-auto">
-    <table class="w-full">
-      <thead>
-        <tr>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Runtime</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Kwargs</th>
-          <th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for task in active_tasks %}
-        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">
-            {{ task.worker|truncatechars:30 }}
-          </td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ task.name }}</code>
-          </td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ task.id }}</code>
-          </td>
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 font-medium tabular-nums border-b border-slate-100 dark:border-slate-700/50">
-            {{ task.runtime_display }}
-          </td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <div class="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-slate-400" title="{{ task.kwargs }}">
-              {{ task.kwargs|truncatechars:50 }}
-            </div>
-          </td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50 text-center">
-            <form method="post" action="{% url 'admin:backfill-action' action='revoke' %}" class="inline"
-                  onsubmit="return confirm('Revoke task {{ task.id }}?')">
-              {% csrf_token %}
-              <input type="hidden" name="task_id" value="{{ task.full_id }}">
-              <button type="submit" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-[11px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-                Revoke
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Active Tasks (<span id="bf-active-count">...</span>)</div>
+<div id="bf-active-tasks" class="mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">
+    <div class="animate-pulse flex flex-col items-center gap-2"><div class="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div></div>
   </div>
 </div>
-{% else %}
-<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs mb-6 text-center">
-  <i data-lucide="coffee" class="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
-  <div class="text-[13px] text-slate-400">No tasks currently running.</div>
-</div>
-{% endif %}
 
 <!-- Task Log Viewer -->
 <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Recent Task History</div>
-{% if recent_task_results %}
-<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
-  <div class="overflow-x-auto">
-    <table class="w-full">
-      <thead>
-        <tr>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Completed</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Result</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for tr in recent_task_results %}
-        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ tr.short_name }}</code>
-          </td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            {% if tr.status == "SUCCESS" %}
-            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Success
-            </span>
-            {% elif tr.status == "FAILURE" %}
-            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
-              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Failed
-            </span>
-            {% elif tr.status == "STARTED" %}
-            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Running
-            </span>
-            {% elif tr.status == "REVOKED" %}
-            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
-              <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Revoked
-            </span>
-            {% else %}
-            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400">
-              <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> {{ tr.status }}
-            </span>
-            {% endif %}
-          </td>
-          <td class="px-5 py-3 text-[12px] text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-700/50">
-            {{ tr.worker|default:"—"|truncatechars:20 }}
-          </td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ tr.task_id|truncatechars:12 }}</code>
-          </td>
-          <td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">
-            {{ tr.date_done_str }}
-          </td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px]
-                        {% if tr.status == 'FAILURE' %}text-red-500{% else %}text-slate-500 dark:text-slate-400{% endif %}"
-                 title="{{ tr.result_short }}">
-              {% if tr.status == "FAILURE" %}{{ tr.traceback_short|truncatechars:80 }}{% else %}{{ tr.result_short|truncatechars:80 }}{% endif %}
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div id="bf-recent-tasks" class="mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">
+    <div class="animate-pulse flex flex-col items-center gap-2"><div class="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div></div>
   </div>
 </div>
-{% else %}
-<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs mb-6 text-center">
-  <i data-lucide="scroll" class="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
-  <div class="text-[13px] text-slate-400">No recent task history.</div>
-</div>
-{% endif %}
 
 <!-- Failed Products Table -->
 <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Failed Products (Last 50)</div>
-{% if failed_products %}
-<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6">
-  <div class="overflow-x-auto">
-    <table class="w-full">
-      <thead>
-        <tr>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">External ID</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Scrape</th>
-          <th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Retries</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Error</th>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Updated</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for fp in failed_products %}
-        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{{ fp.external_id }}</code>
-          </td>
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">{{ fp.marketplace_slug }}</td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
-              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> {{ fp.status }}
-            </span>
-          </td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400">
-              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> {{ fp.scrape_status }}
-            </span>
-          </td>
-          <td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-center font-semibold border-b border-slate-100 dark:border-slate-700/50">{{ fp.retry_count }}</td>
-          <td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">
-            <div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-red-500" title="{{ fp.error_message }}">
-              {{ fp.error_message|truncatechars:80 }}
-            </div>
-          </td>
-          <td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">{{ fp.updated_at }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div id="bf-failed-products" class="mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-xs text-center">
+    <div class="animate-pulse flex flex-col items-center gap-2"><div class="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div></div>
   </div>
 </div>
-{% else %}
-<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-xs mb-6 text-center">
-  <i data-lucide="check-circle" class="w-8 h-8 text-emerald-400 mx-auto mb-2"></i>
-  <div class="text-[13px] text-slate-400">No failed products.</div>
-</div>
-{% endif %}
 
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Progress bar builder
+// ── Helpers ───────────────────────────────────────────────────────
 function buildProgressBars(containerId, items, total) {
-  const container = document.getElementById(containerId);
+  var container = document.getElementById(containerId);
   if (!container) return;
+  container.innerHTML = '';
   items.forEach(function(item) {
-    const pct = total > 0 ? (item.count / total * 100) : 0;
-    const row = document.createElement('div');
+    var pct = total > 0 ? (item.count / total * 100) : 0;
+    var row = document.createElement('div');
     row.className = 'mb-3';
     row.innerHTML =
       '<div class="flex justify-between text-xs mb-1.5">' +
         '<span class="text-slate-500 dark:text-slate-400 font-medium">' + item.label + '</span>' +
-        '<span class="text-slate-400 tabular-nums">' + item.count.toLocaleString() + ' (' + pct.toFixed(1) + '%)</span>' +
+        '<span class="text-slate-400 tabular-nums">' + item.count.toLocaleString('en-IN') + ' (' + pct.toFixed(1) + '%)</span>' +
       '</div>' +
       '<div class="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">' +
         '<div class="h-full rounded-full transition-all duration-500" style="width:' + pct.toFixed(1) + '%;background:' + item.color + '"></div>' +
@@ -861,92 +700,242 @@ function buildProgressBars(containerId, items, total) {
   });
 }
 
-// Pipeline status bars
-var total = {{ total|default:"0" }};
-buildProgressBars('pipeline-bars', [
-  {label: 'Discovered', count: {{ by_status.discovered|default:"0" }}, color: '#94a3b8'},
-  {label: 'BH Filling', count: {{ by_status.bh_filling|default:"0" }}, color: '#fbbf24'},
-  {label: 'BH Filled', count: {{ by_status.bh_filled|default:"0" }}, color: '#60a5fa'},
-  {label: 'PH Extending', count: {{ by_status.ph_extending|default:"0" }}, color: '#a78bfa'},
-  {label: 'PH Extended', count: {{ by_status.ph_extended|default:"0" }}, color: '#818cf8'},
-  {label: 'Done', count: {{ by_status.done|default:"0" }}, color: '#10b981'},
-  {label: 'Failed', count: {{ by_status.failed|default:"0" }}, color: '#ef4444'},
-  {label: 'Skipped', count: {{ by_status.skipped|default:"0" }}, color: '#9ca3af'}
-], total);
-
-// Scrape status bars
-buildProgressBars('scrape-bars', [
-  {label: 'Pending', count: {{ by_scrape.pending|default:"0" }}, color: '#94a3b8'},
-  {label: 'Enriching', count: {{ by_scrape.enriching|default:"0" }}, color: '#fbbf24'},
-  {label: 'Scraped', count: {{ by_scrape.scraped|default:"0" }}, color: '#10b981'},
-  {label: 'Failed', count: {{ by_scrape.failed|default:"0" }}, color: '#ef4444'}
-], total);
-
-// Chart colors
-var chartColors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#94a3b8'];
-var isDark = document.documentElement.classList.contains('dark');
-var borderColor = isDark ? '#1e293b' : '#ffffff';
-
-// Enrichment Priority Doughnut
-var priorityData = {{ priority_chart|safe }};
-new Chart(document.getElementById('priorityChart'), {
-  type: 'doughnut',
-  data: {
-    labels: priorityData.labels,
-    datasets: [{
-      data: priorityData.data,
-      backgroundColor: ['#ef4444', '#f97316', '#3b82f6', '#94a3b8'],
-      borderWidth: 2,
-      borderColor: borderColor
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: true,
-    cutout: '65%',
-    plugins: {
-      legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } }
-    }
+function buildTableRows(tbodyId, rows) {
+  var tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>';
+    return;
   }
-});
+  tbody.innerHTML = rows.map(function(r) {
+    return '<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">' +
+      '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 capitalize">' + r[0] + '</td>' +
+      '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">' + (r[1] || 0).toLocaleString('en-IN') + '</td>' +
+    '</tr>';
+  }).join('');
+}
 
-// Snapshots by Source Doughnut
-var snapshotData = {{ snapshot_chart|safe }};
-if (snapshotData.labels.length > 0) {
-  new Chart(document.getElementById('snapshotChart'), {
+function buildDoughnut(canvasId, chartData, colors) {
+  var el = document.getElementById(canvasId);
+  if (!el || !chartData || !chartData.labels || chartData.labels.length === 0) return;
+  var isDark = document.documentElement.classList.contains('dark');
+  new Chart(el, {
     type: 'doughnut',
     data: {
-      labels: snapshotData.labels,
-      datasets: [{
-        data: snapshotData.data,
-        backgroundColor: chartColors.slice(0, snapshotData.labels.length),
-        borderWidth: 2,
-        borderColor: borderColor
-      }]
+      labels: chartData.labels,
+      datasets: [{ data: chartData.data, backgroundColor: colors, borderWidth: 2, borderColor: isDark ? '#1e293b' : '#ffffff' }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      cutout: '65%',
-      plugins: {
-        legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } }
-      }
+      responsive: true, maintainAspectRatio: true, cutout: '65%',
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } } }
     }
   });
 }
 
-// Re-init Lucide icons
-lucide.createIcons();
+function escHtml(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function truncate(s, n) { s = s || ''; return s.length > n ? s.substring(0, n) + '...' : s; }
 
-// Node dropdown multiselect
+function statusBadge(status, colors) {
+  var c = colors || { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-500 dark:text-slate-400', dot: 'bg-slate-400' };
+  return '<span class="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md ' + c.bg + ' ' + c.text + '">' +
+    '<span class="w-1.5 h-1.5 rounded-full ' + c.dot + '"></span> ' + escHtml(status) + '</span>';
+}
+
+var STATUS_COLORS = {
+  SUCCESS: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  FAILURE: { bg: 'bg-red-50 dark:bg-red-500/10', text: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' },
+  STARTED: { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500 animate-pulse' },
+  REVOKED: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-500 dark:text-slate-400', dot: 'bg-slate-400' },
+};
+var STATUS_LABELS = { SUCCESS: 'Success', FAILURE: 'Failed', STARTED: 'Running', REVOKED: 'Revoked' };
+
+// ── Fetch & Populate ──────────────────────────────────────────────
+var REVOKE_URL = '{% url "admin:backfill-action" action="revoke" %}';
+var CSRF = '{{ csrf_token }}';
+
+fetch('{% url "admin:api-backfill-data" %}')
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    // Hide loading banner
+    var loading = document.getElementById('bf-loading');
+    if (loading) loading.style.display = 'none';
+
+    // Top stat cards
+    setText('bf-total', fmtNum(d.total));
+    setText('bf-pending', fmtNum((d.by_scrape || {}).pending || 0));
+    setText('bf-enriching', fmtNum((d.by_scrape || {}).enriching || 0));
+    setText('bf-scraped', fmtNum((d.by_scrape || {}).scraped || 0));
+    setText('bf-failed', fmtNum((d.by_scrape || {}).failed || 0));
+
+    // Estimated time
+    setText('bf-est-p1', (d.est_p1_hrs || 0) + ' hrs');
+    setText('bf-est-p1-sub', fmtNum(d.p1_pending || 0) + ' products @ ~30s each');
+    setText('bf-est-p2p3', (d.est_p2p3_hrs || 0) + ' hrs');
+    setText('bf-est-p2p3-sub', fmtNum(d.p2p3_pending || 0) + ' products @ ~2s each');
+    setText('bf-est-reviews', (d.est_reviews_hrs || 0) + ' hrs');
+    setText('bf-est-reviews-sub', fmtNum(d.reviews_pending || 0) + ' products @ ~15s each');
+
+    // Pipeline status bars
+    var bs = d.by_status || {};
+    buildProgressBars('pipeline-bars', [
+      {label: 'Discovered', count: bs.discovered || 0, color: '#94a3b8'},
+      {label: 'BH Filling', count: bs.bh_filling || 0, color: '#fbbf24'},
+      {label: 'BH Filled', count: bs.bh_filled || 0, color: '#60a5fa'},
+      {label: 'PH Extending', count: bs.ph_extending || 0, color: '#a78bfa'},
+      {label: 'PH Extended', count: bs.ph_extended || 0, color: '#818cf8'},
+      {label: 'Done', count: bs.done || 0, color: '#10b981'},
+      {label: 'Failed', count: bs.failed || 0, color: '#ef4444'},
+      {label: 'Skipped', count: bs.skipped || 0, color: '#9ca3af'}
+    ], d.total || 0);
+
+    // Scrape status bars
+    var sc = d.by_scrape || {};
+    buildProgressBars('scrape-bars', [
+      {label: 'Pending', count: sc.pending || 0, color: '#94a3b8'},
+      {label: 'Enriching', count: sc.enriching || 0, color: '#fbbf24'},
+      {label: 'Scraped', count: sc.scraped || 0, color: '#10b981'},
+      {label: 'Failed', count: sc.failed || 0, color: '#ef4444'}
+    ], d.total || 0);
+
+    // Breakdown tables
+    var bm = d.by_method || {};
+    buildTableRows('bf-method-tbody', Object.keys(bm).map(function(k) { return [k, bm[k]]; }));
+    var br = d.by_review || {};
+    buildTableRows('bf-review-tbody', Object.keys(br).map(function(k) { return [k, br[k]]; }));
+    buildTableRows('bf-marketplace-tbody', (d.by_marketplace || []).map(function(m) { return [m.marketplace_slug, m.count]; }));
+    buildTableRows('bf-snapshots-tbody', (d.snapshots_by_source || []).map(function(s) { return [s.source, s.count]; }));
+
+    // Charts
+    var chartColors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#94a3b8'];
+    buildDoughnut('priorityChart', d.priority_chart, ['#ef4444', '#f97316', '#3b82f6', '#94a3b8']);
+    buildDoughnut('snapshotChart', d.snapshot_chart, chartColors.slice(0, (d.snapshot_chart || {labels:[]}).labels.length));
+
+    // Active Tasks
+    var tasks = d.active_tasks || [];
+    setText('bf-active-count', tasks.length);
+    var atContainer = document.getElementById('bf-active-tasks');
+    if (atContainer) {
+      if (tasks.length === 0) {
+        atContainer.innerHTML =
+          '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">' +
+            '<i data-lucide="coffee" class="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>' +
+            '<div class="text-[13px] text-slate-400">No tasks currently running.</div>' +
+          '</div>';
+      } else {
+        var rows = tasks.map(function(t) {
+          return '<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">' +
+            '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(truncate(t.worker || '', 30)) + '</td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(t.name || '') + '</code></td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(t.id || '') + '</code></td>' +
+            '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 font-medium tabular-nums border-b border-slate-100 dark:border-slate-700/50">' + escHtml(t.runtime_display || '') + '</td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-slate-400" title="' + escHtml(t.kwargs || '') + '">' + escHtml(truncate(t.kwargs || '', 50)) + '</div></td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50 text-center">' +
+              '<form method="post" action="' + REVOKE_URL + '" class="inline" onsubmit="return confirm(\'Revoke task ' + escHtml(t.id || '') + '?\');">' +
+                '<input type="hidden" name="csrfmiddlewaretoken" value="' + CSRF + '">' +
+                '<input type="hidden" name="task_id" value="' + escHtml(t.full_id || '') + '">' +
+                '<button type="submit" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-[11px] font-medium rounded-lg transition-colors active:scale-[0.98]">Revoke</button>' +
+              '</form>' +
+            '</td></tr>';
+        }).join('');
+        atContainer.innerHTML =
+          '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs"><div class="overflow-x-auto"><table class="w-full"><thead><tr>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Runtime</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Kwargs</th>' +
+          '<th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Action</th>' +
+          '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+      }
+    }
+
+    // Recent Task History
+    var rtr = d.recent_task_results || [];
+    var rtContainer = document.getElementById('bf-recent-tasks');
+    if (rtContainer) {
+      if (rtr.length === 0) {
+        rtContainer.innerHTML =
+          '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">' +
+            '<i data-lucide="scroll" class="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>' +
+            '<div class="text-[13px] text-slate-400">No recent task history.</div>' +
+          '</div>';
+      } else {
+        var trRows = rtr.map(function(tr) {
+          var sc = STATUS_COLORS[tr.status] || STATUS_COLORS.REVOKED;
+          var sl = STATUS_LABELS[tr.status] || tr.status;
+          var resultText = tr.status === 'FAILURE' ? truncate(tr.traceback_short || '', 80) : truncate(tr.result_short || '', 80);
+          var resultClass = tr.status === 'FAILURE' ? 'text-red-500' : 'text-slate-500 dark:text-slate-400';
+          return '<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(tr.short_name || '') + '</code></td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(sl, sc) + '</td>' +
+            '<td class="px-5 py-3 text-[12px] text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(truncate(tr.worker || '\u2014', 20)) + '</td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(truncate(tr.task_id || '', 12)) + '</code></td>' +
+            '<td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">' + escHtml(tr.date_done_str || '') + '</td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] ' + resultClass + '" title="' + escHtml(resultText) + '">' + escHtml(resultText) + '</div></td>' +
+          '</tr>';
+        }).join('');
+        rtContainer.innerHTML =
+          '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs"><div class="overflow-x-auto"><table class="w-full"><thead><tr>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Completed</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Result</th>' +
+          '</tr></thead><tbody>' + trRows + '</tbody></table></div></div>';
+      }
+    }
+
+    // Failed Products
+    var fps = d.failed_products || [];
+    var fpContainer = document.getElementById('bf-failed-products');
+    if (fpContainer) {
+      if (fps.length === 0) {
+        fpContainer.innerHTML =
+          '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-xs text-center">' +
+            '<i data-lucide="check-circle" class="w-8 h-8 text-emerald-400 mx-auto mb-2"></i>' +
+            '<div class="text-[13px] text-slate-400">No failed products.</div>' +
+          '</div>';
+      } else {
+        var fpRows = fps.map(function(fp) {
+          return '<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(fp.external_id) + '</code></td>' +
+            '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(fp.marketplace_slug) + '</td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(fp.status, STATUS_COLORS.FAILURE) + '</td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(fp.scrape_status, STATUS_COLORS.FAILURE) + '</td>' +
+            '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-center font-semibold border-b border-slate-100 dark:border-slate-700/50">' + (fp.retry_count || 0) + '</td>' +
+            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-red-500" title="' + escHtml(fp.error_message || '') + '">' + escHtml(truncate(fp.error_message || '', 80)) + '</div></td>' +
+            '<td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">' + escHtml(fp.updated_at || '') + '</td>' +
+          '</tr>';
+        }).join('');
+        fpContainer.innerHTML =
+          '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs"><div class="overflow-x-auto"><table class="w-full"><thead><tr>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">External ID</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Scrape</th>' +
+          '<th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Retries</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Error</th>' +
+          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Updated</th>' +
+          '</tr></thead><tbody>' + fpRows + '</tbody></table></div></div>';
+      }
+    }
+
+    // Re-init Lucide icons after DOM update
+    lucide.createIcons();
+  })
+  .catch(function(err) {
+    console.error('Failed to load backfill data:', err);
+    var loading = document.getElementById('bf-loading');
+    if (loading) loading.innerHTML = '<span class="text-sm text-red-500">Failed to load data. Refresh the page.</span>';
+  });
+
+// ── Dropdown helpers ──────────────────────────────────────────────
 function toggleNodeDD(id) {
   var dd = document.getElementById(id);
   if (!dd) return;
   var panel = dd.querySelector('.dd-panel');
-  // Close all other open dropdowns first
-  document.querySelectorAll('.dd-panel').forEach(function(p) {
-    if (p !== panel) p.classList.add('hidden');
-  });
+  document.querySelectorAll('.dd-panel').forEach(function(p) { if (p !== panel) p.classList.add('hidden'); });
   panel.classList.toggle('hidden');
 }
 
@@ -960,8 +949,7 @@ function updateNodeDDLabel(id) {
     label.classList.remove('text-slate-700', 'dark:text-slate-200');
     label.classList.add('text-slate-500', 'dark:text-slate-400');
   } else {
-    var names = Array.from(checked).map(function(c) { return c.value; });
-    label.textContent = names.join(', ');
+    label.textContent = Array.from(checked).map(function(c) { return c.value; }).join(', ');
     label.classList.remove('text-slate-500', 'dark:text-slate-400');
     label.classList.add('text-slate-700', 'dark:text-slate-200');
   }
@@ -984,12 +972,9 @@ function updateCatDDLabel(id) {
   }
 }
 
-// Close dropdown on outside click
 document.addEventListener('click', function(e) {
   document.querySelectorAll('.dd-panel:not(.hidden)').forEach(function(panel) {
-    if (!panel.parentElement.contains(e.target)) {
-      panel.classList.add('hidden');
-    }
+    if (!panel.parentElement.contains(e.target)) panel.classList.add('hidden');
   });
 });
 </script>

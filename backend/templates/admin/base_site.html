@@ -279,6 +279,58 @@
     }
   </script>
 
+  <!-- Global: live clock + async sidebar badges + loading helpers -->
+  <script>
+  (function() {
+    // ── Live Clock ──────────────────────────────────────────────
+    function updateClock() {
+      var now = new Date();
+      var dateEl = document.getElementById('topbar-date');
+      var timeEl = document.getElementById('topbar-time');
+      if (dateEl && timeEl) {
+        dateEl.textContent = now.toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'});
+        timeEl.textContent = now.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+      }
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ── Async Sidebar Badges ────────────────────────────────────
+    fetch('{% url "admin:api-sidebar-badges" %}')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var bfBadge = document.getElementById('sidebar-badge-backfill');
+        var enBadge = document.getElementById('sidebar-badge-enrichment');
+        var rvBadge = document.getElementById('sidebar-badge-flagged');
+        if (bfBadge && d.backfill) { bfBadge.textContent = d.backfill; bfBadge.classList.remove('hidden'); }
+        if (enBadge && d.enrichment) { enBadge.textContent = d.enrichment; enBadge.classList.remove('hidden'); }
+        if (rvBadge && d.flagged_reviews > 0) { rvBadge.textContent = d.flagged_reviews; rvBadge.classList.remove('hidden'); }
+      })
+      .catch(function() {});
+
+    // ── Global loading helpers ───────────────────────────────────
+    // Skeleton pulse HTML for stat cards
+    window.SKEL = '<div class="animate-pulse"><div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded mb-3"></div><div class="h-8 w-28 bg-slate-200 dark:bg-slate-700 rounded"></div></div>';
+    window.SKEL_ROW = '<div class="animate-pulse flex justify-between py-1"><div class="h-3 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-12 bg-slate-200 dark:bg-slate-700 rounded"></div></div>';
+    // Format number with commas
+    window.fmtNum = function(n) { return (n || 0).toLocaleString('en-IN'); };
+    window.fmtK = function(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return Math.round(n / 1000) + 'K';
+      return String(n || 0);
+    };
+    // Set text content safely
+    window.setText = function(id, val) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+    window.setHTML = function(id, html) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    };
+  })();
+  </script>
+
   {% block extra_js %}{% endblock %}
 </body>
 </html>

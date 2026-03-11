@@ -79,6 +79,14 @@ class BackfillConfig:
         return int(_get("BACKFILL_PH_MAX_RETRIES", 3))
 
     @classmethod
+    def ph_abort_threshold(cls) -> int:
+        """Abort all requests immediately after this many consecutive 403s.
+
+        Once hit, the IP is considered burned for this session.
+        """
+        return int(_get("BACKFILL_PH_ABORT_THRESHOLD", 20))
+
+    @classmethod
     def ph_cooldown_interval(cls) -> float:
         """Seconds between alternating cooldown pauses."""
         return float(_get("BACKFILL_PH_COOLDOWN_INTERVAL", 180.0))

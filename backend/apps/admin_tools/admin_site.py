@@ -11,21 +11,10 @@ class WhydudAdminSite(AdminSite):
     def each_context(self, request):
         ctx = super().each_context(request)
         ctx['active_page'] = ''
-        try:
-            from apps.pricing.models import BackfillProduct
-            pending = BackfillProduct.objects.filter(scrape_status='pending').count()
-            ctx['sidebar_backfill_badge'] = self._format_count(pending)
-            enrichment = BackfillProduct.objects.filter(
-                scrape_status='pending', enrichment_priority__lte=2).count()
-            ctx['sidebar_enrichment_badge'] = self._format_count(enrichment)
-        except Exception:
-            ctx['sidebar_backfill_badge'] = ''
-            ctx['sidebar_enrichment_badge'] = ''
-        try:
-            from apps.reviews.models import Review
-            ctx['sidebar_flagged_reviews'] = Review.objects.filter(is_flagged=True).count()
-        except Exception:
-            ctx['sidebar_flagged_reviews'] = 0
+        # Sidebar badges loaded async via /api/sidebar-badges/
+        ctx['sidebar_backfill_badge'] = ''
+        ctx['sidebar_enrichment_badge'] = ''
+        ctx['sidebar_flagged_reviews'] = 0
         return ctx
 
     @staticmethod
@@ -106,6 +95,27 @@ class WhydudAdminSite(AdminSite):
                 self.admin_view(self.api_backfill_status),
                 name="api-backfill-status",
             ),
+            # Async data-loading endpoints (pages load shell, then fetch stats)
+            path(
+                "api/sidebar-badges/",
+                self.admin_view(self.api_sidebar_badges),
+                name="api-sidebar-badges",
+            ),
+            path(
+                "api/dashboard-data/",
+                self.admin_view(self.api_dashboard_data),
+                name="api-dashboard-data",
+            ),
+            path(
+                "api/backfill-data/",
+                self.admin_view(self.api_backfill_data),
+                name="api-backfill-data",
+            ),
+            path(
+                "api/enrichment-data/",
+                self.admin_view(self.api_enrichment_data),
+                name="api-enrichment-data",
+            ),
         ]
         return custom_urls + super().get_urls()
 
@@ -114,24 +124,11 @@ class WhydudAdminSite(AdminSite):
     # ------------------------------------------------------------------
 
     def dashboard_view(self, request):
-        """Platform overview — the admin home page."""
-        import json
-        from datetime import timedelta
-
-        from django.db.models import Count, Q
+        """Platform overview — page shell only, stats loaded async via JS."""
         from django.shortcuts import render
         from django.utils import timezone
 
-        from apps.pricing.models import BackfillProduct
-        from apps.products.models import Product, ProductListing
-        from apps.reviews.models import Review
-
-        User = self._get_user_model()
         now = timezone.now()
-        today = now.date()
-        week_ago = now - timedelta(days=7)
-
-        # Greeting logic
         local_hour = timezone.localtime(now).hour
         if local_hour < 12:
             greeting = "Good morning"
@@ -144,62 +141,12 @@ class WhydudAdminSite(AdminSite):
             full_name.split()[0] if full_name else request.user.email.split("@")[0]
         )
 
-        # 7-day sparkline data
-        sparkline_data = self._compute_sparkline_data(
-            now, Product, Review, User
-        )
-
         context = {
             **self.each_context(request),
             "active_page": "dashboard",
             "title": "Platform Dashboard",
-            # Greeting
             "greeting": greeting,
             "user_first_name": user_first_name,
-            # Product stats
-            "product_count": Product.objects.count(),
-            "product_lightweight": Product.objects.filter(
-                is_lightweight=True
-            ).count(),
-            "product_enriched": Product.objects.filter(
-                is_lightweight=False
-            ).count(),
-            "product_with_reviews": Product.objects.filter(
-                total_reviews__gt=0
-            ).count(),
-            "product_with_dudscore": Product.objects.exclude(
-                dud_score__isnull=True
-            ).count(),
-            "listing_count": ProductListing.objects.count(),
-            # Backfill stats
-            "backfill_total": BackfillProduct.objects.count(),
-            "backfill_by_status": list(
-                BackfillProduct.objects.values("status")
-                .annotate(count=Count("id"))
-                .order_by("status")
-            ),
-            "backfill_by_scrape": list(
-                BackfillProduct.objects.values("scrape_status")
-                .annotate(count=Count("id"))
-                .order_by("scrape_status")
-            ),
-            # Review stats
-            "review_count": Review.objects.count(),
-            "review_flagged": Review.objects.filter(is_flagged=True).count(),
-            # User stats
-            "user_count": User.objects.count(),
-            "user_new_today": User.objects.filter(
-                created_at__date=today
-            ).count(),
-            "user_active_7d": User.objects.filter(
-                last_login__gte=week_ago
-            ).count(),
-            # Price snapshots
-            "snapshot_count": self._get_snapshot_count(),
-            # Marketplace breakdown
-            "marketplace_stats": self._get_marketplace_stats(),
-            # Sparkline JSON
-            "sparkline_json": json.dumps(sparkline_data),
         }
         return render(request, "admin/dashboard.html", context)
 
@@ -595,174 +542,13 @@ class WhydudAdminSite(AdminSite):
     # ------------------------------------------------------------------
 
     def backfill_view(self, request):
-        """Backfill pipeline management — stats, charts, action buttons."""
-        import json
-
-        from django.db.models import Count, Q
+        """Backfill pipeline — page shell only, stats loaded async via JS."""
         from django.shortcuts import render
-
-        from apps.pricing.models import BackfillProduct
-
-        total = BackfillProduct.objects.count()
-
-        # --- By status ---
-        by_status = dict(
-            BackfillProduct.objects.values_list("status")
-            .annotate(c=Count("id"))
-            .values_list("status", "c")
-        )
-
-        # --- By scrape_status ---
-        by_scrape = dict(
-            BackfillProduct.objects.values_list("scrape_status")
-            .annotate(c=Count("id"))
-            .values_list("scrape_status", "c")
-        )
-
-        # --- By enrichment_priority ---
-        by_priority = dict(
-            BackfillProduct.objects.values_list("enrichment_priority")
-            .annotate(c=Count("id"))
-            .values_list("enrichment_priority", "c")
-        )
-
-        # --- By enrichment_method ---
-        by_method = dict(
-            BackfillProduct.objects.values_list("enrichment_method")
-            .annotate(c=Count("id"))
-            .values_list("enrichment_method", "c")
-        )
-
-        # --- By review_status ---
-        by_review = dict(
-            BackfillProduct.objects.values_list("review_status")
-            .annotate(c=Count("id"))
-            .values_list("review_status", "c")
-        )
-
-        # --- By marketplace ---
-        by_marketplace = list(
-            BackfillProduct.objects.values("marketplace_slug")
-            .annotate(count=Count("id"))
-            .order_by("-count")
-        )
-
-        # --- Price snapshots by source ---
-        snapshots_by_source = self._get_snapshots_by_source()
-
-        # --- Estimated time remaining ---
-        p1_pending = BackfillProduct.objects.filter(
-            scrape_status="pending", enrichment_priority=1
-        ).count()
-        p2p3_pending = BackfillProduct.objects.filter(
-            scrape_status="pending", enrichment_priority__in=[2, 3]
-        ).count()
-        reviews_pending = BackfillProduct.objects.filter(
-            review_status="pending"
-        ).count()
-
-        # P1: ~30s/product, P2/P3: ~2s/product, reviews: ~15s/product
-        est_p1_hrs = round(p1_pending * 30 / 3600, 1)
-        est_p2p3_hrs = round(p2p3_pending * 2 / 3600, 1)
-        est_reviews_hrs = round(reviews_pending * 15 / 3600, 1)
-
-        # --- Failed products (last 50) ---
-        failed_products = list(
-            BackfillProduct.objects.filter(
-                Q(status="failed") | Q(scrape_status="failed")
-            )
-            .order_by("-updated_at")
-            .values(
-                "id",
-                "external_id",
-                "marketplace_slug",
-                "error_message",
-                "retry_count",
-                "status",
-                "scrape_status",
-                "updated_at",
-            )[:50]
-        )
-        # Serialize updated_at for template
-        for fp in failed_products:
-            fp["updated_at"] = localtime(fp["updated_at"]).strftime("%Y-%m-%d %H:%M")
-
-        # --- Chart data as JSON ---
-        status_labels = [
-            "discovered", "bh_filling", "bh_filled",
-            "ph_extending", "ph_extended", "done", "failed", "skipped",
-        ]
-        status_chart = json.dumps({
-            "labels": [s.replace("_", " ").title() for s in status_labels],
-            "data": [by_status.get(s, 0) for s in status_labels],
-        })
-
-        priority_chart = json.dumps({
-            "labels": ["P0 On-demand", "P1 Playwright", "P2 curl_cffi", "P3 curl_cffi-low"],
-            "data": [
-                by_priority.get(0, 0),
-                by_priority.get(1, 0),
-                by_priority.get(2, 0),
-                by_priority.get(3, 0),
-            ],
-        })
-
-        snapshot_chart = json.dumps({
-            "labels": [s["source"] for s in snapshots_by_source],
-            "data": [s["count"] for s in snapshots_by_source],
-        })
-
-        scrape_labels = ["pending", "enriching", "scraped", "failed"]
-        scrape_chart = json.dumps({
-            "labels": [s.title() for s in scrape_labels],
-            "data": [by_scrape.get(s, 0) for s in scrape_labels],
-        })
-
-        # --- Category list for filter dropdowns (distinct values from BackfillProduct) ---
-        backfill_categories = list(
-            BackfillProduct.objects
-            .exclude(category_name="")
-            .values_list("category_name", flat=True)
-            .distinct()
-            .order_by("category_name")
-        )
-
-        # --- Online workers for node targeting dropdown ---
-        online_workers = self._get_online_workers()
-
-        # --- Active Celery tasks ---
-        _, _, active_tasks = self._get_cluster_data()
-
-        # --- Recent task history from django-celery-results ---
-        recent_task_results = self._get_recent_backfill_tasks(limit=20)
 
         context = {
             **self.each_context(request),
             "active_page": "backfill",
             "title": "Backfill Pipeline",
-            "total": total,
-            "by_status": by_status,
-            "by_scrape": by_scrape,
-            "by_priority": by_priority,
-            "by_method": by_method,
-            "by_review": by_review,
-            "by_marketplace": by_marketplace,
-            "snapshots_by_source": snapshots_by_source,
-            "p1_pending": p1_pending,
-            "p2p3_pending": p2p3_pending,
-            "reviews_pending": reviews_pending,
-            "est_p1_hrs": est_p1_hrs,
-            "est_p2p3_hrs": est_p2p3_hrs,
-            "est_reviews_hrs": est_reviews_hrs,
-            "failed_products": failed_products,
-            "status_chart": status_chart,
-            "priority_chart": priority_chart,
-            "snapshot_chart": snapshot_chart,
-            "scrape_chart": scrape_chart,
-            "online_workers": online_workers,
-            "active_tasks": active_tasks,
-            "recent_task_results": recent_task_results,
-            "backfill_categories": backfill_categories,
         }
         return render(request, "admin/backfill_console.html", context)
 
@@ -1090,216 +876,13 @@ class WhydudAdminSite(AdminSite):
     # ------------------------------------------------------------------
 
     def enrichment_view(self, request):
-        """Enrichment queue management — priority breakdown, throughput, bandwidth."""
-        import json
-        from datetime import timedelta
-
-        from django.db.models import Count, Q
+        """Enrichment queue — page shell only, stats loaded async via JS."""
         from django.shortcuts import render
-        from django.utils import timezone
-
-        from apps.pricing.models import BackfillProduct
-
-        now = timezone.now()
-        day_ago = now - timedelta(hours=24)
-
-        total = BackfillProduct.objects.count()
-
-        # --- By scrape_status ---
-        by_scrape = dict(
-            BackfillProduct.objects.values_list("scrape_status")
-            .annotate(c=Count("id"))
-            .values_list("scrape_status", "c")
-        )
-
-        # --- Queue depth by enrichment_priority (pending only) ---
-        queue_by_priority = dict(
-            BackfillProduct.objects.filter(scrape_status="pending")
-            .values_list("enrichment_priority")
-            .annotate(c=Count("id"))
-            .values_list("enrichment_priority", "c")
-        )
-        p0_queue = queue_by_priority.get(0, 0)
-        p1_queue = queue_by_priority.get(1, 0)
-        p2_queue = queue_by_priority.get(2, 0)
-        p3_queue = queue_by_priority.get(3, 0)
-
-        # --- Currently enriching by method ---
-        enriching_qs = BackfillProduct.objects.filter(scrape_status="enriching")
-        enriching_total = enriching_qs.count()
-        enriching_by_method = dict(
-            enriching_qs.values_list("enrichment_method")
-            .annotate(c=Count("id"))
-            .values_list("enrichment_method", "c")
-        )
-
-        # --- Completed by method ---
-        completed_by_method = dict(
-            BackfillProduct.objects.filter(scrape_status="scraped")
-            .values_list("enrichment_method")
-            .annotate(c=Count("id"))
-            .values_list("enrichment_method", "c")
-        )
-
-        # --- Failed breakdown ---
-        failed_retryable = BackfillProduct.objects.filter(
-            scrape_status="failed", retry_count__lt=3
-        ).count()
-        failed_exhausted = BackfillProduct.objects.filter(
-            scrape_status="failed", retry_count__gte=3
-        ).count()
-
-        # --- Throughput: enriched in last 24h ---
-        enriched_24h = BackfillProduct.objects.filter(
-            scrape_status="scraped", updated_at__gte=day_ago
-        ).count()
-
-        # --- Review status ---
-        by_review = dict(
-            BackfillProduct.objects.values_list("review_status")
-            .annotate(c=Count("id"))
-            .values_list("review_status", "c")
-        )
-
-        # --- By marketplace (pending enrichment only) ---
-        pending_by_marketplace = list(
-            BackfillProduct.objects.filter(scrape_status="pending")
-            .values("marketplace_slug")
-            .annotate(count=Count("id"))
-            .order_by("-count")
-        )
-
-        # --- Estimated time remaining ---
-        # P0/P1: ~30s/product (Playwright), P2/P3: ~2s/product (curl_cffi)
-        est_p0_hrs = round(p0_queue * 30 / 3600, 1)
-        est_p1_hrs = round(p1_queue * 30 / 3600, 1)
-        est_p2p3_hrs = round((p2_queue + p3_queue) * 2 / 3600, 1)
-
-        # --- Bandwidth estimates ---
-        # P1 Playwright: ~625KB/product, P2/P3 curl_cffi: ~85KB/product
-        bw_p1_gb = round(p1_queue * 625 / (1024 * 1024), 2)
-        bw_p2p3_gb = round((p2_queue + p3_queue) * 85 / (1024 * 1024), 2)
-        bw_total_gb = round(bw_p1_gb + bw_p2p3_gb, 2)
-
-        # --- Stale enrichments (enriching for > 2 hours) ---
-        stale_threshold = now - timedelta(hours=2)
-        stale_products = list(
-            BackfillProduct.objects.filter(
-                scrape_status="enriching",
-                enrichment_queued_at__lt=stale_threshold,
-            )
-            .order_by("-enrichment_queued_at")
-            .values(
-                "id",
-                "external_id",
-                "marketplace_slug",
-                "enrichment_method",
-                "error_message",
-                "retry_count",
-                "enrichment_queued_at",
-                "updated_at",
-            )[:50]
-        )
-        for sp in stale_products:
-            if sp["enrichment_queued_at"]:
-                sp["enrichment_queued_at"] = localtime(sp["enrichment_queued_at"]).strftime(
-                    "%Y-%m-%d %H:%M"
-                )
-            sp["updated_at"] = localtime(sp["updated_at"]).strftime("%Y-%m-%d %H:%M")
-
-        # --- Recent failures (last 50) ---
-        recent_failures = list(
-            BackfillProduct.objects.filter(scrape_status="failed")
-            .order_by("-updated_at")
-            .values(
-                "id",
-                "external_id",
-                "marketplace_slug",
-                "enrichment_method",
-                "error_message",
-                "retry_count",
-                "updated_at",
-            )[:50]
-        )
-        for rf in recent_failures:
-            rf["updated_at"] = localtime(rf["updated_at"]).strftime("%Y-%m-%d %H:%M")
-
-        # --- Chart data ---
-        queue_chart = json.dumps(
-            {
-                "labels": [
-                    "P0 On-demand",
-                    "P1 Playwright",
-                    "P2 curl_cffi",
-                    "P3 curl_cffi-low",
-                ],
-                "data": [p0_queue, p1_queue, p2_queue, p3_queue],
-            }
-        )
-
-        method_chart = json.dumps(
-            {
-                "labels": list(completed_by_method.keys()),
-                "data": list(completed_by_method.values()),
-            }
-        )
-
-        review_chart = json.dumps(
-            {
-                "labels": ["Skip", "Pending", "Scraping", "Scraped", "Failed"],
-                "data": [
-                    by_review.get("skip", 0),
-                    by_review.get("pending", 0),
-                    by_review.get("scraping", 0),
-                    by_review.get("scraped", 0),
-                    by_review.get("failed", 0),
-                ],
-            }
-        )
 
         context = {
             **self.each_context(request),
             "active_page": "enrichment",
             "title": "Enrichment Queue",
-            "total": total,
-            "by_scrape": by_scrape,
-            # Queue depths
-            "p0_queue": p0_queue,
-            "p1_queue": p1_queue,
-            "p2_queue": p2_queue,
-            "p3_queue": p3_queue,
-            "total_queue": p0_queue + p1_queue + p2_queue + p3_queue,
-            # Currently enriching
-            "enriching_total": enriching_total,
-            "enriching_by_method": enriching_by_method,
-            # Completed
-            "completed_by_method": completed_by_method,
-            "completed_total": by_scrape.get("scraped", 0),
-            # Failed
-            "failed_total": by_scrape.get("failed", 0),
-            "failed_retryable": failed_retryable,
-            "failed_exhausted": failed_exhausted,
-            # Throughput
-            "enriched_24h": enriched_24h,
-            # Reviews
-            "by_review": by_review,
-            # Marketplace
-            "pending_by_marketplace": pending_by_marketplace,
-            # Time estimates
-            "est_p0_hrs": est_p0_hrs,
-            "est_p1_hrs": est_p1_hrs,
-            "est_p2p3_hrs": est_p2p3_hrs,
-            # Bandwidth
-            "bw_p1_gb": bw_p1_gb,
-            "bw_p2p3_gb": bw_p2p3_gb,
-            "bw_total_gb": bw_total_gb,
-            # Tables
-            "stale_products": stale_products,
-            "recent_failures": recent_failures,
-            # Charts
-            "queue_chart": queue_chart,
-            "method_chart": method_chart,
-            "review_chart": review_chart,
         }
         return render(request, "admin/enrichment_console.html", context)
 
@@ -2289,6 +1872,365 @@ class WhydudAdminSite(AdminSite):
             .values_list("scrape_status", "count")
         )
         return JsonResponse(by_status)
+
+    def api_sidebar_badges(self, request):
+        """Lightweight endpoint for sidebar badge counts."""
+        from django.http import JsonResponse
+
+        result = {"backfill": "", "enrichment": "", "flagged_reviews": 0}
+        try:
+            from apps.pricing.models import BackfillProduct
+            pending = BackfillProduct.objects.filter(scrape_status='pending').count()
+            result["backfill"] = self._format_count(pending)
+            enrichment = BackfillProduct.objects.filter(
+                scrape_status='pending', enrichment_priority__lte=2).count()
+            result["enrichment"] = self._format_count(enrichment)
+        except Exception:
+            pass
+        try:
+            from apps.reviews.models import Review
+            result["flagged_reviews"] = Review.objects.filter(is_flagged=True).count()
+        except Exception:
+            pass
+        return JsonResponse(result)
+
+    def api_dashboard_data(self, request):
+        """All dashboard stats as JSON — fetched async after page shell loads."""
+        import json
+        from datetime import timedelta
+
+        from django.db.models import Count
+        from django.http import JsonResponse
+        from django.utils import timezone
+
+        from apps.pricing.models import BackfillProduct
+        from apps.products.models import Product, ProductListing
+        from apps.reviews.models import Review
+
+        User = self._get_user_model()
+        now = timezone.now()
+        today = now.date()
+        week_ago = now - timedelta(days=7)
+
+        backfill_by_status = list(
+            BackfillProduct.objects.values("status")
+            .annotate(count=Count("id"))
+            .order_by("status")
+        )
+        backfill_by_scrape = list(
+            BackfillProduct.objects.values("scrape_status")
+            .annotate(count=Count("id"))
+            .order_by("scrape_status")
+        )
+
+        sparkline_data = self._compute_sparkline_data(now, Product, Review, User)
+
+        marketplace_stats = self._get_marketplace_stats()
+        # Convert marketplace__name key for JSON safety
+        mp_list = [{"name": m.get("marketplace__name", "?"), "count": m["count"]}
+                   for m in marketplace_stats]
+
+        return JsonResponse({
+            "product_count": Product.objects.count(),
+            "product_lightweight": Product.objects.filter(is_lightweight=True).count(),
+            "product_enriched": Product.objects.filter(is_lightweight=False).count(),
+            "product_with_reviews": Product.objects.filter(total_reviews__gt=0).count(),
+            "product_with_dudscore": Product.objects.exclude(dud_score__isnull=True).count(),
+            "listing_count": ProductListing.objects.count(),
+            "backfill_total": BackfillProduct.objects.count(),
+            "backfill_by_status": backfill_by_status,
+            "backfill_by_scrape": backfill_by_scrape,
+            "review_count": Review.objects.count(),
+            "review_flagged": Review.objects.filter(is_flagged=True).count(),
+            "user_count": User.objects.count(),
+            "user_new_today": User.objects.filter(created_at__date=today).count(),
+            "user_active_7d": User.objects.filter(last_login__gte=week_ago).count(),
+            "snapshot_count": self._get_snapshot_count(),
+            "marketplace_stats": mp_list,
+            "sparkline": sparkline_data,
+        })
+
+    def api_backfill_data(self, request):
+        """All backfill console stats as JSON — fetched async after page shell loads."""
+        import json
+
+        from django.db.models import Count, Q
+        from django.http import JsonResponse
+
+        from apps.pricing.models import BackfillProduct
+
+        total = BackfillProduct.objects.count()
+
+        by_status = dict(
+            BackfillProduct.objects.values_list("status")
+            .annotate(c=Count("id"))
+            .values_list("status", "c")
+        )
+        by_scrape = dict(
+            BackfillProduct.objects.values_list("scrape_status")
+            .annotate(c=Count("id"))
+            .values_list("scrape_status", "c")
+        )
+        by_priority = dict(
+            BackfillProduct.objects.values_list("enrichment_priority")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_priority", "c")
+        )
+        by_method = dict(
+            BackfillProduct.objects.values_list("enrichment_method")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_method", "c")
+        )
+        by_review = dict(
+            BackfillProduct.objects.values_list("review_status")
+            .annotate(c=Count("id"))
+            .values_list("review_status", "c")
+        )
+        by_marketplace = list(
+            BackfillProduct.objects.values("marketplace_slug")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        snapshots_by_source = self._get_snapshots_by_source()
+
+        p1_pending = BackfillProduct.objects.filter(
+            scrape_status="pending", enrichment_priority=1
+        ).count()
+        p2p3_pending = BackfillProduct.objects.filter(
+            scrape_status="pending", enrichment_priority__in=[2, 3]
+        ).count()
+        reviews_pending = BackfillProduct.objects.filter(
+            review_status="pending"
+        ).count()
+
+        est_p1_hrs = round(p1_pending * 30 / 3600, 1)
+        est_p2p3_hrs = round(p2p3_pending * 2 / 3600, 1)
+        est_reviews_hrs = round(reviews_pending * 15 / 3600, 1)
+
+        failed_products = list(
+            BackfillProduct.objects.filter(
+                Q(status="failed") | Q(scrape_status="failed")
+            )
+            .order_by("-updated_at")
+            .values(
+                "id", "external_id", "marketplace_slug", "error_message",
+                "retry_count", "status", "scrape_status", "updated_at",
+            )[:50]
+        )
+        for fp in failed_products:
+            fp["updated_at"] = localtime(fp["updated_at"]).strftime("%Y-%m-%d %H:%M")
+            fp["id"] = str(fp["id"])
+
+        status_labels = [
+            "discovered", "bh_filling", "bh_filled",
+            "ph_extending", "ph_extended", "done", "failed", "skipped",
+        ]
+        scrape_labels = ["pending", "enriching", "scraped", "failed"]
+
+        backfill_categories = list(
+            BackfillProduct.objects
+            .exclude(category_name="")
+            .values_list("category_name", flat=True)
+            .distinct()
+            .order_by("category_name")
+        )
+
+        online_workers = self._get_online_workers()
+        _, _, active_tasks = self._get_cluster_data()
+        recent_task_results = self._get_recent_backfill_tasks(limit=20)
+
+        return JsonResponse({
+            "total": total,
+            "by_status": by_status,
+            "by_scrape": by_scrape,
+            "by_priority": {str(k): v for k, v in by_priority.items()},
+            "by_method": by_method,
+            "by_review": by_review,
+            "by_marketplace": by_marketplace,
+            "snapshots_by_source": snapshots_by_source,
+            "p1_pending": p1_pending,
+            "p2p3_pending": p2p3_pending,
+            "reviews_pending": reviews_pending,
+            "est_p1_hrs": est_p1_hrs,
+            "est_p2p3_hrs": est_p2p3_hrs,
+            "est_reviews_hrs": est_reviews_hrs,
+            "failed_products": failed_products,
+            "status_chart": {
+                "labels": [s.replace("_", " ").title() for s in status_labels],
+                "data": [by_status.get(s, 0) for s in status_labels],
+            },
+            "priority_chart": {
+                "labels": ["P0 On-demand", "P1 Playwright", "P2 curl_cffi", "P3 curl_cffi-low"],
+                "data": [by_priority.get(0, 0), by_priority.get(1, 0),
+                         by_priority.get(2, 0), by_priority.get(3, 0)],
+            },
+            "snapshot_chart": {
+                "labels": [s["source"] for s in snapshots_by_source],
+                "data": [s["count"] for s in snapshots_by_source],
+            },
+            "scrape_chart": {
+                "labels": [s.title() for s in scrape_labels],
+                "data": [by_scrape.get(s, 0) for s in scrape_labels],
+            },
+            "online_workers": online_workers,
+            "active_tasks": active_tasks,
+            "recent_task_results": recent_task_results,
+            "backfill_categories": backfill_categories,
+        })
+
+    def api_enrichment_data(self, request):
+        """All enrichment console stats as JSON — fetched async after page shell loads."""
+        from datetime import timedelta
+
+        from django.db.models import Count
+        from django.http import JsonResponse
+        from django.utils import timezone
+
+        from apps.pricing.models import BackfillProduct
+
+        now = timezone.now()
+        day_ago = now - timedelta(hours=24)
+
+        total = BackfillProduct.objects.count()
+
+        by_scrape = dict(
+            BackfillProduct.objects.values_list("scrape_status")
+            .annotate(c=Count("id"))
+            .values_list("scrape_status", "c")
+        )
+
+        queue_by_priority = dict(
+            BackfillProduct.objects.filter(scrape_status="pending")
+            .values_list("enrichment_priority")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_priority", "c")
+        )
+        p0_queue = queue_by_priority.get(0, 0)
+        p1_queue = queue_by_priority.get(1, 0)
+        p2_queue = queue_by_priority.get(2, 0)
+        p3_queue = queue_by_priority.get(3, 0)
+
+        enriching_qs = BackfillProduct.objects.filter(scrape_status="enriching")
+        enriching_total = enriching_qs.count()
+        enriching_by_method = dict(
+            enriching_qs.values_list("enrichment_method")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_method", "c")
+        )
+
+        completed_by_method = dict(
+            BackfillProduct.objects.filter(scrape_status="scraped")
+            .values_list("enrichment_method")
+            .annotate(c=Count("id"))
+            .values_list("enrichment_method", "c")
+        )
+
+        failed_retryable = BackfillProduct.objects.filter(
+            scrape_status="failed", retry_count__lt=3
+        ).count()
+        failed_exhausted = BackfillProduct.objects.filter(
+            scrape_status="failed", retry_count__gte=3
+        ).count()
+
+        enriched_24h = BackfillProduct.objects.filter(
+            scrape_status="scraped", updated_at__gte=day_ago
+        ).count()
+
+        by_review = dict(
+            BackfillProduct.objects.values_list("review_status")
+            .annotate(c=Count("id"))
+            .values_list("review_status", "c")
+        )
+
+        pending_by_marketplace = list(
+            BackfillProduct.objects.filter(scrape_status="pending")
+            .values("marketplace_slug")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        est_p0_hrs = round(p0_queue * 30 / 3600, 1)
+        est_p1_hrs = round(p1_queue * 30 / 3600, 1)
+        est_p2p3_hrs = round((p2_queue + p3_queue) * 2 / 3600, 1)
+
+        bw_p1_gb = round(p1_queue * 625 / (1024 * 1024), 2)
+        bw_p2p3_gb = round((p2_queue + p3_queue) * 85 / (1024 * 1024), 2)
+        bw_total_gb = round(bw_p1_gb + bw_p2p3_gb, 2)
+
+        stale_threshold = now - timedelta(hours=2)
+        stale_products = list(
+            BackfillProduct.objects.filter(
+                scrape_status="enriching",
+                enrichment_queued_at__lt=stale_threshold,
+            )
+            .order_by("-enrichment_queued_at")
+            .values(
+                "id", "external_id", "marketplace_slug", "enrichment_method",
+                "error_message", "retry_count", "enrichment_queued_at", "updated_at",
+            )[:50]
+        )
+        for sp in stale_products:
+            sp["id"] = str(sp["id"])
+            if sp["enrichment_queued_at"]:
+                sp["enrichment_queued_at"] = localtime(sp["enrichment_queued_at"]).strftime("%Y-%m-%d %H:%M")
+            sp["updated_at"] = localtime(sp["updated_at"]).strftime("%Y-%m-%d %H:%M")
+
+        recent_failures = list(
+            BackfillProduct.objects.filter(scrape_status="failed")
+            .order_by("-updated_at")
+            .values(
+                "id", "external_id", "marketplace_slug", "enrichment_method",
+                "error_message", "retry_count", "updated_at",
+            )[:50]
+        )
+        for rf in recent_failures:
+            rf["id"] = str(rf["id"])
+            rf["updated_at"] = localtime(rf["updated_at"]).strftime("%Y-%m-%d %H:%M")
+
+        return JsonResponse({
+            "total": total,
+            "by_scrape": by_scrape,
+            "p0_queue": p0_queue,
+            "p1_queue": p1_queue,
+            "p2_queue": p2_queue,
+            "p3_queue": p3_queue,
+            "total_queue": p0_queue + p1_queue + p2_queue + p3_queue,
+            "enriching_total": enriching_total,
+            "enriching_by_method": enriching_by_method,
+            "completed_by_method": completed_by_method,
+            "completed_total": by_scrape.get("scraped", 0),
+            "failed_total": by_scrape.get("failed", 0),
+            "failed_retryable": failed_retryable,
+            "failed_exhausted": failed_exhausted,
+            "enriched_24h": enriched_24h,
+            "by_review": by_review,
+            "pending_by_marketplace": pending_by_marketplace,
+            "est_p0_hrs": est_p0_hrs,
+            "est_p1_hrs": est_p1_hrs,
+            "est_p2p3_hrs": est_p2p3_hrs,
+            "bw_p1_gb": bw_p1_gb,
+            "bw_p2p3_gb": bw_p2p3_gb,
+            "bw_total_gb": bw_total_gb,
+            "stale_products": stale_products,
+            "recent_failures": recent_failures,
+            "queue_chart": {
+                "labels": ["P0 On-demand", "P1 Playwright", "P2 curl_cffi", "P3 curl_cffi-low"],
+                "data": [p0_queue, p1_queue, p2_queue, p3_queue],
+            },
+            "method_chart": {
+                "labels": list(completed_by_method.keys()),
+                "data": list(completed_by_method.values()),
+            },
+            "review_chart": {
+                "labels": ["Skip", "Pending", "Scraping", "Scraped", "Failed"],
+                "data": [
+                    by_review.get("skip", 0), by_review.get("pending", 0),
+                    by_review.get("scraping", 0), by_review.get("scraped", 0),
+                    by_review.get("failed", 0),
+                ],
+            },
+        })
 
     # ------------------------------------------------------------------
     # Helpers

@@ -48,11 +48,8 @@
                 {% if active_page == 'backfill' %}!text-white !bg-white/10 border-l-[3px] border-emerald-500{% endif %}">
         <i data-lucide="database" class="w-[18px] h-[18px] flex-shrink-0"></i>
         <span class="sidebar-text">Backfill</span>
-        {% if sidebar_backfill_badge %}
-        <span class="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 sidebar-text">
-          {{ sidebar_backfill_badge }}
-        </span>
-        {% endif %}
+        <span id="sidebar-badge-backfill"
+              class="hidden ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 sidebar-text"></span>
       </a>
       <a href="{% url 'admin:enrichment-console' %}"
          class="flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg text-[13.5px]
@@ -60,11 +57,8 @@
                 {% if active_page == 'enrichment' %}!text-white !bg-white/10 border-l-[3px] border-emerald-500{% endif %}">
         <i data-lucide="refresh-cw" class="w-[18px] h-[18px] flex-shrink-0"></i>
         <span class="sidebar-text">Enrichment</span>
-        {% if sidebar_enrichment_badge %}
-        <span class="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 sidebar-text">
-          {{ sidebar_enrichment_badge }}
-        </span>
-        {% endif %}
+        <span id="sidebar-badge-enrichment"
+              class="hidden ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 sidebar-text"></span>
       </a>
       <a href="{% url 'admin:cluster-console' %}"
          class="flex items-center gap-2.5 px-4 py-2.5 mx-0 rounded-lg text-[13.5px]
@@ -209,11 +203,8 @@
                   {% if request.path == '/admin/reviews/review/' %}!text-white !bg-white/10{% endif %}">
           <span class="w-1.5 h-1.5 rounded-full bg-white/20 flex-shrink-0"></span>
           <span class="sidebar-text">All Reviews</span>
-          {% if sidebar_flagged_reviews and sidebar_flagged_reviews > 0 %}
-          <span class="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 sidebar-text">
-            {{ sidebar_flagged_reviews }}
-          </span>
-          {% endif %}
+          <span id="sidebar-badge-flagged"
+                class="hidden ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 sidebar-text"></span>
         </a>
         <a href="/admin/reviews/reviewerprofile/"
            class="nav-item-sub flex items-center gap-2.5 px-4 py-1.5 mx-2 rounded-lg text-[13px] text-white/45 hover:text-white/80 hover:bg-white/5 transition-colors

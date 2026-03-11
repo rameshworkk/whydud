@@ -276,9 +276,33 @@ python manage.py backfill_prices ph-extend --limit 5000
 
 # PriceHistory.app deep extension — via Celery workers
 python manage.py backfill_prices ph-extend --celery --workers 4 --limit 5000
+
+# PH-extend including DISCOVERED products (skip bh-fill)
+python manage.py backfill_prices ph-extend --limit 5000 --include-discovered
 ```
 
-Both phases use `asyncio.gather()` with semaphore-limited concurrency (default: 5 concurrent requests, 0.5s delay per request). Each run claims a batch via `SELECT ... FOR UPDATE SKIP LOCKED` — safe for parallel execution.
+Both phases use wave-based processing (50 products per wave) with semaphore-limited concurrency. Each run claims a batch via `SELECT ... FOR UPDATE SKIP LOCKED` — safe for parallel execution.
+
+### PH-Extend Rate Limiting & Retry
+
+PriceHistory.app enforces Cloudflare-based rate limiting. The PH client includes:
+
+- **Retry with exponential backoff:** 3 attempts on 403/429, with 15s/30s/45s waits between retries
+- **Alternating cooldown pauses:** Every 3 minutes, pauses for 15s or 30s (alternating) to avoid triggering Cloudflare's rolling-window detection
+- **Adaptive delay:** On success, delay decays toward base (`delay * 0.9`). On rate limit, delay doubles (capped at 30s)
+- **Data safety on cancel:** Wave-based processing ensures all completed waves are persisted. Rate-limited products revert to their original status (BH_FILLED or DISCOVERED) for retry — NOT marked FAILED
+- **Include Discovered:** `--include-discovered` flag lets you skip bh-fill entirely and fetch PH history directly for discovered products. Each product's original status is tracked so it reverts correctly on failure
+
+**Tunable config (env vars or Django settings):**
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `BACKFILL_PH_MAX_RETRIES` | 3 | Max retry attempts on 403/429 |
+| `BACKFILL_PH_COOLDOWN_INTERVAL` | 180s | Seconds between alternating cooldown pauses |
+| `BACKFILL_PH_COOLDOWN_SHORT` | 15s | Short cooldown pause duration |
+| `BACKFILL_PH_COOLDOWN_LONG` | 30s | Long cooldown pause duration |
+| `BACKFILL_PH_HTML_DELAY` | 0.5s | Delay between HTML page fetches |
+| `BACKFILL_PH_API_DELAY` | 1.5s | Delay between API calls |
 
 ### Parallel Workers (Phase 2-3)
 
@@ -768,6 +792,7 @@ python manage.py backfill_prices verify-data          # Data quality checks
 python manage.py backfill_prices discover --start 1 --end 10
 python manage.py backfill_prices bh-fill --batch 5000
 python manage.py backfill_prices ph-extend --limit 5000
+python manage.py backfill_prices ph-extend --limit 5000 --include-discovered
 
 # Via Celery workers (parallel)
 python manage.py backfill_prices bh-fill --celery --workers 4 --batch 5000
