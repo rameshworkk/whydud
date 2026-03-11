@@ -178,11 +178,14 @@
         </div>
         <div class="text-[11px] text-white/30 truncate">Administrator</div>
       </div>
-      <a href="{% url 'admin:logout' %}"
-         class="text-white/30 hover:text-white/60 transition-colors sidebar-text flex-shrink-0"
-         title="Logout">
-        <i data-lucide="log-out" class="w-4 h-4"></i>
-      </a>
+      <form method="post" action="{% url 'admin:logout' %}" class="inline sidebar-text flex-shrink-0">
+        {% csrf_token %}
+        <button type="submit"
+                class="text-white/30 hover:text-white/60 transition-colors cursor-pointer bg-transparent border-none p-0"
+                title="Logout">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+        </button>
+      </form>
     </div>
   </div>
 </aside>

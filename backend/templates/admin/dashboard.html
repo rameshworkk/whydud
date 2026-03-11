@@ -1,8 +1,6 @@
 {% extends "admin/base_site.html" %}
 
 {% block title %}Platform Dashboard{% endblock %}
-{% block page_title %}Dashboard{% endblock %}
-
 {% block content %}
 
 <p class="text-sm text-slate-400 mb-6">{{ greeting }}, {{ user_first_name }}. Here's what's happening today.</p>
@@ -210,8 +208,4 @@ createSparkline('spark-snapshots', sparkData.snapshots, '#8b5cf6');
 createSparkline('spark-users', sparkData.users, '#8b5cf6');
 </script>
 
-<!-- Auto-refresh every 60s -->
-<script>
-  setTimeout(function() { location.reload(); }, 60000);
-</script>
 {% endblock %}

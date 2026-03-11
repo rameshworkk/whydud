@@ -35,29 +35,24 @@
 
     <!-- Login Card -->
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      {% if form.errors %}
+      {% if form.non_field_errors %}
+      {% for error in form.non_field_errors %}
       <div class="flex items-start gap-2 px-4 py-3 rounded-xl mb-4 text-[13px]
                   bg-red-50 border-l-4 border-red-500 text-red-800">
         <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        <span>
-          {% if form.errors.items|length == 1 and "__all__" in form.errors %}
-            {{ form.errors.__all__.0 }}
-          {% else %}
-            {% translate "Please correct the errors below." %}
-          {% endif %}
-        </span>
-      </div>
-      {% endif %}
-
-      {% if form.non_field_errors %}
-      {% for error in form.non_field_errors %}
-      <div class="flex items-start gap-2 px-4 py-3 rounded-xl mb-4 text-[13px]
-                  bg-red-50 border-l-4 border-red-500 text-red-800">
-        {{ error }}
+        <span>{{ error }}</span>
       </div>
       {% endfor %}
+      {% elif form.errors %}
+      <div class="flex items-start gap-2 px-4 py-3 rounded-xl mb-4 text-[13px]
+                  bg-red-50 border-l-4 border-red-500 text-red-800">
+        <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>{% translate "Please correct the errors below." %}</span>
+      </div>
       {% endif %}
 
       <form method="post" action="{{ app_path }}">

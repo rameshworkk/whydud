@@ -1,7 +1,6 @@
 {% extends "admin/base_site.html" %}
 
 {% block title %}System Health{% endblock %}
-{% block page_title %}System Health{% endblock %}
 
 {% block content %}
 
@@ -87,7 +86,7 @@
         <span class="text-slate-400 tabular-nums font-semibold">{{ depth }}</span>
       </div>
       <div class="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-        <div class="h-full rounded-full bg-emerald-500 transition-all duration-500" style="width: {% widthratio depth 100 100 %}%"></div>
+        <div class="h-full rounded-full bg-emerald-500 transition-all duration-500 queue-bar" data-depth="{{ depth }}"></div>
       </div>
     </div>
     {% endfor %}
@@ -269,8 +268,19 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- Auto-refresh every 30s -->
 <script>
+  // Scale queue depth bars relative to max depth (min bar 5% so non-zero queues are visible)
+  (function() {
+    var bars = document.querySelectorAll('.queue-bar');
+    var max = 0;
+    bars.forEach(function(b) { var d = parseInt(b.dataset.depth) || 0; if (d > max) max = d; });
+    if (max === 0) max = 1;
+    bars.forEach(function(b) {
+      var d = parseInt(b.dataset.depth) || 0;
+      b.style.width = d === 0 ? '0%' : Math.max(5, Math.round(d / max * 100)) + '%';
+    });
+  })();
+  // Auto-refresh every 30s
   setTimeout(function() { location.reload(); }, 30000);
 </script>
 {% endblock %}

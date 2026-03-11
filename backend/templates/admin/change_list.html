@@ -2,8 +2,6 @@
 {% load i18n admin_urls static admin_list %}
 
 {% block title %}{{ cl.opts.verbose_name_plural|capfirst }} | {{ site_title }}{% endblock %}
-{% block page_title %}{{ cl.opts.verbose_name_plural|capfirst }}{% endblock %}
-
 {% block extrahead %}
 {{ block.super }}
 {{ media.css }}

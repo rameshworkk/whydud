@@ -10,7 +10,7 @@
 
   <!-- Page title -->
   <h1 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
-    {% block page_title %}Dashboard{% endblock %}
+    {{ title|default:"Dashboard" }}
   </h1>
 
   <!-- Right side controls -->
