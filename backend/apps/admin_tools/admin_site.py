@@ -565,6 +565,7 @@ class WhydudAdminSite(AdminSite):
             "active_page": "backfill",
             "title": "Backfill Pipeline",
             "backfill_categories": backfill_categories,
+            "online_workers": self._get_online_workers(),
         }
         return render(request, "admin/backfill_console.html", context)
 

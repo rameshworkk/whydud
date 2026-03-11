@@ -14,12 +14,26 @@ Adding a new tunable:
   2. Add a classmethod below that reads it via ``_get()``.
   3. The admin panel (Sprint 4) only needs to know the string key to expose it.
 """
+import os
+
 from django.conf import settings
+
+_SENTINEL = object()
 
 
 def _get(key: str, default):
-    """Return ``settings.<key>`` when present, otherwise ``default``."""
-    return getattr(settings, key, default)
+    """Return ``settings.<key>`` → ``os.environ[key]`` → ``default``.
+
+    Django settings take priority, then env vars (always strings — callers
+    wrap with int()/float() as needed), then the hard-coded default.
+    """
+    val = getattr(settings, key, _SENTINEL)
+    if val is not _SENTINEL:
+        return val
+    env_val = os.environ.get(key)
+    if env_val is not None:
+        return env_val
+    return default
 
 
 # ---------------------------------------------------------------------------
