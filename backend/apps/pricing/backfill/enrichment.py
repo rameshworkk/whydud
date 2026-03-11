@@ -237,6 +237,13 @@ def enrich_via_http(backfill_product_id: str) -> dict:
 
         Product.objects.filter(id=product.id).update(**product_updates)
 
+        # Refresh from DB (the .update() above bypasses the ORM instance)
+        product.refresh_from_db()
+
+        # Recalculate current_best_price from in-stock listings
+        from apps.products.matching import update_canonical_product
+        update_canonical_product(product)
+
     # Mark enrichment complete
     bp.scrape_status = "scraped"
     bp.save(update_fields=["scrape_status"])
