@@ -138,9 +138,9 @@ class WhydudAdminSite(AdminSite):
             greeting = "Good afternoon"
         else:
             greeting = "Good evening"
+        full_name = (getattr(request.user, 'name', '') or '').strip()
         user_first_name = (
-            request.user.first_name
-            or request.user.email.split("@")[0]
+            full_name.split()[0] if full_name else request.user.email.split("@")[0]
         )
 
         # 7-day sparkline data
