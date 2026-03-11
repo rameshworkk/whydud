@@ -2,19 +2,44 @@
    Django admin element overrides that Tailwind can't target via class names.
    Everything else is Tailwind utility classes inline in templates. */
 
+/* ========================================
+   LAYOUT OVERRIDES
+   ======================================== */
+
 /* Hide Django's default header — we use our own topbar */
 #header { display: none !important; }
 
 /* Hide Django's default breadcrumbs container — we style our own */
 div.breadcrumbs { display: none; }
 
-/* Change list page */
+/* Content wrapper — reset Django defaults */
+#content { padding: 0; }
+#content h1 { display: none; }
+#content-main { padding: 0; }
+
+/* ========================================
+   CHANGE LIST PAGE
+   ======================================== */
+
 #changelist { padding: 0; }
 #changelist #toolbar { padding: 12px 0; }
 #changelist-search input[type="text"] {
   border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px;
   font-family: 'Inter', sans-serif; font-size: 13px;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
+#changelist-search input[type="text"]:focus {
+  border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.1);
+  outline: none;
+}
+#changelist-search input[type="submit"] {
+  background: #10b981; color: white; border: none; border-radius: 8px;
+  padding: 8px 16px; font-family: 'Inter', sans-serif; font-size: 13px;
+  font-weight: 500; cursor: pointer; transition: background 0.15s;
+}
+#changelist-search input[type="submit"]:hover { background: #059669; }
+
+/* Filters sidebar */
 #changelist-filter {
   background: white; border-radius: 12px; border: 1px solid #e2e8f0;
   padding: 16px; margin: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
@@ -28,34 +53,73 @@ div.breadcrumbs { display: none; }
 }
 #changelist-filter li { list-style: none; }
 #changelist-filter a {
-  color: #64748b; font-size: 13px; text-decoration: none; padding: 2px 0; display: block;
+  color: #64748b; font-size: 13px; text-decoration: none;
+  padding: 3px 0; display: block; transition: color 0.15s;
 }
 #changelist-filter a:hover { color: #10b981; }
 #changelist-filter li.selected a { color: #10b981; font-weight: 600; }
 
-/* Result table */
+/* Actions bar */
+.actions { padding: 10px 16px; font-size: 13px; }
+.actions select {
+  border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px;
+  font-family: 'Inter', sans-serif; font-size: 13px;
+}
+.actions button {
+  background: #10b981; color: white; border: none; border-radius: 8px;
+  padding: 6px 16px; font-family: 'Inter', sans-serif; font-size: 13px;
+  font-weight: 500; cursor: pointer; transition: background 0.15s;
+}
+.actions button:hover { background: #059669; }
+
+/* ========================================
+   RESULT TABLE
+   ======================================== */
+
+#result_list {
+  border-collapse: collapse; width: 100%;
+}
 #result_list th {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
   color: #94a3b8; font-weight: 500; background: #f8fafc;
   padding: 10px 16px; border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
 }
+#result_list th a { color: #94a3b8; text-decoration: none; }
+#result_list th a:hover { color: #10b981; }
+#result_list th.sorted a { color: #10b981; }
 #result_list td {
   padding: 10px 16px; font-size: 13px; color: #475569;
   border-bottom: 1px solid #f1f5f9;
 }
+#result_list td a { color: #10b981; text-decoration: none; }
+#result_list td a:hover { text-decoration: underline; }
 #result_list tr:hover td { background: rgba(241,245,249,0.5); }
+#result_list tr.selected td { background: rgba(16,185,129,0.05); }
 
-/* Pagination */
+/* Checkbox in table */
+#result_list td input[type="checkbox"],
+#result_list th input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: #10b981;
+}
+
+/* ========================================
+   PAGINATION
+   ======================================== */
+
 .paginator {
   padding: 12px 16px; font-size: 13px; color: #64748b;
 }
 .paginator a {
   color: #10b981; text-decoration: none; padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: 6px; transition: background 0.15s;
 }
 .paginator a:hover { background: #ecfdf5; }
 
-/* Change form */
+/* ========================================
+   CHANGE FORM
+   ======================================== */
+
 fieldset {
   border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;
   background: white; margin-bottom: 16px;
@@ -70,7 +134,7 @@ fieldset h2 {
 .submit-row input[type="submit"] {
   background: #10b981; color: white; border: none; border-radius: 8px;
   padding: 8px 20px; font-family: 'Inter', sans-serif; font-size: 13px;
-  font-weight: 500; cursor: pointer;
+  font-weight: 500; cursor: pointer; transition: background 0.15s;
 }
 .submit-row input[type="submit"]:hover { background: #059669; }
 
@@ -80,15 +144,121 @@ input[type="text"], input[type="url"], input[type="email"],
 input[type="password"], input[type="number"], select, textarea {
   border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px;
   font-family: 'Inter', sans-serif; font-size: 13px; max-width: 400px;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 input:focus, select:focus, textarea:focus {
   border-color: #10b981; outline: none; box-shadow: 0 0 0 3px rgba(16,185,129,0.1);
 }
 
-/* Dark mode overrides for Django elements */
-.dark #changelist-filter { background: #1e293b; border-color: #334155; }
-.dark #result_list th { background: #0f172a; color: #64748b; border-color: #334155; }
-.dark #result_list td { color: #cbd5e1; border-color: #1e293b; }
+/* Help text */
+.help, .helptext {
+  font-size: 11px; color: #94a3b8; margin-top: 4px;
+}
+
+/* Error list */
+.errorlist { color: #dc2626; font-size: 13px; list-style: none; padding: 0; margin: 4px 0; }
+.errorlist li { padding: 2px 0; }
+
+/* Related widget */
+.related-widget-wrapper { display: flex; align-items: center; gap: 4px; }
+.related-widget-wrapper select { flex: 1; max-width: 380px; }
+
+/* Delete confirmation */
+.delete-confirmation { font-size: 13px; color: #475569; }
+
+/* ========================================
+   SIDEBAR SCROLLBAR
+   ======================================== */
+
+.sidebar-scroll::-webkit-scrollbar { width: 4px; }
+.sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1); border-radius: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.2);
+}
+/* Firefox */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+
+@media (max-width: 1023px) {
+  /* Table horizontal scroll on small screens */
+  #result_list { display: block; overflow-x: auto; }
+
+  /* Stack filter below content on mobile */
+  #changelist-filter {
+    position: static !important; width: 100% !important;
+    margin-top: 16px;
+  }
+
+  /* Full-width form inputs on mobile */
+  input[type="text"], input[type="url"], input[type="email"],
+  input[type="password"], input[type="number"], select, textarea {
+    max-width: 100%;
+  }
+}
+
+/* ========================================
+   DARK MODE — Django element overrides
+   ======================================== */
+
+.dark #changelist-filter {
+  background: #1e293b; border-color: #334155;
+}
+.dark #changelist-filter h3 { color: #cbd5e1; }
+.dark #changelist-filter a { color: #94a3b8; }
+.dark #changelist-filter a:hover { color: #10b981; }
+.dark #changelist-filter li.selected a { color: #10b981; }
+
+.dark #changelist-search input[type="text"] {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+.dark #changelist-search input[type="submit"] {
+  background: #10b981;
+}
+
+.dark #result_list th {
+  background: #0f172a; color: #64748b; border-color: #334155;
+}
+.dark #result_list th a { color: #64748b; }
+.dark #result_list th a:hover { color: #10b981; }
+.dark #result_list th.sorted a { color: #10b981; }
+.dark #result_list td {
+  color: #cbd5e1; border-color: #1e293b;
+}
+.dark #result_list td a { color: #34d399; }
+.dark #result_list tr:hover td { background: rgba(30,41,59,0.5); }
+.dark #result_list tr.selected td { background: rgba(16,185,129,0.1); }
+
 .dark fieldset { background: #1e293b; border-color: #334155; }
+.dark fieldset h2 { color: #e2e8f0; }
 .dark .submit-row { background: #0f172a; border-color: #334155; }
-.dark input, .dark select, .dark textarea { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+
+.dark input, .dark select, .dark textarea {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+.dark input:focus, .dark select:focus, .dark textarea:focus {
+  border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+}
+
+.dark .aligned label { color: #cbd5e1; }
+.dark .help, .dark .helptext { color: #64748b; }
+.dark .paginator { color: #94a3b8; }
+.dark .paginator a:hover { background: rgba(16,185,129,0.1); }
+
+.dark .actions select {
+  background: #1e293b; border-color: #334155; color: #e2e8f0;
+}
+
+.dark .delete-confirmation { color: #cbd5e1; }
+
+/* Date hierarchy */
+.dark .xfull, .dark .date-hierarchy { color: #cbd5e1; }
+.dark .date-hierarchy a { color: #34d399; }

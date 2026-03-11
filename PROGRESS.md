@@ -4713,3 +4713,58 @@ Redesigned 4 admin pages with pure Tailwind utility classes matching the Apex Da
 | `backend/templates/admin/price_intel.html` | Full Tailwind redesign — removed all inline CSS |
 | `backend/templates/admin/index.html` | Full Tailwind redesign — pills + card grid replacing old quick-links |
 | `backend/templates/admin/login.html` | NEW — standalone Tailwind login page |
+
+---
+
+### UI-5: Django CRUD Styling + Responsive + Dark Mode + Polish
+**Date:** 2026-03-11
+**Status:** Done
+
+Added Django CRUD page overrides, responsive sidebar, dark mode polish, and converted all app-specific templates to Tailwind.
+
+**CRUD Templates (NEW):**
+- `change_list.html` — extends base_site.html, adds breadcrumbs (Home > App > Model), "Add" button with Lucide plus icon, wraps result list in rounded card container, handles search/filters/pagination
+- `change_form.html` — extends base_site.html, adds breadcrumbs, styled error alerts with red border-left, fieldset rendering, inline formsets in card containers, delete button with red styling
+
+**Responsive Sidebar:**
+- Mobile (<1024px): sidebar hidden off-screen with `-translate-x-full`, toggleable via hamburger, overlay backdrop on open
+- Desktop (>=1024px): collapsible to 16px width (previous behavior preserved)
+- Auto-close sidebar on nav link click (mobile)
+- `closeMobileSidebar()` function + resize handler to reset state across breakpoints
+- Content padding: `p-4 sm:p-6` (smaller on mobile)
+- Command palette: `w-[90vw] sm:w-[560px]` (responsive width)
+
+**Dark Mode:**
+- Chart.js defaults now dark-mode aware (text color, grid color)
+- Extended whydud_overrides.css dark mode: search inputs, sorted column headers, table links, labels, help text, pagination, action selects, delete confirmation, date hierarchy
+- All app-specific templates now use Tailwind dark: classes
+
+**Polish:**
+- Sidebar scrollbar: thin custom scrollbar (4px width, transparent track, white/10 thumb)
+- Sidebar transition: `duration-200` for smooth collapse/slide
+- CSS overrides: transition on search focus, submit button hover, filter link hover
+- Result table: sorted column header highlight, selected row background, checkbox accent color
+- Help text and error list styling
+- Responsive table: horizontal scroll on mobile (<1024px)
+- Mobile filter: full width, stacked below content
+
+**App-Specific Templates (converted to Tailwind):**
+- Products change_list: stat cards + data quality grid with color-coded counts
+- Users change_list: stat cards + auth methods section
+- Reviews change_list: stat cards with amber/red conditional colors
+- Scraping change_list: stat cards + last scrapes table + ad-hoc scrape form
+- Click events change_list: stat cards + marketplace/product rankings
+
+**Files modified:**
+| File | Change |
+|---|---|
+| `backend/templates/admin/base_site.html` | Responsive sidebar JS, mobile overlay, dark mode chart defaults |
+| `backend/templates/admin/change_list.html` | NEW — CRUD list with breadcrumbs + styled card container |
+| `backend/templates/admin/change_form.html` | NEW — CRUD form with breadcrumbs + error alerts + fieldsets |
+| `backend/templates/admin/includes/sidebar.html` | Added duration-200, sidebar-scroll class |
+| `backend/static/admin/css/whydud_overrides.css` | Expanded to ~190 lines — dark mode, responsive, scrollbar, polish |
+| `backend/templates/admin/products/product/change_list.html` | Converted inline CSS to Tailwind |
+| `backend/templates/admin/accounts/user/change_list.html` | Converted inline CSS to Tailwind |
+| `backend/templates/admin/reviews/review/change_list.html` | Converted inline CSS to Tailwind |
+| `backend/templates/admin/scraping/scraperjob/change_list.html` | Converted inline CSS to Tailwind |
+| `backend/templates/admin/pricing/clickevent/change_list.html` | Converted inline CSS to Tailwind |

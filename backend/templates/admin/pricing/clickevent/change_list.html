@@ -3,123 +3,53 @@
 
 {% block content %}
 {% if stats_header %}
-<style>
-  .click-stats { margin-bottom: 20px; }
-  .click-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-  .click-stat-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 12px 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .click-stat-card .label {
-    font-size: 11px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0;
-  }
-  .click-stat-card .value {
-    font-size: 24px;
-    font-weight: bold;
-    color: #1a1a2e;
-    margin-top: 2px;
-  }
-  .click-stat-card .sub {
-    font-size: 11px;
-    color: #999;
-    margin-top: 2px;
-  }
-  .click-section-title {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 16px 0 8px;
-    padding-bottom: 6px;
-    border-bottom: 2px solid #F97316;
-    color: #1a1a2e;
-  }
-  .click-ranking-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 10px;
-    margin-bottom: 16px;
-  }
-  .click-ranking-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 13px;
-  }
-  .click-ranking-item .rank {
-    font-weight: 700;
-    font-size: 16px;
-    color: #F97316;
-    min-width: 24px;
-  }
-  .click-ranking-item .name {
-    color: #333;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .click-ranking-item .count {
-    font-weight: 600;
-    color: #1a1a2e;
-  }
-</style>
-
-<div class="click-stats">
-  <div class="click-stat-grid">
-    <div class="click-stat-card">
-      <div class="label">Clicks Today</div>
-      <div class="value">{{ clicks_today|default:"0" }}</div>
+<div class="mb-6">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Clicks Today</div>
+      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ clicks_today|default:"0" }}</div>
     </div>
-    <div class="click-stat-card">
-      <div class="label">This Week</div>
-      <div class="value">{{ clicks_week|default:"0" }}</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">This Week</div>
+      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ clicks_week|default:"0" }}</div>
     </div>
-    <div class="click-stat-card">
-      <div class="label">This Month</div>
-      <div class="value">{{ clicks_month|default:"0" }}</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">This Month</div>
+      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ clicks_month|default:"0" }}</div>
     </div>
-    <div class="click-stat-card">
-      <div class="label">Conversion (7d)</div>
-      <div class="value">{{ conversion_rate }}%</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Conversion (7d)</div>
+      <div class="text-[24px] font-bold text-emerald-500 mt-1 leading-none">{{ conversion_rate }}%</div>
     </div>
   </div>
 
   {% if by_marketplace %}
-  <div class="click-section-title">By Marketplace (7d)</div>
-  <div class="click-ranking-list">
+  <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-3">By Marketplace (7d)</div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
     {% for item in by_marketplace %}
-    <div class="click-ranking-item">
-      <span class="rank">{{ forloop.counter }}</span>
-      <span class="name">{{ item.marketplace__name }}</span>
-      <span class="count">{{ item.count }}</span>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-xl p-3 flex items-center gap-3">
+      <span class="text-[16px] font-bold text-amber-500 tabular-nums min-w-[24px]">{{ forloop.counter }}</span>
+      <span class="text-[13px] text-slate-600 dark:text-slate-300 flex-1 truncate">{{ item.marketplace__name }}</span>
+      <span class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 tabular-nums">{{ item.count }}</span>
     </div>
     {% endfor %}
   </div>
   {% endif %}
 
   {% if top_products %}
-  <div class="click-section-title">Top Products (7d)</div>
-  <div class="click-ranking-list">
+  <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-3">Top Products (7d)</div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
     {% for item in top_products %}
-    <div class="click-ranking-item">
-      <span class="rank">{{ forloop.counter }}</span>
-      <span class="name">{{ item.product__title|truncatechars:45 }}</span>
-      <span class="count">{{ item.count }}</span>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-xl p-3 flex items-center gap-3">
+      <span class="text-[16px] font-bold text-amber-500 tabular-nums min-w-[24px]">{{ forloop.counter }}</span>
+      <span class="text-[13px] text-slate-600 dark:text-slate-300 flex-1 truncate">{{ item.product__title|truncatechars:45 }}</span>
+      <span class="text-[13px] font-semibold text-slate-900 dark:text-slate-100 tabular-nums">{{ item.count }}</span>
     </div>
     {% endfor %}
   </div>

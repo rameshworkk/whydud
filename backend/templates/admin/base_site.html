@@ -51,19 +51,22 @@
 </head>
 
 <body class="font-sans bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 m-0">
+  <!-- Mobile sidebar overlay -->
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden lg:hidden" onclick="closeMobileSidebar()"></div>
+
   <div class="flex min-h-screen">
 
     <!-- Sidebar -->
     {% include "admin/includes/sidebar.html" %}
 
     <!-- Main area -->
-    <main class="flex-1 ml-[240px] min-h-screen transition-all" id="main-content">
+    <main class="flex-1 lg:ml-[240px] min-h-screen transition-all" id="main-content">
 
       <!-- Topbar -->
       {% include "admin/includes/topbar.html" %}
 
       <!-- Content -->
-      <div class="p-6 max-w-[1400px] animate-fade-in">
+      <div class="p-4 sm:p-6 max-w-[1400px] animate-fade-in">
         {% if messages %}
         {% for message in messages %}
         <div class="flex items-center gap-2 px-4 py-3 rounded-xl mb-4 text-[13px]
@@ -83,7 +86,7 @@
 
   <!-- Command Palette Overlay -->
   <div id="command-palette" class="fixed inset-0 bg-black/50 z-50 hidden items-start justify-center pt-[20vh]">
-    <div class="bg-white dark:bg-slate-800 rounded-2xl w-[560px] max-h-[400px] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl w-[90vw] sm:w-[560px] max-h-[400px] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
       <input type="text" id="cmd-search" placeholder="Search pages, models, actions..."
              class="w-full px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-[15px] font-sans outline-none
                     bg-transparent text-slate-900 dark:text-slate-100">
@@ -110,25 +113,74 @@
       localStorage.setItem('whydud-admin-theme', html.classList.contains('dark') ? 'dark' : 'light');
     }
 
-    // Sidebar collapse
+    // Responsive sidebar
     const sidebar = document.getElementById('sidebar');
     const mainEl = document.getElementById('main-content');
+    const overlay = document.getElementById('sidebar-overlay');
+    const isMobile = () => window.innerWidth < 1024;
+
+    // Desktop: restore collapsed state
     const sidebarCollapsed = localStorage.getItem('whydud-sidebar-collapsed') === 'true';
-    if (sidebarCollapsed) {
+    if (sidebarCollapsed && !isMobile()) {
       sidebar.classList.add('!w-16');
       sidebar.querySelectorAll('.sidebar-text').forEach(el => el.classList.add('hidden'));
-      mainEl.classList.replace('ml-[240px]', 'ml-16');
+      mainEl.classList.replace('lg:ml-[240px]', 'lg:ml-16');
     }
+    // Mobile: start hidden
+    if (isMobile()) {
+      sidebar.classList.add('-translate-x-full');
+    }
+
     function toggleSidebar() {
-      sidebar.classList.toggle('!w-16');
-      sidebar.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden'));
-      if (mainEl.classList.contains('ml-[240px]')) {
-        mainEl.classList.replace('ml-[240px]', 'ml-16');
+      if (isMobile()) {
+        sidebar.classList.toggle('-translate-x-full');
+        overlay.classList.toggle('hidden');
       } else {
-        mainEl.classList.replace('ml-16', 'ml-[240px]');
+        sidebar.classList.toggle('!w-16');
+        sidebar.querySelectorAll('.sidebar-text').forEach(el => el.classList.toggle('hidden'));
+        if (mainEl.classList.contains('lg:ml-[240px]')) {
+          mainEl.classList.replace('lg:ml-[240px]', 'lg:ml-16');
+        } else {
+          mainEl.classList.replace('lg:ml-16', 'lg:ml-[240px]');
+        }
+        localStorage.setItem('whydud-sidebar-collapsed', sidebar.classList.contains('!w-16'));
       }
-      localStorage.setItem('whydud-sidebar-collapsed', sidebar.classList.contains('!w-16'));
     }
+
+    function closeMobileSidebar() {
+      if (isMobile()) {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+      }
+    }
+
+    // Close mobile sidebar on nav link click
+    sidebar.querySelectorAll('a[href]').forEach(link => {
+      link.addEventListener('click', () => closeMobileSidebar());
+    });
+
+    // Handle resize across breakpoint
+    window.addEventListener('resize', () => {
+      if (isMobile()) {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+        sidebar.classList.remove('!w-16');
+        sidebar.querySelectorAll('.sidebar-text').forEach(el => el.classList.remove('hidden'));
+      } else {
+        sidebar.classList.remove('-translate-x-full');
+        overlay.classList.add('hidden');
+        const collapsed = localStorage.getItem('whydud-sidebar-collapsed') === 'true';
+        if (collapsed) {
+          sidebar.classList.add('!w-16');
+          sidebar.querySelectorAll('.sidebar-text').forEach(el => el.classList.add('hidden'));
+          if (mainEl.classList.contains('lg:ml-[240px]')) mainEl.classList.replace('lg:ml-[240px]', 'lg:ml-16');
+        } else {
+          sidebar.classList.remove('!w-16');
+          sidebar.querySelectorAll('.sidebar-text').forEach(el => el.classList.remove('hidden'));
+          if (mainEl.classList.contains('lg:ml-16')) mainEl.classList.replace('lg:ml-16', 'lg:ml-[240px]');
+        }
+      }
+    });
 
     // Command palette (Cmd+K / Ctrl+K)
     const palette = document.getElementById('command-palette');
@@ -185,12 +237,16 @@
       }
     });
 
-    // Chart.js global defaults
+    // Chart.js global defaults — dark mode aware
     if (typeof Chart !== 'undefined') {
+      const isDark = html.classList.contains('dark');
       Chart.defaults.font.family = 'Inter';
-      Chart.defaults.color = '#94a3b8';
+      Chart.defaults.color = isDark ? '#94a3b8' : '#64748b';
       Chart.defaults.plugins.legend.labels.usePointStyle = true;
       Chart.defaults.plugins.legend.labels.padding = 16;
+      // Default grid colors for dark/light mode
+      const gridColor = isDark ? '#1e293b' : '#f1f5f9';
+      Chart.defaults.elements = Chart.defaults.elements || {};
     }
   </script>
 

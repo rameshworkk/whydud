@@ -3,68 +3,37 @@
 
 {% block content %}
 {% if stats_header %}
-<style>
-  .review-stats { margin-bottom: 20px; }
-  .review-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-  .review-stat-card {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 12px 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  }
-  .review-stat-card .label {
-    font-size: 11px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0;
-  }
-  .review-stat-card .value {
-    font-size: 24px;
-    font-weight: bold;
-    color: #1a1a2e;
-    margin-top: 2px;
-  }
-  .review-stat-card .sub {
-    font-size: 11px;
-    color: #999;
-    margin-top: 2px;
-  }
-  .review-stat-card .value.warn { color: #d97706; }
-  .review-stat-card .value.danger { color: #DC2626; }
-</style>
-
-<div class="review-stats">
-  <div class="review-stat-grid">
-    <div class="review-stat-card">
-      <div class="label">Total Reviews</div>
-      <div class="value">{{ total_reviews|default:"0" }}</div>
+<div class="mb-6">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Total Reviews</div>
+      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ total_reviews|default:"0" }}</div>
     </div>
-    <div class="review-stat-card">
-      <div class="label">Pending (48h hold)</div>
-      <div class="value{% if pending_count %} warn{% endif %}">{{ pending_count|default:"0" }}</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Pending (48h hold)</div>
+      <div class="text-[24px] font-bold {% if pending_count %}text-amber-500{% else %}text-slate-900 dark:text-slate-100{% endif %} mt-1 leading-none">{{ pending_count|default:"0" }}</div>
     </div>
-    <div class="review-stat-card">
-      <div class="label">Flagged</div>
-      <div class="value{% if flagged_count %} danger{% endif %}">{{ flagged_count|default:"0" }}</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Flagged</div>
+      <div class="text-[24px] font-bold {% if flagged_count %}text-red-500{% else %}text-slate-900 dark:text-slate-100{% endif %} mt-1 leading-none">{{ flagged_count|default:"0" }}</div>
     </div>
-    <div class="review-stat-card">
-      <div class="label">Published Today</div>
-      <div class="value">{{ published_today|default:"0" }}</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Published Today</div>
+      <div class="text-[24px] font-bold text-emerald-500 mt-1 leading-none">{{ published_today|default:"0" }}</div>
     </div>
-    <div class="review-stat-card">
-      <div class="label">Avg Credibility</div>
-      <div class="value">{{ avg_credibility }}</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Avg Credibility</div>
+      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ avg_credibility }}</div>
     </div>
-    <div class="review-stat-card">
-      <div class="label">Fraud Detection Rate</div>
-      <div class="value">{{ fraud_rate }}%</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Fraud Detection Rate</div>
+      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ fraud_rate }}%</div>
     </div>
   </div>
 </div>
