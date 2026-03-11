@@ -5,7 +5,7 @@
 
 {% block content %}
 
-<p class="text-sm text-slate-400 mb-6">Welcome back. Here's what's happening today.</p>
+<p class="text-sm text-slate-400 mb-6">{{ greeting }}, {{ user_first_name }}. Here's what's happening today.</p>
 
 <!-- Products & Data Row 1 -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
@@ -201,13 +201,13 @@ function createSparkline(canvasId, data, color) {
   });
 }
 
-// TODO: Replace with real trend data from context
-// Placeholder sparkline data
-createSparkline('spark-products', [10, 12, 15, 14, 18, 20, 23], '#10b981');
-createSparkline('spark-reviews', [5, 6, 4, 8, 7, 9, 11], '#f59e0b');
-createSparkline('spark-dudscore', [2, 3, 5, 4, 6, 8, 7], '#3b82f6');
-createSparkline('spark-snapshots', [100, 120, 110, 150, 140, 180, 200], '#8b5cf6');
-createSparkline('spark-users', [3, 4, 2, 5, 6, 4, 7], '#8b5cf6');
+// Real 7-day sparkline data from backend
+const sparkData = JSON.parse('{{ sparkline_json|escapejs }}');
+createSparkline('spark-products', sparkData.products, '#10b981');
+createSparkline('spark-reviews', sparkData.reviews, '#f59e0b');
+createSparkline('spark-dudscore', sparkData.products, '#3b82f6');
+createSparkline('spark-snapshots', sparkData.snapshots, '#8b5cf6');
+createSparkline('spark-users', sparkData.users, '#8b5cf6');
 </script>
 
 <!-- Auto-refresh every 60s -->

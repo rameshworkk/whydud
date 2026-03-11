@@ -114,6 +114,7 @@ class WhydudAdminSite(AdminSite):
 
     def dashboard_view(self, request):
         """Platform overview — the admin home page."""
+        import json
         from datetime import timedelta
 
         from django.db.models import Count, Q
@@ -129,10 +130,31 @@ class WhydudAdminSite(AdminSite):
         today = now.date()
         week_ago = now - timedelta(days=7)
 
+        # Greeting logic
+        local_hour = timezone.localtime(now).hour
+        if local_hour < 12:
+            greeting = "Good morning"
+        elif local_hour < 17:
+            greeting = "Good afternoon"
+        else:
+            greeting = "Good evening"
+        user_first_name = (
+            request.user.first_name
+            or request.user.email.split("@")[0]
+        )
+
+        # 7-day sparkline data
+        sparkline_data = self._compute_sparkline_data(
+            now, Product, Review, User
+        )
+
         context = {
             **self.each_context(request),
             "active_page": "dashboard",
             "title": "Platform Dashboard",
+            # Greeting
+            "greeting": greeting,
+            "user_first_name": user_first_name,
             # Product stats
             "product_count": Product.objects.count(),
             "product_lightweight": Product.objects.filter(
@@ -175,6 +197,8 @@ class WhydudAdminSite(AdminSite):
             "snapshot_count": self._get_snapshot_count(),
             # Marketplace breakdown
             "marketplace_stats": self._get_marketplace_stats(),
+            # Sparkline JSON
+            "sparkline_json": json.dumps(sparkline_data),
         }
         return render(request, "admin/dashboard.html", context)
 
@@ -2007,6 +2031,72 @@ class WhydudAdminSite(AdminSite):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_sparkline_data(now, Product, Review, User):
+        """Compute 7-day daily counts for dashboard sparklines."""
+        from datetime import timedelta
+
+        from django.db import connection
+        from django.db.models import Count
+        from django.db.models.functions import TruncDate
+
+        seven_days_ago = now - timedelta(days=7)
+
+        # Products created per day (last 7 days)
+        products_qs = dict(
+            Product.objects.filter(created_at__gte=seven_days_ago)
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .values_list("day", "count")
+        )
+
+        # Reviews created per day
+        reviews_qs = dict(
+            Review.objects.filter(created_at__gte=seven_days_ago)
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .values_list("day", "count")
+        )
+
+        # Users created per day
+        users_qs = dict(
+            User.objects.filter(created_at__gte=seven_days_ago)
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(count=Count("id"))
+            .values_list("day", "count")
+        )
+
+        # Price snapshots per day (raw SQL — hypertable)
+        snapshots_by_day = {}
+        try:
+            with connection.cursor() as cur:
+                cur.execute(
+                    "SELECT time::date AS day, COUNT(*) "
+                    "FROM price_snapshots "
+                    "WHERE time >= %s "
+                    "GROUP BY day ORDER BY day",
+                    [seven_days_ago],
+                )
+                for row in cur.fetchall():
+                    snapshots_by_day[row[0]] = row[1]
+        except Exception:
+            pass
+
+        # Build arrays for each day in the 7-day window
+        days = [
+            (now - timedelta(days=i)).date() for i in range(6, -1, -1)
+        ]
+        return {
+            "labels": [d.strftime("%a") for d in days],
+            "products": [products_qs.get(d, 0) for d in days],
+            "reviews": [reviews_qs.get(d, 0) for d in days],
+            "users": [users_qs.get(d, 0) for d in days],
+            "snapshots": [snapshots_by_day.get(d, 0) for d in days],
+        }
 
     @staticmethod
     def _get_user_model():

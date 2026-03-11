@@ -4716,8 +4716,8 @@ Redesigned 4 admin pages with pure Tailwind utility classes matching the Apex Da
 
 ---
 
-### UI-5: Django CRUD Styling + Responsive + Dark Mode + Polish
-**Date:** 2026-03-11
+### 2026-03-11 — UI-5: Django CRUD Styling + Responsive + Dark Mode + Polish
+**Commit:** `b0d6272` — `feat(admin): Django CRUD styling + responsive + dark mode + polish`
 **Status:** Done
 
 Added Django CRUD page overrides, responsive sidebar, dark mode polish, and converted all app-specific templates to Tailwind.
@@ -4768,3 +4768,65 @@ Added Django CRUD page overrides, responsive sidebar, dark mode polish, and conv
 | `backend/templates/admin/reviews/review/change_list.html` | Converted inline CSS to Tailwind |
 | `backend/templates/admin/scraping/scraperjob/change_list.html` | Converted inline CSS to Tailwind |
 | `backend/templates/admin/pricing/clickevent/change_list.html` | Converted inline CSS to Tailwind |
+
+---
+
+### 2026-03-11 — UI-3: Enrichment + Cluster + Health Redesign (Tailwind)
+
+**Commit:** `ec0ee54` — `feat(admin): redesign enrichment + cluster + health (Tailwind)`
+
+Replaced all custom CSS (`<style>` blocks) with Tailwind utility classes on 3 admin console pages, matching the Apex Dashboard design system established in UI-1/UI-2.
+
+**enrichment_console.html:**
+- 5 stat cards (Total Queue, Currently Enriching, Completed, Failed, Enriched 24h) with Apex card pattern
+- Queue depth + scrape status progress bars using `buildProgressBars` helper
+- Estimated time cards (amber) + bandwidth estimate cards (blue/violet)
+- 3 doughnut charts (Queue by Priority, Completed by Method, Review Status)
+- Review Status + Pending by Marketplace breakdown tables
+- 8 action cards (emerald=primary, blue=secondary, red=destructive)
+- Stale enrichments + recent failures tables with status badges
+- Empty state with Lucide icon
+
+**cluster_console.html:**
+- Quick links as colored pills (Flower, System Health, Backfill)
+- 4 summary stat cards (Nodes Online, Active, Reserved, Completed)
+- Node cards with `border-l-4` (emerald=online, red=offline), 2x2 stat grid, queue tags
+- Queue depth progress bars + Chart.js horizontal bar chart
+- Active tasks table with code-styled cells + empty state
+
+**system_health.html:**
+- Service status cards with `border-l-4` (emerald/amber/red) + status badges
+- Celery worker cards with 3-column stat grid + queue tags
+- Queue depth progress bars
+- Database stats + largest tables + row counts in card containers
+- Redis + TimescaleDB stats in 2-column grid with hypertables table
+- Continuous aggregates shown as tag pills
+
+**All pages:** Dark mode support, auto-refresh, consistent Tailwind patterns, no custom CSS.
+
+**Net change:** -387 lines (837 added, 1224 removed)
+
+| File | Change |
+|---|---|
+| `backend/templates/admin/enrichment_console.html` | Full Tailwind rewrite — removed ~285 lines of custom CSS |
+| `backend/templates/admin/cluster_console.html` | Full Tailwind rewrite — removed ~266 lines of custom CSS |
+| `backend/templates/admin/system_health.html` | Full Tailwind rewrite — removed ~152 lines of custom CSS |
+
+---
+
+### UI-6: Real sparkline data + sidebar badges + welcome message (2026-03-11)
+
+**Python changes to `admin_site.py`:**
+- Added `_compute_sparkline_data()` static method: computes 7-day daily counts for Products, Reviews, Users (via ORM TruncDate), and PriceSnapshots (raw SQL on hypertable)
+- Dashboard greeting logic: time-based greeting (morning/afternoon/evening) + user first name (falls back to email prefix)
+- Passes `sparkline_json` (JSON-serialized dict with `products`, `reviews`, `users`, `snapshots`, `labels` arrays) to template context
+- Sidebar badges already wired in `each_context()` from UI-1 — verified working
+
+**Template changes to `dashboard.html`:**
+- Welcome message now uses `{{ greeting }}, {{ user_first_name }}` instead of static text
+- Sparklines now consume real data via `JSON.parse('{{ sparkline_json|escapejs }}')` instead of placeholder arrays
+
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Added `_compute_sparkline_data()`, greeting logic, sparkline_json context |
+| `backend/templates/admin/dashboard.html` | Real sparkline data + personalized greeting |
