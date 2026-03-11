@@ -1,4 +1,4 @@
-"""Enhanced scraping console — ScraperJob admin with status badges, run buttons, stats header."""
+"""Enhanced scraping console — Apex-style ScraperJob admin with status badges, run buttons, stats header."""
 from datetime import timedelta
 
 from django.contrib import admin
@@ -7,6 +7,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.timesince import timesince
 
 from .models import ScraperJob
 
@@ -14,14 +15,14 @@ from .models import ScraperJob
 @admin.register(ScraperJob)
 class ScraperJobAdmin(admin.ModelAdmin):
     list_display = [
-        "spider_name",
-        "marketplace",
+        "spider_display",
+        "marketplace_badge",
         "status_badge",
-        "items_scraped",
-        "items_failed",
+        "items_display",
+        "failed_display",
         "duration_display",
-        "triggered_by",
-        "started_at",
+        "triggered_badge",
+        "started_ago",
     ]
     list_filter = ["status", "marketplace__slug", "triggered_by", "started_at"]
     search_fields = ["marketplace__slug", "spider_name"]
@@ -39,7 +40,8 @@ class ScraperJobAdmin(admin.ModelAdmin):
         "created_at",
     ]
     ordering = ["-started_at"]
-    list_per_page = 50
+    list_per_page = 30
+    list_select_related = ["marketplace"]
     actions = [
         "run_amazon_spider",
         "run_flipkart_spider",
@@ -48,52 +50,119 @@ class ScraperJobAdmin(admin.ModelAdmin):
     ]
 
     # ------------------------------------------------------------------
-    # Custom display columns
+    # Custom display columns — Apex-style
     # ------------------------------------------------------------------
+
+    @admin.display(description="Spider", ordering="spider_name")
+    def spider_display(self, obj):
+        return format_html(
+            '<span class="text-[13px] font-medium text-slate-800 dark:text-slate-200">{}</span>',
+            obj.spider_name or "\u2014",
+        )
+
+    @admin.display(description="Marketplace")
+    def marketplace_badge(self, obj):
+        name = obj.marketplace.name if obj.marketplace else "\u2014"
+        colors = {
+            "Amazon.in": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            "Flipkart": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+        }
+        color = colors.get(name, "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400")
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, name,
+        )
 
     @admin.display(description="Status", ordering="status")
     def status_badge(self, obj):
-        colors = {
-            "completed": ("#f0fdf4", "#16A34A"),
-            "failed": ("#fef2f2", "#DC2626"),
-            "running": ("#eff6ff", "#2563eb"),
-            "queued": ("#f8fafc", "#64748b"),
-            "partial": ("#fffbeb", "#d97706"),
+        status_colors = {
+            "completed": "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+            "failed": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+            "running": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            "queued": "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
+            "partial": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
         }
-        icons = {
-            "completed": "\u2705",
-            "failed": "\u274c",
-            "running": "\U0001f504",
-            "queued": "\u23f3",
-            "partial": "\u26a0\ufe0f",
-        }
-        bg, fg = colors.get(obj.status, ("#f8fafc", "#64748b"))
-        icon = icons.get(obj.status, "")
+        classes = status_colors.get(obj.status, status_colors["queued"])
         return format_html(
-            '<span style="background:{};color:{};padding:2px 8px;border-radius:10px;'
-            'font-size:11px;font-weight:600;">{} {}</span>',
-            bg,
-            fg,
-            icon,
-            obj.get_status_display(),
+            '<span class="inline-flex px-2.5 py-1 rounded-md text-[11px] font-semibold {}">{}</span>',
+            classes, obj.get_status_display(),
         )
+
+    @admin.display(description="Items", ordering="items_scraped")
+    def items_display(self, obj):
+        count = obj.items_scraped or 0
+        if count > 0:
+            return format_html(
+                '<span class="text-[13px] font-semibold text-slate-700 dark:text-slate-300">{}</span>',
+                f"{count:,}",
+            )
+        return format_html('<span class="text-[12px] text-slate-400">0</span>')
+
+    @admin.display(description="Failed", ordering="items_failed")
+    def failed_display(self, obj):
+        count = obj.items_failed or 0
+        if count > 0:
+            return format_html(
+                '<span class="text-[13px] font-medium text-red-600 dark:text-red-400">{}</span>',
+                f"{count:,}",
+            )
+        return format_html('<span class="text-[12px] text-slate-400">0</span>')
 
     @admin.display(description="Duration", ordering="finished_at")
     def duration_display(self, obj):
         if not obj.started_at:
-            return "-"
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
         end = obj.finished_at or timezone.now()
         delta = end - obj.started_at
         total_seconds = int(delta.total_seconds())
         if total_seconds < 0:
-            return "-"
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
         if total_seconds < 60:
-            return f"{total_seconds}s"
-        minutes, seconds = divmod(total_seconds, 60)
-        if minutes < 60:
-            return f"{minutes}m {seconds}s"
-        hours, minutes = divmod(minutes, 60)
-        return f"{hours}h {minutes}m"
+            dur = f"{total_seconds}s"
+        else:
+            minutes, seconds = divmod(total_seconds, 60)
+            if minutes < 60:
+                dur = f"{minutes}m {seconds}s"
+            else:
+                hours, minutes = divmod(minutes, 60)
+                dur = f"{hours}h {minutes}m"
+        return format_html(
+            '<span class="text-[12px] font-mono text-slate-600 dark:text-slate-400">{}</span>',
+            dur,
+        )
+
+    @admin.display(description="Trigger")
+    def triggered_badge(self, obj):
+        trigger = obj.triggered_by or "\u2014"
+        trigger_colors = {
+            "celery": "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400",
+            "admin": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            "manual": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            "schedule": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-400",
+        }
+        color = trigger_colors.get(
+            trigger.lower() if trigger != "\u2014" else "",
+            "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
+        )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, trigger,
+        )
+
+    @admin.display(description="Started", ordering="started_at")
+    def started_ago(self, obj):
+        if obj.started_at:
+            delta = timezone.now() - obj.started_at
+            if delta.days > 30:
+                return format_html(
+                    '<span class="text-[12px] text-slate-400">{}</span>',
+                    obj.started_at.strftime("%b %d, %Y"),
+                )
+            return format_html(
+                '<span class="text-[12px] text-slate-500">{} ago</span>',
+                timesince(obj.started_at, timezone.now()).split(",")[0],
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
     # ------------------------------------------------------------------
     # Admin actions — trigger spiders

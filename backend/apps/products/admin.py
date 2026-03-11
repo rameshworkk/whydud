@@ -1,7 +1,9 @@
-"""Enhanced product admin — data quality stats, custom filters, merge action."""
+"""Enhanced product admin — Apex-style badges, formatted prices, data quality stats."""
 from django.contrib import admin
 from django.db.models import Count, Q
+from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.timesince import timesince
 
 from apps.admin_tools.mixins import AuditLogMixin
 
@@ -127,17 +129,15 @@ class ProductAdmin(AuditLogMixin, admin.ModelAdmin):
     change_list_template = "admin/products/product/change_list.html"
 
     list_display = [
-        "title_short",
-        "brand",
-        "category",
-        "price_display",
-        "listing_count",
+        "product_display",
+        "brand_display",
+        "category_display",
+        "price_formatted",
+        "listing_count_display",
         "dudscore_badge",
-        "has_images_icon",
-        "is_lightweight_icon",
-        "total_reviews",
-        "status",
-        "updated_at",
+        "stock_badge",
+        "lightweight_badge",
+        "updated_ago",
     ]
     list_filter = [
         "status",
@@ -151,7 +151,7 @@ class ProductAdmin(AuditLogMixin, admin.ModelAdmin):
     ]
     search_fields = ["title", "slug", "brand__name", "listings__external_id"]
     readonly_fields = ["id", "created_at", "updated_at", "first_seen_at"]
-    list_per_page = 50
+    list_per_page = 30
     list_select_related = ["brand", "category"]
     inlines = [ProductListingInline]
 
@@ -170,63 +170,122 @@ class ProductAdmin(AuditLogMixin, admin.ModelAdmin):
         return super().get_queryset(request).annotate(_listing_count=Count("listings"))
 
     # ------------------------------------------------------------------
-    # Display columns
+    # Display columns — Apex-style
     # ------------------------------------------------------------------
 
-    @admin.display(description="Title", ordering="title")
-    def title_short(self, obj):
+    @admin.display(description="Product", ordering="title")
+    def product_display(self, obj):
         t = obj.title
-        return t[:60] + "..." if len(t) > 60 else t
+        short = t[:55] + "..." if len(t) > 55 else t
+        return format_html(
+            '<div class="max-w-[350px]">'
+            '  <div class="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate">{}</div>'
+            '  <div class="text-[11px] text-slate-400 font-mono">{}</div>'
+            '</div>',
+            short, obj.slug[:40] if obj.slug else "",
+        )
+
+    @admin.display(description="Brand", ordering="brand__name")
+    def brand_display(self, obj):
+        if obj.brand:
+            return format_html(
+                '<span class="text-[13px] text-slate-700 dark:text-slate-300">{}</span>',
+                obj.brand.name,
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
+
+    @admin.display(description="Category", ordering="category__name")
+    def category_display(self, obj):
+        if obj.category:
+            return format_html(
+                '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium'
+                ' bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400">{}</span>',
+                obj.category.name,
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
     @admin.display(description="Price", ordering="current_best_price")
-    def price_display(self, obj):
+    def price_formatted(self, obj):
         if obj.current_best_price is None:
-            return "-"
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
         p = int(obj.current_best_price)
-        # Indian numbering: 1,23,456
-        s = str(p)
-        if len(s) <= 3:
-            formatted = s
-        else:
-            last3 = s[-3:]
-            rest = s[:-3]
-            parts = []
-            while rest:
-                parts.append(rest[-2:])
-                rest = rest[:-2]
-            formatted = ",".join(reversed(parts)) + "," + last3
-        return f"₹{formatted}"
+        return format_html(
+            '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
+            f"\u20b9{p:,}",
+        )
 
     @admin.display(description="Listings", ordering="_listing_count")
-    def listing_count(self, obj):
-        return obj._listing_count
+    def listing_count_display(self, obj):
+        count = obj._listing_count
+        if count > 0:
+            return format_html(
+                '<span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold'
+                ' bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">{}</span>',
+                count,
+            )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-full text-[11px]'
+            ' bg-slate-100 text-slate-400 dark:bg-slate-500/20">0</span>'
+        )
 
     @admin.display(description="DudScore", ordering="dud_score")
     def dudscore_badge(self, obj):
         if obj.dud_score is None:
-            return format_html(
-                '<span style="color:#94a3b8;font-size:11px;">—</span>'
-            )
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
         score = float(obj.dud_score)
-        if score >= 80:
-            bg, fg = "#f0fdf4", "#16A34A"
-        elif score >= 50:
-            bg, fg = "#fffbeb", "#d97706"
+        if score >= 70:
+            classes = "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
+        elif score >= 40:
+            classes = "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
         else:
-            bg, fg = "#fef2f2", "#DC2626"
+            classes = "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
         return format_html(
-            '<span style="background:{};color:{};padding:2px 8px;border-radius:10px;'
-            'font-size:11px;font-weight:600;">{}</span>',
-            bg, fg, f"{score:.1f}",
+            '<span class="inline-flex px-2.5 py-1 rounded-md text-[11px] font-semibold {}">{}</span>',
+            classes, f"{score:.1f}",
         )
 
-    @admin.display(description="Images", boolean=True)
-    def has_images_icon(self, obj):
-        return bool(obj.images)
+    @admin.display(description="Status", ordering="status")
+    def stock_badge(self, obj):
+        status_colors = {
+            "active": ("bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400", "Active"),
+            "discontinued": ("bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400", "Discontinued"),
+            "pending": ("bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400", "Pending"),
+        }
+        classes, label = status_colors.get(
+            obj.status,
+            ("bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400", obj.status),
+        )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            classes, label,
+        )
 
-    @admin.display(description="Lightweight", boolean=True)
-    def is_lightweight_icon(self, obj):
-        return obj.is_lightweight
+    @admin.display(description="Type")
+    def lightweight_badge(self, obj):
+        if obj.is_lightweight:
+            return format_html(
+                '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium'
+                ' bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">Lightweight</span>'
+            )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium'
+            ' bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">Enriched</span>'
+        )
+
+    @admin.display(description="Updated")
+    def updated_ago(self, obj):
+        if obj.updated_at:
+            delta = timezone.now() - obj.updated_at
+            if delta.days > 30:
+                return format_html(
+                    '<span class="text-[12px] text-slate-400">{}</span>',
+                    obj.updated_at.strftime("%b %d, %Y"),
+                )
+            return format_html(
+                '<span class="text-[12px] text-slate-500">{} ago</span>',
+                timesince(obj.updated_at, timezone.now()).split(",")[0],
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
     # ------------------------------------------------------------------
     # Admin actions
@@ -326,21 +385,58 @@ class ProductAdmin(AuditLogMixin, admin.ModelAdmin):
 
 
 # ------------------------------------------------------------------
-# Other model admins (unchanged)
+# Other model admins — Apex-style
 # ------------------------------------------------------------------
 
 @admin.register(Marketplace)
 class MarketplaceAdmin(AuditLogMixin, admin.ModelAdmin):
-    list_display = ["name", "slug", "scraper_status"]
+    list_display = ["name_display", "slug", "scraper_status_badge"]
+    list_per_page = 30
+
+    @admin.display(description="Name", ordering="name")
+    def name_display(self, obj):
+        return format_html(
+            '<span class="text-[13px] font-medium text-slate-800 dark:text-slate-200">{}</span>',
+            obj.name,
+        )
+
+    @admin.display(description="Status", ordering="scraper_status")
+    def scraper_status_badge(self, obj):
+        status = obj.scraper_status or "\u2014"
+        status_colors = {
+            "active": "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+            "paused": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            "disabled": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+            "error": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+        }
+        classes = status_colors.get(
+            status.lower() if status != "\u2014" else "",
+            "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
+        )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            classes, status.title() if status != "\u2014" else status,
+        )
 
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ["name", "parent_display", "level", "slug", "product_count", "is_active", "display_order"]
+    list_display = [
+        "name_display", "parent_display", "level_badge",
+        "slug", "product_count_badge", "active_badge", "display_order",
+    ]
     list_filter = ["level", "is_active", "parent"]
-    list_editable = ["display_order", "is_active"]
+    list_editable = ["display_order"]
     search_fields = ["name", "slug"]
     ordering = ["level", "parent__name", "display_order", "name"]
+    list_per_page = 30
+
+    @admin.display(description="Name", ordering="name")
+    def name_display(self, obj):
+        return format_html(
+            '<span class="text-[13px] font-medium text-slate-800 dark:text-slate-200">{}</span>',
+            obj.name,
+        )
 
     @admin.display(description="Hierarchy")
     def parent_display(self, obj):
@@ -349,17 +445,130 @@ class CategoryAdmin(admin.ModelAdmin):
         while current:
             parts.append(current.name)
             current = current.parent
-        return " > ".join(reversed(parts)) if parts else "—"
+        if parts:
+            return format_html(
+                '<span class="text-[12px] text-slate-500">{}</span>',
+                " > ".join(reversed(parts)),
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
+
+    @admin.display(description="Level", ordering="level")
+    def level_badge(self, obj):
+        level_colors = {
+            0: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+            1: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            2: "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400",
+            3: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+        }
+        classes = level_colors.get(
+            obj.level, "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400"
+        )
+        return format_html(
+            '<span class="inline-flex px-2.5 py-1 rounded-md text-[11px] font-semibold {}">L{}</span>',
+            classes, obj.level,
+        )
+
+    @admin.display(description="Products", ordering="product_count")
+    def product_count_badge(self, obj):
+        count = obj.product_count or 0
+        if count > 0:
+            return format_html(
+                '<span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold'
+                ' bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">{}</span>',
+                f"{count:,}",
+            )
+        return format_html('<span class="text-[12px] text-slate-400">0</span>')
+
+    @admin.display(description="Active", ordering="is_active")
+    def active_badge(self, obj):
+        if obj.is_active:
+            return format_html(
+                '<span class="inline-flex items-center gap-1 text-[12px]">'
+                '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>'
+                '<span class="text-emerald-600 dark:text-emerald-400 font-medium">Active</span></span>'
+            )
+        return format_html(
+            '<span class="inline-flex items-center gap-1 text-[12px]">'
+            '<span class="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600"></span>'
+            '<span class="text-slate-400">Inactive</span></span>'
+        )
 
 
 @admin.register(MarketplaceCategoryMapping)
 class MarketplaceCategoryMappingAdmin(admin.ModelAdmin):
-    list_display = ["marketplace", "marketplace_category_path", "canonical_category", "confidence", "updated_at"]
+    list_display = [
+        "marketplace_badge", "category_path_display",
+        "canonical_display", "confidence_badge", "updated_ago",
+    ]
     list_filter = ["marketplace", "confidence"]
     search_fields = ["marketplace_category_path", "canonical_category__name"]
-    list_editable = ["canonical_category", "confidence"]
     raw_id_fields = ["canonical_category"]
+    list_select_related = ["marketplace", "canonical_category"]
+    list_per_page = 30
     actions = ["mark_as_reviewed"]
+
+    @admin.display(description="Marketplace")
+    def marketplace_badge(self, obj):
+        name = obj.marketplace.name if obj.marketplace else "\u2014"
+        colors = {
+            "Amazon.in": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            "Flipkart": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+        }
+        color = colors.get(name, "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400")
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, name,
+        )
+
+    @admin.display(description="Marketplace Category")
+    def category_path_display(self, obj):
+        path = obj.marketplace_category_path or "\u2014"
+        short = path[:60] + "..." if len(path) > 60 else path
+        return format_html(
+            '<span class="text-[12px] text-slate-600 dark:text-slate-400">{}</span>',
+            short,
+        )
+
+    @admin.display(description="Canonical", ordering="canonical_category__name")
+    def canonical_display(self, obj):
+        if obj.canonical_category:
+            return format_html(
+                '<span class="text-[13px] font-medium text-slate-800 dark:text-slate-200">{}</span>',
+                obj.canonical_category.name,
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
+
+    @admin.display(description="Confidence", ordering="confidence")
+    def confidence_badge(self, obj):
+        conf = obj.confidence or "\u2014"
+        conf_colors = {
+            "manual": "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+            "auto": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            "unreviewed": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+        }
+        color = conf_colors.get(
+            conf.lower() if conf != "\u2014" else "",
+            "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
+        )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, conf.title() if conf != "\u2014" else conf,
+        )
+
+    @admin.display(description="Updated", ordering="updated_at")
+    def updated_ago(self, obj):
+        if obj.updated_at:
+            delta = timezone.now() - obj.updated_at
+            if delta.days > 30:
+                return format_html(
+                    '<span class="text-[12px] text-slate-400">{}</span>',
+                    obj.updated_at.strftime("%b %d, %Y"),
+                )
+            return format_html(
+                '<span class="text-[12px] text-slate-500">{} ago</span>',
+                timesince(obj.updated_at, timezone.now()).split(",")[0],
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
     @admin.action(description="Mark selected mappings as reviewed (manual)")
     def mark_as_reviewed(self, request, queryset):
@@ -369,52 +578,243 @@ class MarketplaceCategoryMappingAdmin(admin.ModelAdmin):
 
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "verified"]
+    list_display = ["name_display", "slug", "verified_badge"]
     list_filter = ["verified"]
     search_fields = ["name", "slug"]
+    list_per_page = 30
+
+    @admin.display(description="Name", ordering="name")
+    def name_display(self, obj):
+        return format_html(
+            '<span class="text-[13px] font-medium text-slate-800 dark:text-slate-200">{}</span>',
+            obj.name,
+        )
+
+    @admin.display(description="Verified", ordering="verified")
+    def verified_badge(self, obj):
+        if obj.verified:
+            return format_html(
+                '<span class="inline-flex items-center gap-1 text-[12px]">'
+                '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>'
+                '<span class="text-emerald-600 dark:text-emerald-400 font-medium">Verified</span></span>'
+            )
+        return format_html(
+            '<span class="inline-flex items-center gap-1 text-[12px]">'
+            '<span class="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600"></span>'
+            '<span class="text-slate-400">Unverified</span></span>'
+        )
 
 
 @admin.register(ProductListing)
 class ProductListingAdmin(admin.ModelAdmin):
     list_display = [
-        "product_title_short", "marketplace", "price_display",
-        "mrp_display", "discount_pct", "in_stock_icon", "seller",
-        "match_confidence", "last_scraped_at",
+        "product_title_display",
+        "marketplace_badge",
+        "price_display",
+        "mrp_display",
+        "stock_badge",
+        "rating_display",
+        "scraped_ago",
     ]
     list_filter = ["marketplace", "in_stock"]
     search_fields = ["product__title", "external_id"]
     list_select_related = ["product", "marketplace", "seller"]
+    list_per_page = 30
 
     @admin.display(description="Product", ordering="product__title")
-    def product_title_short(self, obj):
+    def product_title_display(self, obj):
         t = obj.product.title
-        return t[:50] + "..." if len(t) > 50 else t
+        short = t[:55] + "..." if len(t) > 55 else t
+        return format_html(
+            '<div class="max-w-[350px]">'
+            '  <div class="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate">{}</div>'
+            '  <div class="text-[11px] text-slate-400 font-mono">{}</div>'
+            '</div>',
+            short, obj.external_id or "\u2014",
+        )
+
+    @admin.display(description="Marketplace", ordering="marketplace__name")
+    def marketplace_badge(self, obj):
+        name = obj.marketplace.name if obj.marketplace else "\u2014"
+        colors = {
+            "Amazon.in": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            "Amazon India": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            "Flipkart": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            "Myntra": "bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-400",
+            "Croma": "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+            "Ajio": "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400",
+            "Tata CLiQ": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-400",
+        }
+        color = colors.get(name, "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400")
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, name,
+        )
 
     @admin.display(description="Price", ordering="current_price")
     def price_display(self, obj):
-        if obj.current_price is None:
-            return "-"
-        return f"₹{int(obj.current_price):,}"
+        if obj.current_price is not None:
+            return format_html(
+                '<span class="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{}</span>',
+                f"\u20b9{int(obj.current_price):,}",
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
     @admin.display(description="MRP", ordering="mrp")
     def mrp_display(self, obj):
-        if obj.mrp is None:
-            return "-"
-        return f"₹{int(obj.mrp):,}"
+        if obj.mrp and obj.current_price and obj.mrp > obj.current_price:
+            return format_html(
+                '<span class="text-[12px] text-slate-400 line-through">{}</span>',
+                f"\u20b9{int(obj.mrp):,}",
+            )
+        if obj.mrp:
+            return format_html(
+                '<span class="text-[12px] text-slate-500">{}</span>',
+                f"\u20b9{int(obj.mrp):,}",
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
-    @admin.display(description="In Stock", boolean=True)
-    def in_stock_icon(self, obj):
-        return obj.in_stock
+    @admin.display(description="Stock", ordering="in_stock")
+    def stock_badge(self, obj):
+        if obj.in_stock:
+            return format_html(
+                '<span class="inline-flex items-center gap-1 text-[12px]">'
+                '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>'
+                '<span class="text-emerald-600 dark:text-emerald-400">In Stock</span></span>'
+            )
+        return format_html(
+            '<span class="inline-flex items-center gap-1 text-[12px]">'
+            '<span class="w-2 h-2 rounded-full bg-red-500"></span>'
+            '<span class="text-red-600 dark:text-red-400">Out of Stock</span></span>'
+        )
+
+    @admin.display(description="Rating", ordering="rating")
+    def rating_display(self, obj):
+        if obj.rating:
+            return format_html(
+                '<span class="text-[12px]">'
+                '<span class="text-amber-500">\u2605</span> '
+                '<span class="font-medium text-slate-700 dark:text-slate-300">{}</span>'
+                '<span class="text-slate-400 ml-1">({})</span></span>',
+                f"{float(obj.rating):.1f}", f"{obj.review_count:,}" if obj.review_count else "0",
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
+
+    @admin.display(description="Last Scraped", ordering="last_scraped_at")
+    def scraped_ago(self, obj):
+        if obj.last_scraped_at:
+            delta = timezone.now() - obj.last_scraped_at
+            if delta.days > 30:
+                return format_html(
+                    '<span class="text-[12px] text-slate-400">{}</span>',
+                    obj.last_scraped_at.strftime("%b %d, %Y"),
+                )
+            return format_html(
+                '<span class="text-[12px] text-slate-500">{} ago</span>',
+                timesince(obj.last_scraped_at, timezone.now()).split(",")[0],
+            )
+        return format_html('<span class="text-[12px] text-slate-400">Never</span>')
 
 
 @admin.register(Seller)
 class SellerAdmin(admin.ModelAdmin):
-    list_display = ["name", "marketplace", "avg_rating", "total_ratings", "is_verified"]
+    list_display = ["name_display", "marketplace_badge", "rating_display", "total_ratings", "verified_badge"]
     list_filter = ["marketplace", "is_verified"]
     search_fields = ["name", "external_seller_id"]
+    list_select_related = ["marketplace"]
+    list_per_page = 30
+
+    @admin.display(description="Seller", ordering="name")
+    def name_display(self, obj):
+        return format_html(
+            '<span class="text-[13px] font-medium text-slate-800 dark:text-slate-200">{}</span>',
+            obj.name[:50],
+        )
+
+    @admin.display(description="Marketplace")
+    def marketplace_badge(self, obj):
+        name = obj.marketplace.name if obj.marketplace else "\u2014"
+        colors = {
+            "Amazon.in": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            "Flipkart": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+        }
+        color = colors.get(name, "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400")
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, name,
+        )
+
+    @admin.display(description="Rating", ordering="avg_rating")
+    def rating_display(self, obj):
+        if obj.avg_rating:
+            return format_html(
+                '<span class="text-[12px]">'
+                '<span class="text-amber-500">\u2605</span> '
+                '<span class="font-medium text-slate-700 dark:text-slate-300">{}</span></span>',
+                f"{float(obj.avg_rating):.1f}",
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
+
+    @admin.display(description="Verified", ordering="is_verified")
+    def verified_badge(self, obj):
+        if obj.is_verified:
+            return format_html(
+                '<span class="inline-flex items-center gap-1 text-[12px]">'
+                '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>'
+                '<span class="text-emerald-600 dark:text-emerald-400 font-medium">Verified</span></span>'
+            )
+        return format_html(
+            '<span class="inline-flex items-center gap-1 text-[12px]">'
+            '<span class="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600"></span>'
+            '<span class="text-slate-400">Unverified</span></span>'
+        )
 
 
 @admin.register(BankCard)
 class BankCardAdmin(admin.ModelAdmin):
-    list_display = ["bank_name", "card_variant", "card_type", "card_network"]
+    list_display = ["bank_display", "card_variant", "type_badge", "network_badge"]
     list_filter = ["bank_slug", "card_type", "card_network"]
+    search_fields = ["bank_name", "card_variant"]
+    list_per_page = 30
+
+    @admin.display(description="Bank", ordering="bank_name")
+    def bank_display(self, obj):
+        return format_html(
+            '<span class="text-[13px] font-medium text-slate-800 dark:text-slate-200">{}</span>',
+            obj.bank_name,
+        )
+
+    @admin.display(description="Type", ordering="card_type")
+    def type_badge(self, obj):
+        ct = obj.card_type or "\u2014"
+        type_colors = {
+            "credit": "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400",
+            "debit": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            "prepaid": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+        }
+        color = type_colors.get(
+            ct.lower() if ct != "\u2014" else "",
+            "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
+        )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, ct.title() if ct != "\u2014" else ct,
+        )
+
+    @admin.display(description="Network", ordering="card_network")
+    def network_badge(self, obj):
+        network = obj.card_network or "\u2014"
+        network_colors = {
+            "visa": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            "mastercard": "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+            "rupay": "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+            "amex": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-400",
+        }
+        color = network_colors.get(
+            network.lower() if network != "\u2014" else "",
+            "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
+        )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, network.title() if network != "\u2014" else network,
+        )

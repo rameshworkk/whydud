@@ -4,51 +4,80 @@
 {% block content %}
 {% if stats_header %}
 <div class="mb-6">
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+  <!-- Stats Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
                 rounded-2xl p-4 shadow-xs">
       <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Total Users</div>
-      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ total_users|default:"0" }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ total_users|default:"0" }}</div>
     </div>
     <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
                 rounded-2xl p-4 shadow-xs">
       <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">New Today</div>
-      <div class="text-[24px] font-bold text-emerald-500 mt-1 leading-none">{{ new_today|default:"0" }}</div>
+      <div class="text-2xl font-bold text-emerald-500 mt-1 leading-none">{{ new_today|default:"0" }}</div>
     </div>
     <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
                 rounded-2xl p-4 shadow-xs">
       <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">New This Week</div>
-      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ new_this_week|default:"0" }}</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ new_this_week|default:"0" }}</div>
     </div>
     <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
                 rounded-2xl p-4 shadow-xs">
       <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Active (7d)</div>
-      <div class="text-[24px] font-bold text-blue-500 mt-1 leading-none">{{ active_7d|default:"0" }}</div>
-    </div>
-    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
-                rounded-2xl p-4 shadow-xs">
-      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">With @whyd.* Email</div>
-      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ with_whydud_email|default:"0" }}</div>
-    </div>
-    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
-                rounded-2xl p-4 shadow-xs">
-      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Suspended</div>
-      <div class="text-[24px] font-bold {% if suspended_count %}text-red-500{% else %}text-slate-900 dark:text-slate-100{% endif %} mt-1 leading-none">{{ suspended_count|default:"0" }}</div>
+      <div class="text-2xl font-bold text-blue-500 mt-1 leading-none">{{ active_7d|default:"0" }}</div>
     </div>
   </div>
 
-  <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-3">Auth Methods</div>
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 max-w-md">
+  <!-- Auth Methods -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">With @whyd.* Email</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ with_whydud_email|default:"0" }}</div>
+    </div>
     <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
                 rounded-2xl p-4 shadow-xs">
       <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">OAuth</div>
-      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ oauth_pct }}%</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ oauth_pct }}%</div>
     </div>
     <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
                 rounded-2xl p-4 shadow-xs">
       <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Password</div>
-      <div class="text-[24px] font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ password_pct }}%</div>
+      <div class="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 leading-none">{{ password_pct }}%</div>
     </div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+                rounded-2xl p-4 shadow-xs">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Suspended</div>
+      <div class="text-2xl font-bold {% if suspended_count %}text-red-500{% else %}text-slate-900 dark:text-slate-100{% endif %} mt-1 leading-none">{{ suspended_count|default:"0" }}</div>
+    </div>
+  </div>
+
+  <!-- Tab Filters -->
+  <div class="flex items-center gap-1 mb-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1 w-fit">
+    <a href="?status=all"
+       class="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors
+              {% if current_tab == 'all' %}bg-slate-900 text-white dark:bg-white dark:text-slate-900
+              {% else %}text-slate-500 hover:text-slate-700 dark:hover:text-slate-300{% endif %}">
+      All <span class="ml-1 text-[11px] opacity-60">{{ total_users }}</span>
+    </a>
+    <a href="?status=active"
+       class="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors
+              {% if current_tab == 'active' %}bg-slate-900 text-white dark:bg-white dark:text-slate-900
+              {% else %}text-slate-500 hover:text-slate-700 dark:hover:text-slate-300{% endif %}">
+      Active <span class="ml-1 text-[11px] opacity-60">{{ active_count }}</span>
+    </a>
+    <a href="?status=inactive"
+       class="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors
+              {% if current_tab == 'inactive' %}bg-slate-900 text-white dark:bg-white dark:text-slate-900
+              {% else %}text-slate-500 hover:text-slate-700 dark:hover:text-slate-300{% endif %}">
+      Inactive <span class="ml-1 text-[11px] opacity-60">{{ inactive_count }}</span>
+    </a>
+    <a href="?status=suspended"
+       class="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors
+              {% if current_tab == 'suspended' %}bg-slate-900 text-white dark:bg-white dark:text-slate-900
+              {% else %}text-slate-500 hover:text-slate-700 dark:hover:text-slate-300{% endif %}">
+      Suspended <span class="ml-1 text-[11px] opacity-60">{{ suspended_count }}</span>
+    </a>
   </div>
 </div>
 {% endif %}

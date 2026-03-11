@@ -845,3 +845,205 @@ Discovered → History Fetched → Lightweight Record (live on site with price c
   → Enrichment (P0-P1: Playwright, P2-P3: curl_cffi) → scrape_status='scraped'
     → Reviews (top 100K) → DudScore calculation → FULLY COMPLETE ✅
 ```
+
+---
+
+# 7. DISTRIBUTED WORKER CLUSTER OPERATIONS
+
+## 7.1 Cluster Topology
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  PRIMARY (95.111.232.70 / 10.8.0.1)                     │
+│  Contabo VPS — 12GB RAM / 6 vCPU                        │
+│  Runs: All services + celery-worker (default, scraping)  │
+│  Compose: docker-compose.primary.yml                     │
+├─────────────────────────────────────────────────────────┤
+│  REPLICA (46.250.237.93 / 10.8.0.2)                     │
+│  Contabo VPS — 8GB RAM / 4 vCPU                         │
+│  Runs: All services + celery-scraping (scraping queue)   │
+│  Compose: docker-compose.replica.yml                     │
+├─────────────────────────────────────────────────────────┤
+│  whyd1 (10.8.0.3) — OCI Always Free ARM, 1GB + 8GB swap │
+│  Runs: celery-enrichment only (scraping queue)           │
+│  Compose: docker/docker-compose.worker.yml               │
+│  Concurrency: 1                                          │
+├─────────────────────────────────────────────────────────┤
+│  whyd2 (10.8.0.4) — OCI Always Free ARM, 1GB + 8GB swap │
+│  Runs: celery-enrichment only (scraping queue)           │
+│  Compose: docker/docker-compose.worker.yml               │
+│  Concurrency: 1                                          │
+└─────────────────────────────────────────────────────────┘
+All nodes connected via WireGuard VPN (10.8.0.0/24).
+OCI workers connect to primary's Redis + PostgreSQL over WireGuard.
+```
+
+## 7.2 OCI Worker Node Setup
+
+### First-Time Provisioning
+Use `docker/cloud-init-worker.yml` when creating OCI instances. Change 10 values marked `← CHANGE THIS`.
+
+### Swap Setup (REQUIRED for 1GB OCI nodes)
+Without swap, Celery + Docker overhead OOM-kills the worker and drops SSH.
+
+```bash
+# Check available disk (OCI boot volume = 47GB)
+df -h /
+
+# Create and enable 8GB swap
+sudo fallocate -l 8G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Persist across reboots
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Tune: only swap when RAM is nearly full
+sudo sysctl vm.swappiness=10
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+
+# Verify
+free -h
+```
+
+### Deploy Code Updates to Workers
+```bash
+# SSH into each worker, then:
+cd /opt/whydud/whydud
+sudo git config --global --add safe.directory /opt/whydud/whydud
+sudo git pull origin master
+cd docker
+docker compose -f docker-compose.worker.yml --env-file /opt/whydud/.env.worker up -d --build
+```
+
+### OCI Node Constraints
+- **NEVER run discovery on 1GB nodes** — it OOMs and crashes the instance
+- **Only tasks safe for OCI:** BH-fill, PH-extend, curl_cffi enrichment
+- **Concurrency must be 1** — higher causes excessive swapping
+- **Always use tmux** for long commands (SSH drops kill the process)
+
+## 7.3 Adaptive Rate Limiting (BH-fill)
+
+BuyHatke rate-limits per source IP. Different nodes have different rate limit tolerance.
+The `BHClient` adapts automatically:
+
+```
+On 200 OK:
+  - Reset consecutive_403s counter
+  - Decay delay back toward base rate (×0.9 per success)
+
+On 403/429:
+  - Increment consecutive_403s
+  - Double inter-request delay: base_delay × 2^streak (capped at 30s)
+  - Retry up to 3 times with 15s/30s/45s waits
+
+After 3 consecutive 403 retries exhausted:
+  - Enter cooldown: 60s × streak count (max 300s)
+  - Raise BHRateLimited → product released back to DISCOVERED
+  - Another node (or same node after cooldown) picks it up
+```
+
+**Net effect:** Each node self-throttles to its IP's sustainable rate. No products are
+wasted as FAILED — rate-limited products rotate back to the pool.
+
+## 7.4 BH-fill Progress Log Fields
+
+Every 200 products, a progress line is logged:
+```
+Phase 2: 400/3000 — 370 filled (450 points), 1 injected, 30 empty, 0 failed, 0 rate_limited
+```
+
+| Field | Meaning |
+|-------|---------|
+| `400/3000` | 400 of 3000 products in this batch processed |
+| `370 filled` | Had price history data from BuyHatke |
+| `450 points` | Price data points injected into `price_snapshots` |
+| `1 injected` | Matched an existing `ProductListing` (points went to live DB) |
+| `30 empty` | No price history on BuyHatke for this product |
+| `0 failed` | Actual errors (network, parse, etc.) |
+| `0 rate_limited` | Products released back to pool due to 403s |
+
+**Note:** `injected` is typically low during initial backfill because most products don't
+have a matching `ProductListing` yet. Price data is cached in `BackfillProduct.price_data`
+and injected later when `create-lightweight` creates the actual records.
+
+## 7.5 Distributed BH-fill Commands
+
+```bash
+# Dispatch to ALL nodes (primary + replica + OCI workers)
+docker compose -f docker-compose.primary.yml exec backend \
+  python manage.py backfill_prices bh-fill \
+    --celery --workers 6 --batch 3000 --repeat
+
+# Dispatch to SPECIFIC nodes only (by Celery hostname prefix)
+# Creates temporary per-node queues so only the named workers pick up the tasks.
+docker compose -f docker-compose.primary.yml exec backend \
+  python manage.py backfill_prices bh-fill \
+    --celery --nodes oci-w1 oci-w2 --batch 3000 --repeat
+
+# Node names match the CELERY_WORKER_ID env var set on each worker:
+#   primary   → "primary"
+#   replica   → worker ID from .env.replica
+#   whyd1     → "oci-w1"
+#   whyd2     → "oci-w2"
+# The command pings all online workers, matches by prefix, and routes accordingly.
+# If a node is offline it is skipped with a warning.
+```
+
+### Monitoring per node
+```bash
+# Primary celery worker logs
+docker compose -f docker-compose.primary.yml logs -f celery-worker --tail 50
+
+# Replica celery worker logs
+docker compose -f docker-compose.replica.yml logs -f celery-scraping --tail 50
+
+# OCI worker logs (SSH into the node first)
+docker logs docker-celery-enrichment-1 -f --tail 50
+```
+
+## 7.6 Worker Health & Troubleshooting
+
+### Check all workers are online
+```bash
+docker compose -f docker-compose.primary.yml exec backend \
+  celery -A whydud inspect ping
+# Expected: pong from primary, replica, oci-w1, oci-w2
+```
+
+### OCI worker SSH unreachable
+Usually caused by OOM. Solutions:
+1. Reboot instance from OCI Console (Compute → Instance → Reboot)
+2. If stuck in "Stopping": use Force Stop from `...` menu
+3. After reboot, verify swap is active: `free -h`
+4. If swap is gone: re-run swap setup commands above
+
+### Worker has stale code (NotRegistered error)
+```bash
+# SSH into worker
+cd /opt/whydud/whydud && sudo git pull origin master
+cd docker && docker compose -f docker-compose.worker.yml \
+  --env-file /opt/whydud/.env.worker up -d --build
+```
+
+### PostgreSQL connection refused from workers
+Ensure `pg_hba.conf` on primary allows WireGuard subnet:
+```bash
+# On primary host (not inside container)
+cat /opt/whydud/whydud/docker/postgres/pg_hba.conf | grep 10.8
+# Should contain: host all whydud 10.8.0.0/24 md5
+# If missing:
+echo 'host all whydud 10.8.0.0/24 md5' >> /opt/whydud/whydud/docker/postgres/pg_hba.conf
+docker exec -u postgres whydud-postgres pg_ctl reload
+```
+
+### Release stuck BH_FILLING products
+If a worker crashes mid-batch, products may be stuck in `bh_filling`:
+```bash
+docker exec whydud-postgres psql -U whydud -c "
+  UPDATE backfill_products SET status='Discovered'
+  WHERE status='bh_filling'
+  AND updated_at < NOW() - INTERVAL '1 hour';
+"
+```

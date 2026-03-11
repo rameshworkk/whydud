@@ -1,10 +1,11 @@
-"""Enhanced review admin — moderation stats, credibility badges, fraud detection actions."""
+"""Enhanced review admin — Apex-style badges, moderation stats, fraud detection actions."""
 from datetime import timedelta
 
 from django.contrib import admin
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.timesince import timesince
 
 from apps.admin_tools.mixins import AuditLogMixin
 
@@ -52,12 +53,12 @@ class ReviewAdmin(AuditLogMixin, admin.ModelAdmin):
         "reviewer_name",
         "rating_stars",
         "credibility_badge",
-        "source",
-        "is_published_icon",
-        "is_flagged_icon",
+        "source_badge",
+        "published_badge",
+        "flagged_badge",
         "fraud_flags_summary",
         "helpful_vote_count",
-        "created_at",
+        "created_ago",
     ]
     list_filter = [
         "is_published",
@@ -68,7 +69,7 @@ class ReviewAdmin(AuditLogMixin, admin.ModelAdmin):
     ]
     search_fields = ["body", "body_positive", "body_negative", "product__title"]
     readonly_fields = ["id", "content_hash", "created_at", "updated_at"]
-    list_per_page = 50
+    list_per_page = 30
     list_select_related = ["product"]
     raw_id_fields = ["product", "listing", "user"]
 
@@ -80,21 +81,25 @@ class ReviewAdmin(AuditLogMixin, admin.ModelAdmin):
     ]
 
     # ------------------------------------------------------------------
-    # Display columns
+    # Display columns — Apex-style
     # ------------------------------------------------------------------
 
     @admin.display(description="Product", ordering="product__title")
     def product_title(self, obj):
         t = obj.product.title
-        return t[:40] + "..." if len(t) > 40 else t
+        short = t[:40] + "..." if len(t) > 40 else t
+        return format_html(
+            '<span class="text-[13px] font-medium text-slate-800 dark:text-slate-200">{}</span>',
+            short,
+        )
 
     @admin.display(description="Rating", ordering="rating")
     def rating_stars(self, obj):
         filled = int(obj.rating) if obj.rating else 0
         empty = 5 - filled
         return format_html(
-            '<span style="color:#FBBF24;font-size:14px;letter-spacing:-1px;">{}</span>'
-            '<span style="color:#cbd5e1;font-size:14px;letter-spacing:-1px;">{}</span>',
+            '<span class="text-amber-400 text-sm tracking-tighter">{}</span>'
+            '<span class="text-slate-300 dark:text-slate-600 text-sm tracking-tighter">{}</span>',
             "\u2605" * filled,
             "\u2606" * empty,
         )
@@ -102,35 +107,63 @@ class ReviewAdmin(AuditLogMixin, admin.ModelAdmin):
     @admin.display(description="Credibility", ordering="credibility_score")
     def credibility_badge(self, obj):
         if obj.credibility_score is None:
-            return format_html('<span style="color:#94a3b8;font-size:11px;">\u2014</span>')
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
         score = float(obj.credibility_score)
         if score > 0.7:
-            color = "#16A34A"
-            icon = "\U0001f7e2"
+            classes = "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
         elif score >= 0.3:
-            color = "#d97706"
-            icon = "\U0001f7e1"
+            classes = "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
         else:
-            color = "#DC2626"
-            icon = "\U0001f534"
+            classes = "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
         return format_html(
-            '<span style="font-size:12px;">{}</span> '
-            '<span style="color:{};font-size:11px;font-weight:600;">{}</span>',
-            icon, color, f"{score:.2f}",
+            '<span class="inline-flex px-2.5 py-1 rounded-md text-[11px] font-semibold {}">{}</span>',
+            classes, f"{score:.2f}",
         )
 
-    @admin.display(description="Published", boolean=True)
-    def is_published_icon(self, obj):
-        return obj.is_published
+    @admin.display(description="Source", ordering="source")
+    def source_badge(self, obj):
+        source = obj.source or "\u2014"
+        colors = {
+            "amazon": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            "flipkart": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            "user": "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400",
+        }
+        color = colors.get(
+            source.lower() if source else "",
+            "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
+        )
+        return format_html(
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium {}">{}</span>',
+            color, source.title() if source else "\u2014",
+        )
 
-    @admin.display(description="Flagged", boolean=True)
-    def is_flagged_icon(self, obj):
-        return obj.is_flagged
+    @admin.display(description="Published", ordering="is_published")
+    def published_badge(self, obj):
+        if obj.is_published:
+            return format_html(
+                '<span class="inline-flex items-center gap-1 text-[12px]">'
+                '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>'
+                '<span class="text-emerald-600 dark:text-emerald-400 font-medium">Published</span></span>'
+            )
+        return format_html(
+            '<span class="inline-flex items-center gap-1 text-[12px]">'
+            '<span class="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600"></span>'
+            '<span class="text-slate-400">Draft</span></span>'
+        )
+
+    @admin.display(description="Flagged", ordering="is_flagged")
+    def flagged_badge(self, obj):
+        if obj.is_flagged:
+            return format_html(
+                '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium'
+                ' bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">Flagged</span>'
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
     @admin.display(description="Fraud Flags")
     def fraud_flags_summary(self, obj):
         if not obj.fraud_flags:
-            return "-"
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
         flags = obj.fraud_flags
         if isinstance(flags, list):
             count = len(flags)
@@ -139,14 +172,30 @@ class ReviewAdmin(AuditLogMixin, admin.ModelAdmin):
             count = len(flags)
             summary = ", ".join(list(flags.keys())[:3])
         else:
-            return "-"
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
         if count == 0:
-            return "-"
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
         return format_html(
-            '<span style="color:#DC2626;font-size:11px;" title="{}">'
-            '\u26a0\ufe0f {} flag{}</span>',
+            '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium'
+            ' bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" title="{}">'
+            '{} flag{}</span>',
             summary, count, "s" if count != 1 else "",
         )
+
+    @admin.display(description="Created")
+    def created_ago(self, obj):
+        if obj.created_at:
+            delta = timezone.now() - obj.created_at
+            if delta.days > 30:
+                return format_html(
+                    '<span class="text-[12px] text-slate-400">{}</span>',
+                    obj.created_at.strftime("%b %d, %Y"),
+                )
+            return format_html(
+                '<span class="text-[12px] text-slate-500">{} ago</span>',
+                timesince(obj.created_at, timezone.now()).split(",")[0],
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
 
     # ------------------------------------------------------------------
     # Admin actions
@@ -278,8 +327,51 @@ class ReviewAdmin(AuditLogMixin, admin.ModelAdmin):
 class ReviewerProfileAdmin(admin.ModelAdmin):
     list_display = [
         "user", "total_reviews", "total_upvotes_received",
-        "review_quality_avg", "reviewer_level", "is_top_reviewer",
+        "quality_badge", "level_badge", "top_reviewer_badge",
     ]
     list_filter = ["reviewer_level", "is_top_reviewer"]
     search_fields = ["user__email", "user__name"]
     readonly_fields = ["created_at", "updated_at"]
+    list_select_related = ["user"]
+
+    @admin.display(description="Quality", ordering="review_quality_avg")
+    def quality_badge(self, obj):
+        if obj.review_quality_avg is None:
+            return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')
+        score = float(obj.review_quality_avg)
+        if score > 0.7:
+            classes = "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
+        elif score >= 0.4:
+            classes = "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
+        else:
+            classes = "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
+        return format_html(
+            '<span class="inline-flex px-2.5 py-1 rounded-md text-[11px] font-semibold {}">{}</span>',
+            classes, f"{score:.2f}",
+        )
+
+    @admin.display(description="Level", ordering="reviewer_level")
+    def level_badge(self, obj):
+        level = obj.reviewer_level or 0
+        level_colors = {
+            0: "bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400",
+            1: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+            2: "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400",
+            3: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+            4: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+            5: "bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-400",
+        }
+        classes = level_colors.get(level, level_colors[0])
+        return format_html(
+            '<span class="inline-flex px-2.5 py-1 rounded-md text-[11px] font-medium {}">Lv {}</span>',
+            classes, level,
+        )
+
+    @admin.display(description="Top Reviewer", ordering="is_top_reviewer")
+    def top_reviewer_badge(self, obj):
+        if obj.is_top_reviewer:
+            return format_html(
+                '<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium'
+                ' bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">Top Reviewer</span>'
+            )
+        return format_html('<span class="text-[12px] text-slate-400">&mdash;</span>')

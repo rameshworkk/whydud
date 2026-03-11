@@ -91,6 +91,7 @@ class Command(BaseCommand):
         p2.add_argument("--celery", action="store_true", help="Dispatch to Celery workers instead of running in-process")
         p2.add_argument("--workers", type=int, default=2, help="Number of Celery tasks to dispatch (default: 2)")
         p2.add_argument("--repeat", action="store_true", help="Keep claiming new batches until nothing left")
+        p2.add_argument("--nodes", type=str, nargs="+", default=None, help="Target specific worker hostnames (e.g. whyd1 whyd2). Dispatches 1 task per node.")
 
         # ── Phase 3: ph-extend ───────────────────────────────────
         p3 = sub.add_parser("ph-extend", help="Extend top products with PH deep history")
@@ -269,32 +270,90 @@ class Command(BaseCommand):
         marketplace = options.get("marketplace")
         delay = options.get("delay")
         repeat = options.get("repeat", False)
+        nodes = options.get("nodes")
 
         mode = "repeat" if repeat else "single-batch"
-        self.stdout.write(self.style.MIGRATE_HEADING(
-            f"Phase 2: Dispatching {workers} Celery tasks (batch={batch}, mode={mode})"
-        ))
 
-        task_ids = []
-        for i in range(workers):
-            result = run_phase2_buyhatke.apply_async(
-                kwargs={
-                    "batch_size": batch,
-                    "marketplace_slug": marketplace,
-                    "delay": delay,
-                    "repeat": repeat,
-                },
-            )
-            task_ids.append(result.id)
-            self.stdout.write(f"  Worker {i + 1}: task_id={result.id}")
+        if nodes:
+            # Target specific worker nodes via temporary per-node queues
+            from whydud.celery import app as celery_app
 
-        repeat_note = " Each will keep claiming batches until queue is empty." if repeat else ""
-        self.stdout.write(self.style.SUCCESS(
-            f"\nDispatched {workers} bh-fill tasks to Celery. "
-            f"Each claims up to {batch} products via SKIP LOCKED.{repeat_note}\n"
-            f"Monitor via: celery -A whydud inspect active\n"
-            f"Or Flower dashboard."
-        ))
+            self.stdout.write(self.style.MIGRATE_HEADING(
+                f"Phase 2: Dispatching to {len(nodes)} specific nodes: {', '.join(nodes)} "
+                f"(batch={batch}, mode={mode})"
+            ))
+
+            # Discover online workers and match by hostname prefix
+            ping_result = celery_app.control.ping(timeout=5)
+            online_workers = {}
+            for resp in ping_result:
+                for worker_name in resp:
+                    # worker_name = "oci-w1@containerid" or "primary@containerid"
+                    prefix = worker_name.split("@")[0]
+                    online_workers[prefix] = worker_name
+
+            if online_workers:
+                self.stdout.write(f"  Online workers: {', '.join(online_workers.keys())}")
+
+            task_ids = []
+            for node in nodes:
+                full_name = online_workers.get(node)
+                if not full_name:
+                    self.stdout.write(self.style.WARNING(
+                        f"  {node}: NOT ONLINE — skipping (available: {', '.join(online_workers.keys())})"
+                    ))
+                    continue
+
+                queue_name = f"bh-fill-{node}"
+
+                # Tell the target worker to start consuming from the temporary queue
+                celery_app.control.add_consumer(
+                    queue_name,
+                    destination=[full_name],
+                )
+
+                result = run_phase2_buyhatke.apply_async(
+                    kwargs={
+                        "batch_size": batch,
+                        "marketplace_slug": marketplace,
+                        "delay": delay,
+                        "repeat": repeat,
+                    },
+                    queue=queue_name,
+                )
+                task_ids.append(result.id)
+                self.stdout.write(f"  {node} ({full_name}): task_id={result.id} (queue={queue_name})")
+
+            repeat_note = " Each will keep claiming batches until queue is empty." if repeat else ""
+            self.stdout.write(self.style.SUCCESS(
+                f"\nDispatched {len(task_ids)} bh-fill tasks to specific nodes.{repeat_note}\n"
+                f"Monitor via: celery -A whydud inspect active\n"
+            ))
+        else:
+            self.stdout.write(self.style.MIGRATE_HEADING(
+                f"Phase 2: Dispatching {workers} Celery tasks (batch={batch}, mode={mode})"
+            ))
+
+            task_ids = []
+            for i in range(workers):
+                result = run_phase2_buyhatke.apply_async(
+                    kwargs={
+                        "batch_size": batch,
+                        "marketplace_slug": marketplace,
+                        "delay": delay,
+                        "repeat": repeat,
+                    },
+                )
+                task_ids.append(result.id)
+                self.stdout.write(f"  Worker {i + 1}: task_id={result.id}")
+
+            repeat_note = " Each will keep claiming batches until queue is empty." if repeat else ""
+            self.stdout.write(self.style.SUCCESS(
+                f"\nDispatched {workers} bh-fill tasks to Celery. "
+                f"Each claims up to {batch} products via SKIP LOCKED.{repeat_note}\n"
+                f"Monitor via: celery -A whydud inspect active\n"
+                f"Or Flower dashboard."
+            ))
 
     # ── Phase 3 ──────────────────────────────────────────────────
 

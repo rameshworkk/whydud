@@ -77,13 +77,18 @@ div.breadcrumbs { display: none; }
    ======================================== */
 
 #result_list {
-  border-collapse: collapse; width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
 }
 #result_list th {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
   color: #94a3b8; font-weight: 500; background: #f8fafc;
   padding: 10px 16px; border-bottom: 1px solid #e2e8f0;
   white-space: nowrap;
+  position: sticky;
+  top: 64px;
+  z-index: 10;
 }
 #result_list th a { color: #94a3b8; text-decoration: none; }
 #result_list th a:hover { color: #10b981; }
@@ -91,11 +96,21 @@ div.breadcrumbs { display: none; }
 #result_list td {
   padding: 10px 16px; font-size: 13px; color: #475569;
   border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  white-space: nowrap;
 }
-#result_list td a { color: #10b981; text-decoration: none; }
-#result_list td a:hover { text-decoration: underline; }
+/* First column with link inherits badge colors */
+#result_list td a { color: inherit; text-decoration: none; }
+#result_list td a:hover { color: #10b981; }
 #result_list tr:hover td { background: rgba(241,245,249,0.5); }
 #result_list tr.selected td { background: rgba(16,185,129,0.05); }
+
+/* Checkbox column narrower */
+#result_list th:first-child,
+#result_list td:first-child {
+  width: 40px;
+  padding-left: 16px;
+}
 
 /* Checkbox in table */
 #result_list td input[type="checkbox"],
@@ -108,13 +123,33 @@ div.breadcrumbs { display: none; }
    ======================================== */
 
 .paginator {
-  padding: 12px 16px; font-size: 13px; color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  font-size: 13px;
+  color: #64748b;
+}
+.paginator a, .paginator span.this-page {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 0.15s;
 }
 .paginator a {
-  color: #10b981; text-decoration: none; padding: 4px 8px;
-  border-radius: 6px; transition: background 0.15s;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
 }
-.paginator a:hover { background: #ecfdf5; }
+.paginator a:hover {
+  background: #f1f5f9;
+  color: #10b981;
+}
+.paginator span.this-page {
+  background: #10b981;
+  color: white;
+  font-weight: 600;
+}
 
 /* ========================================
    CHANGE FORM
@@ -233,7 +268,8 @@ input:focus, select:focus, textarea:focus {
 .dark #result_list td {
   color: #cbd5e1; border-color: #1e293b;
 }
-.dark #result_list td a { color: #34d399; }
+.dark #result_list td a { color: inherit; }
+.dark #result_list td a:hover { color: #34d399; }
 .dark #result_list tr:hover td { background: rgba(30,41,59,0.5); }
 .dark #result_list tr.selected td { background: rgba(16,185,129,0.1); }
 
@@ -251,7 +287,9 @@ input:focus, select:focus, textarea:focus {
 .dark .aligned label { color: #cbd5e1; }
 .dark .help, .dark .helptext { color: #64748b; }
 .dark .paginator { color: #94a3b8; }
-.dark .paginator a:hover { background: rgba(16,185,129,0.1); }
+.dark .paginator a { border-color: #334155; color: #94a3b8; }
+.dark .paginator a:hover { background: rgba(16,185,129,0.1); color: #34d399; }
+.dark .paginator span.this-page { background: #10b981; color: white; }
 
 .dark .actions select {
   background: #1e293b; border-color: #334155; color: #e2e8f0;

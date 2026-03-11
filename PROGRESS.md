@@ -4830,3 +4830,107 @@ Replaced all custom CSS (`<style>` blocks) with Tailwind utility classes on 3 ad
 |---|---|
 | `backend/apps/admin_tools/admin_site.py` | Added `_compute_sparkline_data()`, greeting logic, sparkline_json context |
 | `backend/templates/admin/dashboard.html` | Real sparkline data + personalized greeting |
+
+---
+
+### FIX-2+: Apex-style CRUD pages — avatars, badges, tab filters across all admin pages (2026-03-11)
+
+**UserAdmin (accounts/admin.py) — Reference Implementation:**
+- Avatar circles with colored initials (deterministic color from first letter)
+- Name + email stacked in single "User" column
+- Role as colored pill badge (10 role types, each with unique color)
+- Status as dot + text badge (Active/Inactive/Suspended)
+- Subscription as Premium pill or "Free" text
+- Review count with annotation
+- @whyd.* email display (actual email, not just boolean)
+- Last Active as relative time ("2 hours ago")
+- Tab filters (All/Active/Inactive/Suspended) replacing Django's sidebar filter list
+- `list_filter = []` — empty, tabs handle filtering via `get_queryset` + `?status=` param
+- Stats cards: Total, New Today, New This Week, Active 7d, With @whyd.*, OAuth/Password %, Suspended
+
+**Template (accounts/user/change_list.html):**
+- Stats cards in 4-column grid
+- Auth methods in second row
+- Tab filter pills with counts, active state highlighted
+
+**Pattern extended to ALL 13 admin files:**
+
+| Admin | Key Enhancements |
+|---|---|
+| `ProductAdmin` | Product+slug display, category badge, price formatted, listing count pill, DudScore colored badge, status badge, lightweight/enriched badge, relative updated_at |
+| `ProductListingAdmin` | Product+external_id display, marketplace colored badge (Amazon=amber, Flipkart=blue, etc.), formatted price, strikethrough MRP, stock dot+text, star rating, relative scraped_at |
+| `SellerAdmin` | Name display, marketplace badge, star rating, verified dot+text badge |
+| `ReviewAdmin` | Product display, star ratings (Tailwind not inline style), credibility colored badge, source marketplace badge, published dot+text, flagged red badge, fraud flags count badge, relative created_at |
+| `ReviewerProfileAdmin` | Quality colored badge, level badge (Lv 0-5), top reviewer badge |
+| `BackfillProductAdmin` | External ID mono, marketplace badge, status colored badge (Discovered/PH Extended/Done/Failed), scrape_status badge, priority badge (P0-P3), method badge (playwright/curl_cffi), review_status badge, data points with cached count |
+| `ScraperJobAdmin` | Spider display, marketplace badge, status Tailwind badge (replacing inline styles), items formatted, failed in red, duration mono, trigger badge, relative started_at |
+| `ClickEventAdmin` | Marketplace badge, source page badge, formatted price, purchase dot+text, device badge (mobile/desktop/tablet), relative clicked_at |
+| `PriceAlertAdmin` | User display, product display, target/current price formatted, "vs Target" comparison badge (Below=green, Above=red), marketplace badge, active dot+text, triggered badge, relative triggered_at |
+| `MarketplaceOfferAdmin` | Title display, marketplace badge, offer type badge (cashback/discount/emi/coupon), active dot+text, valid_until with expired state |
+| `NotificationAdmin` | Type colored badge (10 types), title truncated, read dot+text, emailed status, relative created_at |
+| `InboxEmailAdmin` | Sender mono, subject display, category badge (order/shipping/return/refund/subscription/promo), parse status badge, relative received_at |
+| `ParsedOrderAdmin` | Marketplace badge, product display, formatted amount, order date |
+| `WishlistAdmin` | Name display, default badge, visibility dot+text (Public/Private), item count pill |
+| `DealAdmin` | Product display, type badge (price_drop/lightning/clearance/coupon/bank_offer), formatted price, discount % colored, confidence badge (high/medium/low), active dot+text, relative detected_at |
+| `DiscussionThreadAdmin` | Title display, product display, type badge (question/discussion/review/tip), replies count pill, pinned badge, removed/visible status, relative created_at |
+| `DiscussionReplyAdmin` | Accepted badge, removed/visible status, relative created_at |
+| `SearchLogAdmin` | Query display, results count pill (0=red), latency colored mono (<100ms=green, <500ms=amber, >500ms=red), relative searched_at |
+| `RewardPointsLedgerAdmin` | Points +/- colored, action type badge (7 types), reference display, relative created_at, expires with expired state |
+| `RewardBalanceAdmin` | Earned green, spent gray, expired red, balance in slate chip, relative updated_at |
+| `GiftCardCatalogAdmin` | Brand display, active dot+text, category badge |
+| `GiftCardRedemptionAdmin` | Denomination formatted, points amber, status badge (pending/fulfilled/failed/cancelled), relative created_at |
+
+**Global CSS improvements (whydud_overrides.css):**
+- `border-collapse: separate` + `border-spacing: 0` for cleaner table rendering
+- Sticky table headers (`position: sticky; top: 64px; z-index: 10`)
+- `vertical-align: middle` on all td cells
+- `white-space: nowrap` on badge columns
+- Checkbox column width constraint (40px)
+- Table links inherit badge colors (`color: inherit`) instead of overriding with green
+- Pagination: flex layout, bordered pills, active page emerald background
+- Dark mode: table links inherit colors, pagination dark borders
+
+| File | Change |
+|---|---|
+| `backend/apps/accounts/admin.py` | Full Apex-style UserAdmin rewrite + NotificationAdmin badges |
+| `backend/templates/admin/accounts/user/change_list.html` | Tab filters + stats cards + counts |
+| `backend/apps/products/admin.py` | ProductAdmin + ProductListingAdmin + SellerAdmin with badges |
+| `backend/apps/reviews/admin.py` | ReviewAdmin + ReviewerProfileAdmin with Tailwind badges |
+| `backend/apps/pricing/admin.py` | ClickEventAdmin + PriceAlertAdmin + MarketplaceOfferAdmin + BackfillProductAdmin with badges |
+| `backend/apps/scraping/admin.py` | ScraperJobAdmin with Tailwind badges (replacing inline styles) |
+| `backend/apps/email_intel/admin.py` | InboxEmailAdmin + ParsedOrderAdmin with badges |
+| `backend/apps/wishlists/admin.py` | WishlistAdmin + WishlistItemAdmin with badges |
+| `backend/apps/deals/admin.py` | DealAdmin with badges |
+| `backend/apps/discussions/admin.py` | DiscussionThreadAdmin + DiscussionReplyAdmin with badges |
+| `backend/apps/search/admin.py` | SearchLogAdmin with badges |
+| `backend/apps/rewards/admin.py` | Full rewrite — 4 admin classes with badges |
+| `backend/static/admin/css/whydud_overrides.css` | Sticky headers, badge-aware links, pagination pills |
+
+---
+
+### FIX-3 Extended: Apex-Style Badges on ALL Secondary Admin Pages (2026-03-11)
+
+Extended the Apex-style badge pattern to every remaining "raw Django" admin class:
+
+**accounts/admin.py — secondary admins:**
+- `WhydudEmailAdmin`: email@domain styled display, active dot+text, emails/orders count pills, relative last_email
+- `OAuthConnectionAdmin`: provider colored badge (Google=red, Microsoft=blue), status badge (active/expired/revoked), relative connected/synced timestamps
+- `PaymentMethodAdmin`: method type badge (credit/debit/UPI/wallet/netbanking), bank display, preferred badge
+
+**products/admin.py — secondary admins:**
+- `MarketplaceAdmin`: name display, scraper status badge (active=green, paused=amber, disabled=red)
+- `CategoryAdmin`: name display, hierarchy path styled, level badge (L0-L3 colored), product count pill, active dot+text (removed `is_active` from `list_editable` since it uses custom badge)
+- `MarketplaceCategoryMappingAdmin`: marketplace badge, category path truncated, canonical display, confidence badge (manual=green, auto=blue, unreviewed=amber), relative updated_at (removed `list_editable` as custom display methods replace raw fields)
+- `BrandAdmin`: name display, verified dot+text badge
+- `BankCardAdmin`: bank display, card type badge (credit=violet, debit=blue, prepaid=amber), network badge (Visa=blue, Mastercard=red, RuPay=green, Amex=cyan)
+
+**email_intel/admin.py — new admin registrations:**
+- `RefundTrackingAdmin` (NEW): marketplace badge, status badge (initiated/processing/completed/failed), refund amount formatted, delay badge (colored by severity), relative initiated_at
+- `ReturnWindowAdmin` (NEW): window status badge (days left with color: expired=red, ≤3d=amber, >3d=green), extended badge, alerts display (3d/1d sent)
+- `DetectedSubscriptionAdmin` (NEW): service name display, amount formatted, billing cycle badge (monthly/yearly/quarterly), active dot+text, next renewal with urgency coloring
+
+| File | Change |
+|---|---|
+| `backend/apps/accounts/admin.py` | WhydudEmailAdmin, OAuthConnectionAdmin, PaymentMethodAdmin enhanced |
+| `backend/apps/products/admin.py` | MarketplaceAdmin, CategoryAdmin, BrandAdmin, BankCardAdmin, MCM enhanced |
+| `backend/apps/email_intel/admin.py` | +RefundTrackingAdmin, +ReturnWindowAdmin, +DetectedSubscriptionAdmin |
