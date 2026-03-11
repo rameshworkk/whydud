@@ -13,72 +13,72 @@
 </div>
 
 <!-- Top-level Stats -->
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-6">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
-    <div class="flex justify-between items-start">
-      <div>
-        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Total BackfillProducts</div>
+    <div class="flex justify-between items-start gap-3">
+      <div class="min-w-0">
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Total Products</div>
         <div id="bf-total" class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
-          <div class="animate-pulse h-8 w-24 bg-slate-200 dark:bg-slate-700 rounded"></div>
+          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
         </div>
       </div>
-      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
         <i data-lucide="database" class="w-5 h-5"></i>
       </div>
     </div>
   </div>
 
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
-    <div class="flex justify-between items-start">
-      <div>
+    <div class="flex justify-between items-start gap-3">
+      <div class="min-w-0">
         <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Pending</div>
         <div id="bf-pending" class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
-          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
+          <div class="animate-pulse h-8 w-16 bg-slate-200 dark:bg-slate-700 rounded"></div>
         </div>
       </div>
-      <div class="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-500/10 text-slate-500 flex items-center justify-center flex-shrink-0">
+      <div class="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-500/10 text-slate-500 flex items-center justify-center shrink-0">
         <i data-lucide="clock" class="w-5 h-5"></i>
       </div>
     </div>
   </div>
 
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
-    <div class="flex justify-between items-start">
-      <div>
+    <div class="flex justify-between items-start gap-3">
+      <div class="min-w-0">
         <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Enriching</div>
         <div id="bf-enriching" class="text-[28px] font-bold text-amber-500 mt-1.5 leading-none">
-          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
+          <div class="animate-pulse h-8 w-16 bg-slate-200 dark:bg-slate-700 rounded"></div>
         </div>
       </div>
-      <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
+      <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
         <i data-lucide="loader" class="w-5 h-5"></i>
       </div>
     </div>
   </div>
 
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
-    <div class="flex justify-between items-start">
-      <div>
+    <div class="flex justify-between items-start gap-3">
+      <div class="min-w-0">
         <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Scraped</div>
         <div id="bf-scraped" class="text-[28px] font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">
-          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
+          <div class="animate-pulse h-8 w-16 bg-slate-200 dark:bg-slate-700 rounded"></div>
         </div>
       </div>
-      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
+      <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
         <i data-lucide="check-circle" class="w-5 h-5"></i>
       </div>
     </div>
   </div>
 
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
-    <div class="flex justify-between items-start">
-      <div>
+    <div class="flex justify-between items-start gap-3">
+      <div class="min-w-0">
         <div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Failed</div>
         <div id="bf-failed" class="text-[28px] font-bold text-red-500 mt-1.5 leading-none">
-          <div class="animate-pulse h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded"></div>
+          <div class="animate-pulse h-8 w-16 bg-slate-200 dark:bg-slate-700 rounded"></div>
         </div>
       </div>
-      <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center flex-shrink-0">
+      <div class="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center shrink-0">
         <i data-lucide="alert-circle" class="w-5 h-5"></i>
       </div>
     </div>
@@ -86,40 +86,40 @@
 </div>
 
 <!-- Pipeline Status Bars -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs">
-    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Pipeline Status</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Pipeline Status</div>
     <div id="pipeline-bars"></div>
   </div>
 
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs">
-    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Scrape Status</div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+    <div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Scrape Status</div>
     <div id="scrape-bars"></div>
   </div>
 </div>
 
 <!-- Estimated Time Remaining -->
-<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Estimated Time Remaining</div>
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
+<div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Estimated Time Remaining</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
   <div class="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-5">
     <div class="text-[11px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-medium">P1 Playwright</div>
-    <div id="bf-est-p1" class="text-[24px] font-bold text-amber-800 dark:text-amber-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-amber-200 dark:bg-amber-700 rounded"></span></div>
+    <div id="bf-est-p1" class="text-2xl font-bold text-amber-800 dark:text-amber-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-amber-200 dark:bg-amber-700 rounded"></span></div>
     <div id="bf-est-p1-sub" class="text-xs text-amber-600 dark:text-amber-400/70 mt-1.5"><span class="animate-pulse inline-block h-3 w-28 bg-amber-200 dark:bg-amber-700 rounded"></span></div>
   </div>
   <div class="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-2xl p-5">
     <div class="text-[11px] uppercase tracking-wider text-blue-700 dark:text-blue-400 font-medium">P2/P3 curl_cffi</div>
-    <div id="bf-est-p2p3" class="text-[24px] font-bold text-blue-800 dark:text-blue-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-blue-200 dark:bg-blue-700 rounded"></span></div>
+    <div id="bf-est-p2p3" class="text-2xl font-bold text-blue-800 dark:text-blue-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-blue-200 dark:bg-blue-700 rounded"></span></div>
     <div id="bf-est-p2p3-sub" class="text-xs text-blue-600 dark:text-blue-400/70 mt-1.5"><span class="animate-pulse inline-block h-3 w-28 bg-blue-200 dark:bg-blue-700 rounded"></span></div>
   </div>
   <div class="bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 rounded-2xl p-5">
     <div class="text-[11px] uppercase tracking-wider text-violet-700 dark:text-violet-400 font-medium">Reviews</div>
-    <div id="bf-est-reviews" class="text-[24px] font-bold text-violet-800 dark:text-violet-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-violet-200 dark:bg-violet-700 rounded"></span></div>
+    <div id="bf-est-reviews" class="text-2xl font-bold text-violet-800 dark:text-violet-300 mt-1.5 leading-none"><span class="animate-pulse inline-block h-6 w-16 bg-violet-200 dark:bg-violet-700 rounded"></span></div>
     <div id="bf-est-reviews-sub" class="text-xs text-violet-600 dark:text-violet-400/70 mt-1.5"><span class="animate-pulse inline-block h-3 w-28 bg-violet-200 dark:bg-violet-700 rounded"></span></div>
   </div>
 </div>
 
 <!-- Charts Row -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
   {% with title="Enrichment Priority Distribution" chart_id="priorityChart" height="280" %}
     {% include "admin/includes/chart_card.html" %}
   {% endwith %}
@@ -129,127 +129,125 @@
   {% endwith %}
 </div>
 
-<!-- Detailed Breakdowns -->
-<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Detailed Breakdowns</div>
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-6">
+<!-- Detailed Breakdowns + Proxy Config -->
+<div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Detailed Breakdowns</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
   <!-- By Enrichment Method -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
-    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">By Enrichment Method</div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs flex flex-col">
+    <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+      <div class="text-xs font-semibold text-slate-600 dark:text-slate-300">By Enrichment Method</div>
     </div>
-    <table class="w-full">
+    <table class="w-full flex-1">
       <thead>
         <tr>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Method</th>
-          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
+          <th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">Method</th>
+          <th class="text-right text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">Count</th>
         </tr>
       </thead>
       <tbody id="bf-method-tbody">
-        <tr><td colspan="2" class="px-5 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
+        <tr><td colspan="2" class="px-4 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
       </tbody>
     </table>
   </div>
 
   <!-- By Review Status -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
-    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">By Review Status</div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs flex flex-col">
+    <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+      <div class="text-xs font-semibold text-slate-600 dark:text-slate-300">By Review Status</div>
     </div>
-    <table class="w-full">
+    <table class="w-full flex-1">
       <thead>
         <tr>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>
-          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
+          <th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">Status</th>
+          <th class="text-right text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">Count</th>
         </tr>
       </thead>
       <tbody id="bf-review-tbody">
-        <tr><td colspan="2" class="px-5 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
+        <tr><td colspan="2" class="px-4 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
       </tbody>
     </table>
   </div>
 
   <!-- By Marketplace -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
-    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-      <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">By Marketplace</div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs flex flex-col">
+    <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+      <div class="text-xs font-semibold text-slate-600 dark:text-slate-300">By Marketplace</div>
     </div>
-    <table class="w-full">
+    <table class="w-full flex-1">
       <thead>
         <tr>
-          <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>
-          <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
+          <th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">Marketplace</th>
+          <th class="text-right text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">Count</th>
         </tr>
       </thead>
       <tbody id="bf-marketplace-tbody">
-        <tr><td colspan="2" class="px-5 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
+        <tr><td colspan="2" class="px-4 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Price Snapshots by Source -->
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs flex flex-col">
+    <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+      <div class="text-xs font-semibold text-slate-600 dark:text-slate-300">Price Snapshots by Source</div>
+    </div>
+    <table class="w-full flex-1">
+      <thead>
+        <tr>
+          <th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">Source</th>
+          <th class="text-right text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">Count</th>
+        </tr>
+      </thead>
+      <tbody id="bf-snapshots-tbody">
+        <tr><td colspan="2" class="px-4 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
-<!-- Snapshots by Source -->
-<div id="bf-snapshots-section" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs mb-6 max-w-md">
-  <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-    <div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100">Price Snapshots by Source</div>
-  </div>
-  <table class="w-full">
-    <thead>
-      <tr>
-        <th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Source</th>
-        <th class="text-right text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Count</th>
-      </tr>
-    </thead>
-    <tbody id="bf-snapshots-tbody">
-      <tr><td colspan="2" class="px-5 py-3"><div class="animate-pulse space-y-2"><div class="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded"></div><div class="h-3 w-3/4 bg-slate-200 dark:bg-slate-700 rounded"></div></div></td></tr>
-    </tbody>
-  </table>
-</div>
-
-<!-- Proxy Configuration -->
+<!-- Proxy Configuration (compact inline strip) -->
 <div id="proxy-config-card" class="mb-6 hidden">
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs max-w-md">
-    <div class="flex items-center gap-2 mb-3">
-      <div class="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-500/10 text-violet-500 flex items-center justify-center flex-shrink-0">
-        <i data-lucide="shield" class="w-4 h-4"></i>
-      </div>
-      <div>
-        <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Rotating Proxy</div>
-        <div id="proxy-status-badge" class="text-[11px]">
-          <span class="animate-pulse inline-block h-3 w-16 bg-slate-200 dark:bg-slate-700 rounded"></span>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-xs">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-500/10 text-violet-500 flex items-center justify-center shrink-0">
+          <i data-lucide="shield" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <div class="text-xs font-semibold text-slate-900 dark:text-slate-100">Rotating Proxy</div>
+          <div id="proxy-status-badge" class="mt-0.5">
+            <span class="animate-pulse inline-block h-3 w-14 bg-slate-200 dark:bg-slate-700 rounded"></span>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="space-y-2 text-[13px]">
-      <div class="flex justify-between">
-        <span class="text-slate-400">Proxy URL</span>
+      <div class="flex items-center gap-1.5 text-[12px]">
+        <span class="text-slate-400">URL:</span>
         <code id="proxy-url" class="text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">...</code>
       </div>
-      <div class="flex justify-between">
-        <span class="text-slate-400">Direct IP Retry</span>
+      <div class="flex items-center gap-1.5 text-[12px]">
+        <span class="text-slate-400">Retry:</span>
         <span id="proxy-retry-interval" class="text-slate-600 dark:text-slate-300 font-medium">...</span>
       </div>
-      <div class="flex justify-between">
-        <span class="text-slate-400">Probe Threshold</span>
+      <div class="flex items-center gap-1.5 text-[12px]">
+        <span class="text-slate-400">Threshold:</span>
         <span id="proxy-burn-threshold" class="text-slate-600 dark:text-slate-300 font-medium">...</span>
       </div>
-    </div>
-    <div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50 text-[11px] text-slate-400">
-      Set via env: <code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">BACKFILL_PROXY_URL</code>,
-      <code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">BACKFILL_PROXY_RETRY_INTERVAL</code>,
-      <code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">BACKFILL_PROXY_BURN_THRESHOLD</code>
+      <div class="text-[10px] text-slate-400 ml-auto">
+        <code class="bg-slate-100 dark:bg-slate-700 px-1 rounded">BACKFILL_PROXY_URL</code>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- Actions -->
-<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Actions</div>
+<div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Actions</div>
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
 
   <!-- Discovery -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run Discovery</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Discover products from PriceHistory sitemaps (Phase 1)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='discover' %}">
+    <form method="post" action="{% url 'admin:backfill-action' action='discover' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
       <div class="flex items-end gap-2 flex-wrap mb-3">
         <div>
@@ -273,9 +271,6 @@
                         bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
                         focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
         </div>
-        <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-          Run Discovery
-        </button>
       </div>
       <div class="flex items-center gap-3 mb-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
         <span class="text-[11px] text-slate-400 font-medium">Filters:</span>
@@ -315,42 +310,19 @@
         </div>
       </div>
       {% endif %}
-      {% if online_workers %}
-      <div class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-        <span class="text-[11px] text-slate-400 font-medium shrink-0">Nodes:</span>
-        <div class="relative" id="node-dd-discover">
-          <button type="button" onclick="toggleNodeDD('node-dd-discover')"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 dark:border-slate-600
-                         rounded-lg text-[12px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700
-                         hover:border-slate-300 dark:hover:border-slate-500 transition-colors min-w-[120px]">
-            <i data-lucide="server" class="w-3 h-3 opacity-50 shrink-0"></i>
-            <span class="dd-label truncate">Any node</span>
-            <i data-lucide="chevron-down" class="w-3 h-3 opacity-40 ml-auto shrink-0 transition-transform"></i>
-          </button>
-          <div class="dd-panel hidden absolute left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-slate-700
-                      border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 py-1">
-            {% for w in online_workers %}
-            <label class="flex items-center gap-2.5 px-3 py-2 text-[12px] text-slate-600 dark:text-slate-300
-                          hover:bg-slate-50 dark:hover:bg-slate-600/50 cursor-pointer select-none transition-colors">
-              <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
-                     onchange="updateNodeDDLabel('node-dd-discover')"
-                     class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                            focus:ring-emerald-500/20 bg-white dark:bg-slate-800">
-              <span>{{ w.prefix }}</span>
-            </label>
-            {% endfor %}
-          </div>
-        </div>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Run Discovery
+        </button>
       </div>
-      {% endif %}
     </form>
   </div>
 
   <!-- BH-Fill -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run BH-Fill</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">BuyHatke price history fill (Phase 2) via Celery workers</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='bh-fill' %}">
+    <form method="post" action="{% url 'admin:backfill-action' action='bh-fill' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
       <div class="flex items-end gap-2 flex-wrap mb-3">
         <div>
@@ -380,9 +352,6 @@
                         focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
           <label for="bh-repeat" class="text-[11px] text-slate-400 cursor-pointer select-none">Repeat</label>
         </div>
-        <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-          Run BH-Fill
-        </button>
       </div>
       {% if backfill_categories %}
       <div class="flex items-center gap-2 mb-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
@@ -412,42 +381,19 @@
         </div>
       </div>
       {% endif %}
-      {% if online_workers %}
-      <div class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-        <span class="text-[11px] text-slate-400 font-medium shrink-0">Nodes:</span>
-        <div class="relative" id="node-dd-bh">
-          <button type="button" onclick="toggleNodeDD('node-dd-bh')"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 dark:border-slate-600
-                         rounded-lg text-[12px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700
-                         hover:border-slate-300 dark:hover:border-slate-500 transition-colors min-w-[120px]">
-            <i data-lucide="server" class="w-3 h-3 opacity-50 shrink-0"></i>
-            <span class="dd-label truncate">Any node</span>
-            <i data-lucide="chevron-down" class="w-3 h-3 opacity-40 ml-auto shrink-0 transition-transform"></i>
-          </button>
-          <div class="dd-panel hidden absolute left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-slate-700
-                      border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 py-1">
-            {% for w in online_workers %}
-            <label class="flex items-center gap-2.5 px-3 py-2 text-[12px] text-slate-600 dark:text-slate-300
-                          hover:bg-slate-50 dark:hover:bg-slate-600/50 cursor-pointer select-none transition-colors">
-              <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
-                     onchange="updateNodeDDLabel('node-dd-bh')"
-                     class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                            focus:ring-emerald-500/20 bg-white dark:bg-slate-800">
-              <span>{{ w.prefix }}</span>
-            </label>
-            {% endfor %}
-          </div>
-        </div>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Run BH-Fill
+        </button>
       </div>
-      {% endif %}
     </form>
   </div>
 
   <!-- PH-Extend -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run PH-Extend</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">PriceHistory.app deep history extension (Phase 3)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='ph-extend' %}">
+    <form method="post" action="{% url 'admin:backfill-action' action='ph-extend' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
       <div class="flex items-end gap-2 flex-wrap mb-3">
         <div>
@@ -483,9 +429,6 @@
                         focus:ring-emerald-500/20 bg-white dark:bg-slate-700">
           <label for="ph-include-discovered" class="text-[11px] text-slate-400 cursor-pointer select-none">Include Discovered</label>
         </div>
-        <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-          Run PH-Extend
-        </button>
       </div>
       {% if backfill_categories %}
       <div class="flex items-center gap-2 mb-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
@@ -515,73 +458,56 @@
         </div>
       </div>
       {% endif %}
-      {% if online_workers %}
-      <div class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-        <span class="text-[11px] text-slate-400 font-medium shrink-0">Nodes:</span>
-        <div class="relative" id="node-dd-ph">
-          <button type="button" onclick="toggleNodeDD('node-dd-ph')"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 dark:border-slate-600
-                         rounded-lg text-[12px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700
-                         hover:border-slate-300 dark:hover:border-slate-500 transition-colors min-w-[120px]">
-            <i data-lucide="server" class="w-3 h-3 opacity-50 shrink-0"></i>
-            <span class="dd-label truncate">Any node</span>
-            <i data-lucide="chevron-down" class="w-3 h-3 opacity-40 ml-auto shrink-0 transition-transform"></i>
-          </button>
-          <div class="dd-panel hidden absolute left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-slate-700
-                      border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 py-1">
-            {% for w in online_workers %}
-            <label class="flex items-center gap-2.5 px-3 py-2 text-[12px] text-slate-600 dark:text-slate-300
-                          hover:bg-slate-50 dark:hover:bg-slate-600/50 cursor-pointer select-none transition-colors">
-              <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
-                     onchange="updateNodeDDLabel('node-dd-ph')"
-                     class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                            focus:ring-emerald-500/20 bg-white dark:bg-slate-800">
-              <span>{{ w.prefix }}</span>
-            </label>
-            {% endfor %}
-          </div>
-        </div>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Run PH-Extend
+        </button>
       </div>
-      {% endif %}
     </form>
   </div>
 
   <!-- Create Lightweight -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Create Lightweight</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Create Product+Listing from tracker data (no scraping needed)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='create-lightweight' %}" class="flex items-end gap-2 flex-wrap">
+    <form method="post" action="{% url 'admin:backfill-action' action='create-lightweight' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
-        <input type="number" name="batch_size" value="2000" min="100" max="5000"
-               class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                      bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                      focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+      <div class="flex items-end gap-2 flex-wrap mb-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Batch</label>
+          <input type="number" name="batch_size" value="2000" min="100" max="5000"
+                 class="w-24 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                        bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                        focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+        </div>
       </div>
-      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Create
-      </button>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Create
+        </button>
+      </div>
     </form>
   </div>
 
   <!-- Assign Priorities -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Assign Priorities</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Populate derived fields, assign P1/P2/P3, mark review targets</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='assign-priorities' %}" class="flex items-end gap-2">
+    <form method="post" action="{% url 'admin:backfill-action' action='assign-priorities' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
-      <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Assign
-      </button>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Assign
+        </button>
+      </div>
     </form>
   </div>
 
   <!-- Start Enrichment -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Start Enrichment</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Enrich a batch of products by priority (Phase 4)</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='enrich' %}">
+    <form method="post" action="{% url 'admin:backfill-action' action='enrich' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
       <div class="flex items-end gap-2 flex-wrap mb-3">
         <div>
@@ -591,123 +517,125 @@
                         bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
                         focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
         </div>
-        <button type="submit" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+      </div>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
           Enrich
         </button>
       </div>
-      {% if online_workers %}
-      <div class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-        <span class="text-[11px] text-slate-400 font-medium shrink-0">Nodes:</span>
-        <div class="relative" id="node-dd-enrich">
-          <button type="button" onclick="toggleNodeDD('node-dd-enrich')"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 dark:border-slate-600
-                         rounded-lg text-[12px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700
-                         hover:border-slate-300 dark:hover:border-slate-500 transition-colors min-w-[120px]">
-            <i data-lucide="server" class="w-3 h-3 opacity-50 shrink-0"></i>
-            <span class="dd-label truncate">Any node</span>
-            <i data-lucide="chevron-down" class="w-3 h-3 opacity-40 ml-auto shrink-0 transition-transform"></i>
-          </button>
-          <div class="dd-panel hidden absolute left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-slate-700
-                      border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg z-20 py-1">
-            {% for w in online_workers %}
-            <label class="flex items-center gap-2.5 px-3 py-2 text-[12px] text-slate-600 dark:text-slate-300
-                          hover:bg-slate-50 dark:hover:bg-slate-600/50 cursor-pointer select-none transition-colors">
-              <input type="checkbox" name="target_nodes" value="{{ w.prefix }}"
-                     onchange="updateNodeDDLabel('node-dd-enrich')"
-                     class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-emerald-500
-                            focus:ring-emerald-500/20 bg-white dark:bg-slate-800">
-              <span>{{ w.prefix }}</span>
-            </label>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-      {% endif %}
     </form>
   </div>
 
   <!-- Run Overnight -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Run Overnight</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Continuous enrichment — auto-stops at 6 AM IST</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='run-overnight' %}" class="flex items-end gap-2">
+    <form method="post" action="{% url 'admin:backfill-action' action='run-overnight' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
-      <button type="submit" class="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Run Overnight
-      </button>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Run Overnight
+        </button>
+      </div>
     </form>
   </div>
 
   <!-- Refresh Aggregate -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Refresh Aggregate</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Refresh TimescaleDB price_daily continuous aggregate</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='refresh-aggregate' %}" class="flex items-end gap-2">
+    <form method="post" action="{% url 'admin:backfill-action' action='refresh-aggregate' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
-      <button type="submit" class="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Refresh
-      </button>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Refresh
+        </button>
+      </div>
     </form>
   </div>
 
   <!-- Reset Failed -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Reset Failed</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Reset failed products back to pending for another attempt</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='reset-failed' %}" class="flex items-end gap-2 flex-wrap">
+    <form method="post" action="{% url 'admin:backfill-action' action='reset-failed' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
-      <div>
-        <label class="text-[11px] text-slate-400 block mb-1">Which</label>
-        <select name="which"
-                class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
-                       bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
-                       focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
-          <option value="all">All (status)</option>
-          <option value="scrape">Enrichments</option>
-          <option value="review">Reviews</option>
-        </select>
+      <div class="flex items-end gap-2 flex-wrap mb-3">
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Which</label>
+          <select name="which"
+                  class="border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[13px]
+                         bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200
+                         focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none">
+            <option value="all">All (status)</option>
+            <option value="scrape">Enrichments</option>
+            <option value="review">Reviews</option>
+          </select>
+        </div>
       </div>
-      <button type="submit" class="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Reset
-      </button>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Reset
+        </button>
+      </div>
     </form>
   </div>
 
   <!-- Retry Failed -->
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-xs flex flex-col">
     <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Retry Failed Enrichments</div>
     <div class="text-xs text-slate-400 mt-1 mb-3">Reset failed enrichments with retry_count &lt; 3 back to pending</div>
-    <form method="post" action="{% url 'admin:backfill-action' action='retry-failed' %}" class="flex items-end gap-2">
+    <form method="post" action="{% url 'admin:backfill-action' action='retry-failed' %}" class="flex-1 flex flex-col">
       {% csrf_token %}
-      <button type="submit" class="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
-        Retry
-      </button>
+      <div class="mt-auto pt-3">
+        <button type="submit" class="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[13px] font-medium rounded-lg transition-colors active:scale-[0.98]">
+          Retry
+        </button>
+      </div>
     </form>
   </div>
 
 </div>
 
 <!-- Active Tasks Panel -->
-<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Active Tasks (<span id="bf-active-count">...</span>)</div>
+<div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Active Tasks (<span id="bf-active-count">...</span>)</div>
 <div id="bf-active-tasks" class="mb-6">
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">
-    <div class="animate-pulse flex flex-col items-center gap-2"><div class="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div></div>
+    <div class="flex items-center justify-center gap-2">
+      <svg class="animate-spin h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span class="text-[13px] text-slate-400">Loading worker data...</span>
+    </div>
   </div>
 </div>
 
 <!-- Task Log Viewer -->
-<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Recent Task History</div>
+<div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Recent Task History</div>
 <div id="bf-recent-tasks" class="mb-6">
   <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">
-    <div class="animate-pulse flex flex-col items-center gap-2"><div class="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div></div>
+    <div class="flex items-center justify-center gap-2">
+      <svg class="animate-spin h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span class="text-[13px] text-slate-400">Loading task history...</span>
+    </div>
   </div>
 </div>
 
 <!-- Failed Products Table -->
-<div class="text-[15px] font-semibold text-slate-900 dark:text-slate-100 mb-4">Failed Products (Last 50)</div>
+<div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">Failed Products (Last 50)</div>
 <div id="bf-failed-products" class="mb-6">
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-xs text-center">
-    <div class="animate-pulse flex flex-col items-center gap-2"><div class="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded"></div></div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">
+    <div class="flex items-center justify-center gap-2">
+      <svg class="animate-spin h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span class="text-[13px] text-slate-400">Loading failed products...</span>
+    </div>
   </div>
 </div>
 
@@ -723,9 +651,9 @@ function buildProgressBars(containerId, items, total) {
   items.forEach(function(item) {
     var pct = total > 0 ? (item.count / total * 100) : 0;
     var row = document.createElement('div');
-    row.className = 'mb-3';
+    row.className = 'mb-3 last:mb-0';
     row.innerHTML =
-      '<div class="flex justify-between text-xs mb-1.5">' +
+      '<div class="flex justify-between text-xs mb-1">' +
         '<span class="text-slate-500 dark:text-slate-400 font-medium">' + item.label + '</span>' +
         '<span class="text-slate-400 tabular-nums">' + item.count.toLocaleString('en-IN') + ' (' + pct.toFixed(1) + '%)</span>' +
       '</div>' +
@@ -740,13 +668,13 @@ function buildTableRows(tbodyId, rows) {
   var tbody = document.getElementById(tbodyId);
   if (!tbody) return;
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="2" class="px-5 py-3 text-[13px] text-slate-400">No data</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="2" class="px-4 py-3 text-[12px] text-slate-400 text-center">No data</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map(function(r) {
     return '<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">' +
-      '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 capitalize">' + r[0] + '</td>' +
-      '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">' + (r[1] || 0).toLocaleString('en-IN') + '</td>' +
+      '<td class="px-4 py-2.5 text-[12px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50 capitalize">' + r[0] + '</td>' +
+      '<td class="px-4 py-2.5 text-[12px] text-slate-600 dark:text-slate-300 text-right font-semibold tabular-nums border-b border-slate-100 dark:border-slate-700/50">' + (r[1] || 0).toLocaleString('en-IN') + '</td>' +
     '</tr>';
   }).join('');
 }
@@ -763,7 +691,7 @@ function buildDoughnut(canvasId, chartData, colors) {
     },
     options: {
       responsive: true, maintainAspectRatio: true, cutout: '65%',
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 12, family: 'Inter' }, padding: 16, usePointStyle: true } } }
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11, family: 'Inter' }, padding: 12, usePointStyle: true } } }
     }
   });
 }
@@ -785,10 +713,10 @@ var STATUS_COLORS = {
 };
 var STATUS_LABELS = { SUCCESS: 'Success', FAILURE: 'Failed', STARTED: 'Running', REVOKED: 'Revoked' };
 
-// ── Fetch & Populate ──────────────────────────────────────────────
 var REVOKE_URL = '{% url "admin:backfill-action" action="revoke" %}';
 var CSRF = '{{ csrf_token }}';
 
+// ── FETCH 1: Fast DB data (stats, breakdowns, charts) ────────────
 fetch('{% url "admin:api-backfill-data" %}')
   .then(function(r) { return r.json(); })
   .then(function(d) {
@@ -841,7 +769,7 @@ fetch('{% url "admin:api-backfill-data" %}')
     buildTableRows('bf-marketplace-tbody', (d.by_marketplace || []).map(function(m) { return [m.marketplace_slug, m.count]; }));
     buildTableRows('bf-snapshots-tbody', (d.snapshots_by_source || []).map(function(s) { return [s.source, s.count]; }));
 
-    // Proxy configuration card
+    // Proxy configuration
     var pc = d.proxy_config || {};
     var proxyCard = document.getElementById('proxy-config-card');
     if (proxyCard) {
@@ -863,6 +791,19 @@ fetch('{% url "admin:api-backfill-data" %}')
     buildDoughnut('priorityChart', d.priority_chart, ['#ef4444', '#f97316', '#3b82f6', '#94a3b8']);
     buildDoughnut('snapshotChart', d.snapshot_chart, chartColors.slice(0, (d.snapshot_chart || {labels:[]}).labels.length));
 
+    // Re-init Lucide icons
+    lucide.createIcons();
+  })
+  .catch(function(err) {
+    console.error('Failed to load backfill data:', err);
+    var loading = document.getElementById('bf-loading');
+    if (loading) loading.innerHTML = '<span class="text-sm text-red-500">Failed to load stats. Refresh the page.</span>';
+  });
+
+// ── FETCH 2: Slow cluster data (active tasks, history, failed) ───
+fetch('{% url "admin:api-backfill-cluster" %}')
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
     // Active Tasks
     var tasks = d.active_tasks || [];
     setText('bf-active-count', tasks.length);
@@ -877,12 +818,12 @@ fetch('{% url "admin:api-backfill-data" %}')
       } else {
         var rows = tasks.map(function(t) {
           return '<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">' +
-            '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(truncate(t.worker || '', 30)) + '</td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(t.name || '') + '</code></td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(t.id || '') + '</code></td>' +
-            '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 font-medium tabular-nums border-b border-slate-100 dark:border-slate-700/50">' + escHtml(t.runtime_display || '') + '</td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-slate-400" title="' + escHtml(t.kwargs || '') + '">' + escHtml(truncate(t.kwargs || '', 50)) + '</div></td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50 text-center">' +
+            '<td class="px-4 py-2.5 text-[12px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(truncate(t.worker || '', 30)) + '</td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(t.name || '') + '</code></td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(t.id || '') + '</code></td>' +
+            '<td class="px-4 py-2.5 text-[12px] text-slate-600 dark:text-slate-300 font-medium tabular-nums border-b border-slate-100 dark:border-slate-700/50">' + escHtml(t.runtime_display || '') + '</td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-slate-400" title="' + escHtml(t.kwargs || '') + '">' + escHtml(truncate(t.kwargs || '', 50)) + '</div></td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50 text-center">' +
               '<form method="post" action="' + REVOKE_URL + '" class="inline" onsubmit="return confirm(\'Revoke task ' + escHtml(t.id || '') + '?\');">' +
                 '<input type="hidden" name="csrfmiddlewaretoken" value="' + CSRF + '">' +
                 '<input type="hidden" name="task_id" value="' + escHtml(t.full_id || '') + '">' +
@@ -892,12 +833,12 @@ fetch('{% url "admin:api-backfill-data" %}')
         }).join('');
         atContainer.innerHTML =
           '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs"><div class="overflow-x-auto"><table class="w-full"><thead><tr>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Runtime</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Kwargs</th>' +
-          '<th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Action</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Runtime</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Kwargs</th>' +
+          '<th class="text-center text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Action</th>' +
           '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
       }
     }
@@ -919,22 +860,22 @@ fetch('{% url "admin:api-backfill-data" %}')
           var resultText = tr.status === 'FAILURE' ? truncate(tr.traceback_short || '', 80) : truncate(tr.result_short || '', 80);
           var resultClass = tr.status === 'FAILURE' ? 'text-red-500' : 'text-slate-500 dark:text-slate-400';
           return '<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(tr.short_name || '') + '</code></td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(sl, sc) + '</td>' +
-            '<td class="px-5 py-3 text-[12px] text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(truncate(tr.worker || '\u2014', 20)) + '</td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(truncate(tr.task_id || '', 12)) + '</code></td>' +
-            '<td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">' + escHtml(tr.date_done_str || '') + '</td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] ' + resultClass + '" title="' + escHtml(resultText) + '">' + escHtml(resultText) + '</div></td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(tr.short_name || '') + '</code></td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(sl, sc) + '</td>' +
+            '<td class="px-4 py-2.5 text-[11px] text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(truncate(tr.worker || '\u2014', 20)) + '</td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(truncate(tr.task_id || '', 12)) + '</code></td>' +
+            '<td class="px-4 py-2.5 text-[11px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">' + escHtml(tr.date_done_str || '') + '</td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] ' + resultClass + '" title="' + escHtml(resultText) + '">' + escHtml(resultText) + '</div></td>' +
           '</tr>';
         }).join('');
         rtContainer.innerHTML =
           '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs"><div class="overflow-x-auto"><table class="w-full"><thead><tr>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Completed</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Result</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Worker</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Task ID</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Completed</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Result</th>' +
           '</tr></thead><tbody>' + trRows + '</tbody></table></div></div>';
       }
     }
@@ -945,31 +886,31 @@ fetch('{% url "admin:api-backfill-data" %}')
     if (fpContainer) {
       if (fps.length === 0) {
         fpContainer.innerHTML =
-          '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-xs text-center">' +
+          '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">' +
             '<i data-lucide="check-circle" class="w-8 h-8 text-emerald-400 mx-auto mb-2"></i>' +
             '<div class="text-[13px] text-slate-400">No failed products.</div>' +
           '</div>';
       } else {
         var fpRows = fps.map(function(fp) {
           return '<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(fp.external_id) + '</code></td>' +
-            '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(fp.marketplace_slug) + '</td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(fp.status, STATUS_COLORS.FAILURE) + '</td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(fp.scrape_status, STATUS_COLORS.FAILURE) + '</td>' +
-            '<td class="px-5 py-3 text-[13px] text-slate-600 dark:text-slate-300 text-center font-semibold border-b border-slate-100 dark:border-slate-700/50">' + (fp.retry_count || 0) + '</td>' +
-            '<td class="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-red-500" title="' + escHtml(fp.error_message || '') + '">' + escHtml(truncate(fp.error_message || '', 80)) + '</div></td>' +
-            '<td class="px-5 py-3 text-[12px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">' + escHtml(fp.updated_at || '') + '</td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50"><code class="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">' + escHtml(fp.external_id) + '</code></td>' +
+            '<td class="px-4 py-2.5 text-[12px] text-slate-600 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50">' + escHtml(fp.marketplace_slug) + '</td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(fp.status, STATUS_COLORS.FAILURE) + '</td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50">' + statusBadge(fp.scrape_status, STATUS_COLORS.FAILURE) + '</td>' +
+            '<td class="px-4 py-2.5 text-[12px] text-slate-600 dark:text-slate-300 text-center font-semibold border-b border-slate-100 dark:border-slate-700/50">' + (fp.retry_count || 0) + '</td>' +
+            '<td class="px-4 py-2.5 border-b border-slate-100 dark:border-slate-700/50"><div class="max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-red-500" title="' + escHtml(fp.error_message || '') + '">' + escHtml(truncate(fp.error_message || '', 80)) + '</div></td>' +
+            '<td class="px-4 py-2.5 text-[11px] text-slate-400 whitespace-nowrap border-b border-slate-100 dark:border-slate-700/50">' + escHtml(fp.updated_at || '') + '</td>' +
           '</tr>';
         }).join('');
         fpContainer.innerHTML =
           '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs"><div class="overflow-x-auto"><table class="w-full"><thead><tr>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">External ID</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Scrape</th>' +
-          '<th class="text-center text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Retries</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Error</th>' +
-          '<th class="text-left text-[11px] uppercase tracking-wider text-slate-400 font-medium px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Updated</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">External ID</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Marketplace</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Status</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Scrape</th>' +
+          '<th class="text-center text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Retries</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Error</th>' +
+          '<th class="text-left text-[10px] uppercase tracking-wider text-slate-400 font-medium px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">Updated</th>' +
           '</tr></thead><tbody>' + fpRows + '</tbody></table></div></div>';
       }
     }
@@ -978,9 +919,16 @@ fetch('{% url "admin:api-backfill-data" %}')
     lucide.createIcons();
   })
   .catch(function(err) {
-    console.error('Failed to load backfill data:', err);
-    var loading = document.getElementById('bf-loading');
-    if (loading) loading.innerHTML = '<span class="text-sm text-red-500">Failed to load data. Refresh the page.</span>';
+    console.error('Failed to load cluster data:', err);
+    // Show error in the sections that depend on cluster data
+    ['bf-active-tasks', 'bf-recent-tasks', 'bf-failed-products'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML =
+        '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-xs text-center">' +
+          '<div class="text-[13px] text-red-400">Failed to load. Workers may be offline.</div>' +
+        '</div>';
+    });
+    setText('bf-active-count', '?');
   });
 
 // ── Dropdown helpers ──────────────────────────────────────────────

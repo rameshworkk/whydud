@@ -112,6 +112,11 @@ class WhydudAdminSite(AdminSite):
                 name="api-backfill-data",
             ),
             path(
+                "api/backfill-cluster/",
+                self.admin_view(self.api_backfill_cluster),
+                name="api-backfill-cluster",
+            ),
+            path(
                 "api/enrichment-data/",
                 self.admin_view(self.api_enrichment_data),
                 name="api-enrichment-data",
@@ -545,10 +550,21 @@ class WhydudAdminSite(AdminSite):
         """Backfill pipeline — page shell only, stats loaded async via JS."""
         from django.shortcuts import render
 
+        from apps.pricing.models import BackfillProduct
+
+        backfill_categories = list(
+            BackfillProduct.objects
+            .exclude(category_name="")
+            .values_list("category_name", flat=True)
+            .distinct()
+            .order_by("category_name")
+        )
+
         context = {
             **self.each_context(request),
             "active_page": "backfill",
             "title": "Backfill Pipeline",
+            "backfill_categories": backfill_categories,
         }
         return render(request, "admin/backfill_console.html", context)
 
@@ -1951,10 +1967,8 @@ class WhydudAdminSite(AdminSite):
         })
 
     def api_backfill_data(self, request):
-        """All backfill console stats as JSON — fetched async after page shell loads."""
-        import json
-
-        from django.db.models import Count, Q
+        """Fast backfill stats — DB queries only, no Celery inspector calls."""
+        from django.db.models import Count
         from django.http import JsonResponse
 
         from apps.pricing.models import BackfillProduct
@@ -2008,41 +2022,16 @@ class WhydudAdminSite(AdminSite):
         est_p2p3_hrs = round(p2p3_pending * 2 / 3600, 1)
         est_reviews_hrs = round(reviews_pending * 15 / 3600, 1)
 
-        failed_products = list(
-            BackfillProduct.objects.filter(
-                Q(status="failed") | Q(scrape_status="failed")
-            )
-            .order_by("-updated_at")
-            .values(
-                "id", "external_id", "marketplace_slug", "error_message",
-                "retry_count", "status", "scrape_status", "updated_at",
-            )[:50]
-        )
-        for fp in failed_products:
-            fp["updated_at"] = localtime(fp["updated_at"]).strftime("%Y-%m-%d %H:%M")
-            fp["id"] = str(fp["id"])
-
         status_labels = [
             "discovered", "bh_filling", "bh_filled",
             "ph_extending", "ph_extended", "done", "failed", "skipped",
         ]
         scrape_labels = ["pending", "enriching", "scraped", "failed"]
 
-        backfill_categories = list(
-            BackfillProduct.objects
-            .exclude(category_name="")
-            .values_list("category_name", flat=True)
-            .distinct()
-            .order_by("category_name")
-        )
-
-        online_workers = self._get_online_workers()
-        _, _, active_tasks = self._get_cluster_data()
-        recent_task_results = self._get_recent_backfill_tasks(limit=20)
-
         # Proxy configuration for display
-        from apps.pricing.backfill.config import BackfillConfig
         from urllib.parse import urlparse
+
+        from apps.pricing.backfill.config import BackfillConfig
 
         raw_proxy_url = BackfillConfig.proxy_url()
         masked_proxy_url = ""
@@ -2080,7 +2069,6 @@ class WhydudAdminSite(AdminSite):
             "est_p1_hrs": est_p1_hrs,
             "est_p2p3_hrs": est_p2p3_hrs,
             "est_reviews_hrs": est_reviews_hrs,
-            "failed_products": failed_products,
             "proxy_config": proxy_config,
             "status_chart": {
                 "labels": [s.replace("_", " ").title() for s in status_labels],
@@ -2099,10 +2087,36 @@ class WhydudAdminSite(AdminSite):
                 "labels": [s.title() for s in scrape_labels],
                 "data": [by_scrape.get(s, 0) for s in scrape_labels],
             },
-            "online_workers": online_workers,
+        })
+
+    def api_backfill_cluster(self, request):
+        """Slow backfill data — Celery inspector, task history, failed products."""
+        from django.db.models import Q
+        from django.http import JsonResponse
+
+        from apps.pricing.models import BackfillProduct
+
+        _, _, active_tasks = self._get_cluster_data()
+        recent_task_results = self._get_recent_backfill_tasks(limit=20)
+
+        failed_products = list(
+            BackfillProduct.objects.filter(
+                Q(status="failed") | Q(scrape_status="failed")
+            )
+            .order_by("-updated_at")
+            .values(
+                "id", "external_id", "marketplace_slug", "error_message",
+                "retry_count", "status", "scrape_status", "updated_at",
+            )[:50]
+        )
+        for fp in failed_products:
+            fp["updated_at"] = localtime(fp["updated_at"]).strftime("%Y-%m-%d %H:%M")
+            fp["id"] = str(fp["id"])
+
+        return JsonResponse({
             "active_tasks": active_tasks,
             "recent_task_results": recent_task_results,
-            "backfill_categories": backfill_categories,
+            "failed_products": failed_products,
         })
 
     def api_enrichment_data(self, request):

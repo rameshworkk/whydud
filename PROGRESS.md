@@ -5085,3 +5085,33 @@ All admin display methods that format prices/amounts now divide by 100 before di
 **Config:** Set `BACKFILL_PROXY_URL=http://user:pass@proxy:port` as env var to enable. Empty = disabled (existing behavior unchanged).
 
 **Behavior when disabled (no proxy URL):** `ProxyStrategy.enabled=False`, all methods are no-ops, `use_direct` always True, zero overhead — exact same behavior as before.
+
+### Proxy 403 Retry Fix (2026-03-12)
+
+**Problem:** Initial proxy implementation treated 3 consecutive proxy 403s as "burned" and aborted. But rotating proxies give a new IP per request — they never truly burn.
+
+**Fix:** Proxy 403 now triggers immediate retry (new IP automatically). After 3 consecutive proxy 403s, probes direct IP to check if recovered. Converted for-loops to while-loops so proxy retries don't consume main attempt budget. Separate `free_retries` counter (capped at 10) for proxy actions.
+
+### Admin Proxy Config Card + Route Logging (2026-03-12)
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | `api_backfill_data()` returns `proxy_config` with masked URL, retry interval (mins), burn threshold |
+| `backend/templates/admin/backfill_console.html` | New "Rotating Proxy" info card above Actions section — shows status badge (Configured/Disabled), masked proxy URL, direct IP retry interval, probe threshold, env var hints |
+| `backend/apps/pricing/backfill/bh_client.py` | Added `_route_label` property, debug log after each successful request: `"BH {pid} via {direct|proxy} (req #{n})"` |
+| `backend/apps/pricing/backfill/ph_client.py` | Same `_route_label` + debug logs for both HTML and API requests |
+
+### Backfill Console Performance + UI Polish (2026-03-12)
+
+**Problem:** Backfill console took 10-25 seconds to load because `api_backfill_data` made 5+ Celery inspector calls (5s timeout each) in addition to DB queries. Breakdown tables and charts were blocked by slow cluster data. UI had alignment issues: narrow `max-w-md` tables, uneven action card heights, inconsistent spacing.
+
+**Solution:** Split API into fast (DB-only) and slow (Celery inspector) endpoints. JS fetches both in parallel — stats/charts/breakdowns populate instantly, active tasks/history/failed products load independently.
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Split `api_backfill_data()` into two: fast endpoint (DB counts, breakdowns, charts, proxy config) and new `api_backfill_cluster()` (Celery inspector, task history, failed products). Added `/api/backfill-cluster/` URL route. Moved `backfill_categories` to server-side `backfill_view()` context so category dropdowns render without API wait |
+| `backend/templates/admin/backfill_console.html` | Full rewrite: two parallel fetch calls (fast data + cluster data), breakdowns now 4-column grid (method, review, marketplace, snapshots), proxy card is compact horizontal strip instead of narrow card, action cards use `flex flex-col` + `mt-auto` for equal-height buttons, consistent `gap-4` spacing, tighter table padding (`px-4 py-2.5`), loading spinners for cluster-dependent sections |
