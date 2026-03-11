@@ -159,11 +159,9 @@ class ProductAdmin(AuditLogMixin, admin.ModelAdmin):
 
     def get_inlines(self, request, obj=None):
         inlines = list(self.inlines)
-        try:
-            from apps.scoring.admin import DudScoreHistoryInline
-            inlines.append(DudScoreHistoryInline)
-        except ImportError:
-            pass
+        # DudScoreHistory is a TimescaleDB hypertable (no 'id' column).
+        # Django inlines require an id PK, so skip until model gets a
+        # surrogate PK or a custom inline queryset is implemented.
         return inlines
 
     def get_queryset(self, request):
