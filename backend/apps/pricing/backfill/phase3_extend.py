@@ -417,7 +417,10 @@ async def extend_with_pricehistory(
             await sync_to_async(_save_bp_rate_limited)(bp, str(e), revert_status)
             stats["rate_limited"] += 1
             processed_ids.add(bp.id)
-            _stop_requested = True  # Stop current wave + future waves
+            # Only stop if no proxy configured — rotating proxy never exhausts
+            # (each request gets a new IP, so just keep going)
+            if not client._proxy_strategy.enabled:
+                _stop_requested = True
 
         except AuthError as e:
             await sync_to_async(_save_bp_token_failed)(bp, f"Auth: {e}", revert_status)

@@ -113,8 +113,8 @@ class BackfillConfig:
 
     @classmethod
     def proxy_retry_interval(cls) -> float:
-        """Seconds between periodic direct IP retry attempts (default 30 min)."""
-        return float(_get("BACKFILL_PROXY_RETRY_INTERVAL", 1800.0))
+        """Seconds between periodic direct IP retry attempts (default 15 min)."""
+        return float(_get("BACKFILL_PROXY_RETRY_INTERVAL", 900.0))
 
     @classmethod
     def proxy_burn_threshold(cls) -> int:
