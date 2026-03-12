@@ -1,8 +1,22 @@
 /** Formatting utilities for prices, scores, dates. */
 
-/** Convert paisa (integer) to ₹ display string. e.g. 199900 → "₹1,999" */
-export function formatPrice(paisa: number | null | undefined): string {
+/** Convert smallest currency unit to display string.
+ *  INR marketplaces: paisa → ₹  (e.g. 199900 → "₹1,999")
+ *  USD marketplaces: cents → $  (e.g. 3669 → "$36.69")
+ */
+export function formatPrice(
+  paisa: number | null | undefined,
+  marketplaceSlug?: string | null,
+): string {
   if (paisa == null) return "—";
+  if (marketplaceSlug === "amazon-com") {
+    const dollars = paisa / 100;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 2,
+    }).format(dollars);
+  }
   const rupees = paisa / 100;
   return new Intl.NumberFormat("en-IN", {
     style: "currency",

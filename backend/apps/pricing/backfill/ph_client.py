@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 # Map PH marketplace names (from JSON-LD) to our slugs
 _PH_MARKETPLACE_MAP = {
     "amazon.in": "amazon-in",
+    "amazon.com": "amazon-com",
     "flipkart.com": "flipkart",
     "flipkart": "flipkart",
     "croma.com": "croma",

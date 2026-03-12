@@ -484,10 +484,11 @@ def queue_review_scraping(
         review_status="pending",
     ).update(review_status="scraping")
 
-    if marketplace_slug in ("amazon-in", "amazon_in"):
+    if marketplace_slug in ("amazon-in", "amazon_in", "amazon-com"):
         from apps.scraping.tasks import run_review_spider
-        run_review_spider.delay("amazon-in", product_external_ids=[external_id])
-        logger.info("Review spider queued for amazon-in: %s", external_id)
+        spider_slug = "amazon-com" if marketplace_slug == "amazon-com" else "amazon-in"
+        run_review_spider.delay(spider_slug, product_external_ids=[external_id])
+        logger.info("Review spider queued for %s: %s", spider_slug, external_id)
     elif marketplace_slug == "flipkart":
         from apps.scraping.tasks import run_review_spider
         run_review_spider.delay("flipkart", product_external_ids=[external_id])

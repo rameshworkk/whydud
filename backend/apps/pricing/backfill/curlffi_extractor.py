@@ -95,7 +95,7 @@ def extract_product_data(
     if html is None:
         return None
 
-    if marketplace_slug == "amazon-in":
+    if marketplace_slug in ("amazon-in", "amazon-com"):
         return _extract_amazon(html, url)
     elif marketplace_slug == "flipkart":
         return _extract_flipkart(html, url)
@@ -129,6 +129,8 @@ def _fetch_page(
         headers["Referer"] = "https://www.flipkart.com/search?q=product"
     elif marketplace_slug in ("amazon-in", "amazon_in"):
         headers["Referer"] = "https://www.amazon.in/"
+    elif marketplace_slug == "amazon-com":
+        headers["Referer"] = "https://www.amazon.com/"
 
     try:
         session = Session(impersonate="chrome120")
@@ -155,8 +157,8 @@ def _fetch_page(
             logger.info("Block detected (%s) for %s", signal.decode(), url)
             return None
 
-    # Amazon empty challenge page: <title>Amazon.in</title> with tiny body
-    if b"<title>Amazon.in</title>" in snippet and len(resp.content) < 30000:
+    # Amazon empty challenge page: <title>Amazon.in</title> or <title>Amazon.com</title> with tiny body
+    if (b"<title>Amazon.in</title>" in snippet or b"<title>Amazon.com</title>" in snippet) and len(resp.content) < 30000:
         logger.info("Empty challenge page for %s", url)
         return None
 

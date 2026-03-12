@@ -48,6 +48,9 @@ Usage::
     # Overnight enrichment runner
     python manage.py backfill_prices run-overnight --stop-at 06:00
 
+    # Probe sitemap (diagnose JSON-LD extraction)
+    python manage.py backfill_prices probe --sitemap 16 --samples 10
+
     # Data verification
     python manage.py backfill_prices verify-data
 """
@@ -198,6 +201,15 @@ class Command(BaseCommand):
             "--progress-interval", type=int, default=300,
             help="Seconds between progress reports (default: 300 = 5 min)",
         )
+
+        # ── Probe Sitemap ──────────────────────────────────────────
+        ppb = sub.add_parser(
+            "probe",
+            help="Probe a PH sitemap: fetch N sample pages and diagnose JSON-LD extraction",
+        )
+        ppb.add_argument("--sitemap", type=int, default=1, help="Sitemap index to probe (default: 1)")
+        ppb.add_argument("--samples", type=int, default=5, help="Number of random product pages to fetch (default: 5)")
+        ppb.add_argument("--delay", type=float, default=None, help="Override PH request delay")
 
         # ── Verify Data ──────────────────────────────────────────
         sub.add_parser(
@@ -1070,6 +1082,93 @@ class Command(BaseCommand):
         w(self.style.SUCCESS("  Overnight run complete."))
 
     # ── Verify Data ───────────────────────────────────────────────
+
+    def _handle_probe(self, **options):
+        """Probe a sitemap: parse it, pick N random products, fetch their HTML,
+        and report exactly what JSON-LD extraction finds (or doesn't)."""
+        import random
+
+        from apps.pricing.backfill.ph_client import PHClient
+
+        sitemap_idx = options["sitemap"]
+        samples = options["samples"]
+        delay = options.get("delay")
+        w = self.stdout.write
+        heading = self.style.MIGRATE_HEADING
+        warning = self.style.WARNING
+        success = self.style.SUCCESS
+
+        w(heading(f"Probing sitemap prices-{sitemap_idx}.xml ({samples} samples)"))
+
+        async def _run():
+            async with PHClient(delay=delay) as client:
+                # 1. Get sitemap index
+                all_sitemaps = await client.fetch_sitemap_index()
+                if sitemap_idx > len(all_sitemaps):
+                    w(warning(f"  Only {len(all_sitemaps)} sitemaps exist, requested #{sitemap_idx}"))
+                    return
+
+                sitemap_url = all_sitemaps[sitemap_idx - 1]
+                w(f"  Sitemap URL: {sitemap_url}")
+
+                # 2. Parse the sitemap
+                products = await client.parse_sitemap(sitemap_url)
+                w(f"  Total URLs in sitemap: {len(products):,}")
+
+                if not products:
+                    w(warning("  No products found in sitemap!"))
+                    return
+
+                # 3. Pick random samples
+                sample_products = random.sample(products, min(samples, len(products)))
+                w(f"  Sampling {len(sample_products)} products...\n")
+
+                # 4. Fetch each and show extraction results
+                ok_count = 0
+                fail_count = 0
+                for i, prod in enumerate(sample_products, 1):
+                    code = prod["ph_code"]
+                    slug = prod.get("slug", "")
+                    w(f"  [{i}/{len(sample_products)}] {code} (slug: {slug[:60]})")
+
+                    try:
+                        meta = await client.fetch_page_metadata(code)
+                        ext_id = meta.get("external_id", "")
+                        mp = meta.get("marketplace_slug", "")
+                        title = meta.get("title", "")[:80]
+                        price = meta.get("current_price")
+                        token = meta.get("token", "")
+                        brand = meta.get("brand_name", "")
+
+                        if ext_id and mp:
+                            ok_count += 1
+                            w(success(f"    OK  marketplace={mp}, id={ext_id}, brand={brand}"))
+                            w(f"        title: {title}")
+                            w(f"        price: {price}, token: {'yes' if token else 'NO'}")
+                        else:
+                            fail_count += 1
+                            w(warning(f"    FAIL  marketplace={mp or '(empty)'}, id={ext_id or '(empty)'}"))
+                            w(f"        title: {title or '(empty)'}")
+                            if not mp:
+                                w(warning("        -> Missing offeredBy in JSON-LD (unsupported marketplace?)"))
+                            if not ext_id:
+                                w(warning("        -> Missing additionalProperty 'Product Code' in JSON-LD"))
+                    except Exception as e:
+                        fail_count += 1
+                        w(warning(f"    ERROR {type(e).__name__}: {e}"))
+
+                    w("")
+
+                # 5. Summary
+                w(heading("Summary"))
+                w(f"  Extracted OK: {ok_count}/{len(sample_products)}")
+                w(f"  Failed:       {fail_count}/{len(sample_products)}")
+                if fail_count == len(sample_products):
+                    w(warning("  ALL samples failed — PH may have changed page structure or these are unsupported marketplaces."))
+                elif fail_count > 0:
+                    w(warning("  Some failures — likely products from unsupported marketplaces (not Amazon/Flipkart)."))
+
+        asyncio.run(_run())
 
     def _handle_verify_data(self, **options):
         from apps.pricing.models import BackfillProduct

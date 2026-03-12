@@ -173,6 +173,7 @@ class BackfillConfig:
             "BACKFILL_PRODUCT_URL_MAP",
             {
                 "amazon-in": "https://www.amazon.in/dp/{pid}",
+                "amazon-com": "https://www.amazon.com/dp/{pid}",
                 "flipkart": "https://www.flipkart.com/p/{pid}",
             },
         )
