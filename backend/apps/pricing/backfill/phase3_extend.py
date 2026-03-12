@@ -297,6 +297,7 @@ async def extend_with_pricehistory(
     delay: float | None = None,
     category_names: list[str] | None = None,
     include_discovered: bool = False,
+    proxy_mode: str = "auto",
 ) -> dict:
     """Phase 3: Extend products with PH deep history.
 
@@ -314,9 +315,10 @@ async def extend_with_pricehistory(
         delay: Override PH request delay.
         category_names: Filter by category names.
         include_discovered: Also claim DISCOVERED products (skip bh-fill).
+        proxy_mode: "auto" (default), "proxy" (always proxy), "direct" (no proxy).
 
     Returns:
-        Stats dict with counts.
+        Stats dict with counts including ``stop_requested`` flag.
     """
     limit = limit or BackfillConfig.phase3_limit()
 
@@ -452,7 +454,7 @@ async def extend_with_pricehistory(
             )
 
     try:
-        async with PHClient(delay=delay) as client:
+        async with PHClient(delay=delay, proxy_mode=proxy_mode) as client:
             # Process in waves for data safety
             for wave_start in range(0, total, _WAVE_SIZE):
                 if _stop_requested:
@@ -500,5 +502,6 @@ async def extend_with_pricehistory(
         if released:
             stats["released_back"] = released
 
+    stats["stop_requested"] = _stop_requested
     logger.info("Phase 3 complete: %s", stats)
     return stats

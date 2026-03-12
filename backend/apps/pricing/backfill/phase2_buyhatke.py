@@ -192,6 +192,7 @@ async def buyhatke_bulk_fill(
     marketplace_slug: str | None = None,
     delay: float | None = None,
     category_names: list[str] | None = None,
+    proxy_mode: str = "auto",
 ) -> dict:
     """Phase 2: For all discovered products, fetch BuyHatke price history.
 
@@ -204,6 +205,7 @@ async def buyhatke_bulk_fill(
         marketplace_slug: Filter by marketplace slug.
         delay: Override BH request delay.
         category_names: Filter by category names (e.g. ['smartphone', 'laptop']).
+        proxy_mode: "auto" (default), "proxy" (always proxy), "direct" (no proxy).
 
     Returns:
         Stats dict with counts.
@@ -273,7 +275,7 @@ async def buyhatke_bulk_fill(
             )
 
     try:
-        async with BHClient(delay=delay) as client:
+        async with BHClient(delay=delay, proxy_mode=proxy_mode) as client:
             # Fire all tasks concurrently — BHClient semaphore limits to N in-flight
             tasks = [_process_one(bp, client) for bp in batch]
             await asyncio.gather(*tasks)

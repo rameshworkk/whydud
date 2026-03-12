@@ -47,13 +47,22 @@ class ProxyStrategy:
         retry_interval: float = 1800.0,
         proxy_burn_threshold: int = 3,
         direct_burn_threshold: int = 5,
+        proxy_mode: str = "auto",
     ) -> None:
         self._proxy_url = proxy_url or ""
         self._retry_interval = retry_interval
         self._proxy_burn_threshold = proxy_burn_threshold
         self._direct_burn_threshold = direct_burn_threshold
+        self._proxy_mode = proxy_mode  # "auto", "proxy", "direct"
 
-        self._mode = self.MODE_DIRECT
+        # Force modes: "proxy" starts in proxy mode, "direct" disables proxy entirely
+        if proxy_mode == "proxy" and self._proxy_url:
+            self._mode = self.MODE_PROXY
+        elif proxy_mode == "direct":
+            self._proxy_url = ""  # effectively disable proxy
+            self._mode = self.MODE_DIRECT
+        else:
+            self._mode = self.MODE_DIRECT
         self._proxy_consecutive_403s = 0
         self._direct_consecutive_403s = 0
         self._probing_direct = False
@@ -76,9 +85,9 @@ class ProxyStrategy:
         if self.enabled:
             logger.info(
                 "Proxy strategy: initialized with proxy=%s, "
-                "direct_burn=%d, proxy_burn=%d",
+                "direct_burn=%d, proxy_burn=%d, mode=%s (proxy_mode=%s)",
                 self._proxy_host, self._direct_burn_threshold,
-                self._proxy_burn_threshold,
+                self._proxy_burn_threshold, self._mode, self._proxy_mode,
             )
 
     # ── Properties ────────────────────────────────────────────────

@@ -68,6 +68,7 @@ async def discover_from_sitemaps(
     filter_electronics: bool = False,
     max_products: int | None = None,
     delay: float | None = None,
+    proxy_mode: str = "auto",
 ) -> dict:
     """Phase 1: Parse sitemaps → fetch HTML → extract ASINs.
 
@@ -92,7 +93,7 @@ async def discover_from_sitemaps(
         "failed": 0,
     }
 
-    async with PHClient(delay=delay) as client:
+    async with PHClient(delay=delay, proxy_mode=proxy_mode) as client:
         # Step 1: Get sitemap index
         all_sitemaps = await client.fetch_sitemap_index()
         target_sitemaps = all_sitemaps[sitemap_start - 1 : sitemap_end]

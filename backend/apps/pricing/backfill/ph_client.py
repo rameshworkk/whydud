@@ -102,6 +102,7 @@ class PHClient:
         delay: float | None = None,
         concurrency: int | None = None,
         timeout: float | None = None,
+        proxy_mode: str = "auto",
     ) -> None:
         self._html_delay = delay if delay is not None else BackfillConfig.ph_html_delay()
         self._api_delay = BackfillConfig.ph_api_delay()
@@ -135,6 +136,7 @@ class PHClient:
             retry_interval=BackfillConfig.proxy_retry_interval(),
             proxy_burn_threshold=BackfillConfig.proxy_burn_threshold(),
             direct_burn_threshold=BackfillConfig.direct_burn_threshold(),
+            proxy_mode=proxy_mode,
         )
 
     async def __aenter__(self) -> PHClient:

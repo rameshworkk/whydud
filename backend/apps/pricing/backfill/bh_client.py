@@ -94,6 +94,7 @@ class BHClient:
         delay: float | None = None,
         concurrency: int | None = None,
         timeout: float | None = None,
+        proxy_mode: str = "auto",
     ) -> None:
         self._base_delay = delay if delay is not None else BackfillConfig.bh_delay()
         self._delay = self._base_delay
@@ -115,6 +116,7 @@ class BHClient:
             retry_interval=BackfillConfig.proxy_retry_interval(),
             proxy_burn_threshold=BackfillConfig.proxy_burn_threshold(),
             direct_burn_threshold=BackfillConfig.direct_burn_threshold(),
+            proxy_mode=proxy_mode,
         )
 
     async def __aenter__(self) -> BHClient:

@@ -180,6 +180,7 @@ def run_phase1_discover(
     sitemap_end: int = 5,
     filter_electronics: bool = True,
     max_products: int | None = None,
+    proxy_mode: str = "auto",
 ) -> dict:
     """Phase 1: Discover products from PH sitemaps."""
     import asyncio
@@ -192,6 +193,7 @@ def run_phase1_discover(
             sitemap_end=sitemap_end,
             filter_electronics=filter_electronics,
             max_products=max_products,
+            proxy_mode=proxy_mode,
         )
     )
 
@@ -204,6 +206,7 @@ def run_phase2_buyhatke(
     delay: float | None = None,
     repeat: bool = False,
     category_names: list[str] | None = None,
+    proxy_mode: str = "auto",
 ) -> dict:
     """Phase 2: BuyHatke bulk price history fill for discovered products.
 
@@ -212,6 +215,7 @@ def run_phase2_buyhatke(
 
     If repeat=True, keeps claiming new batches until no items remain.
     If category_names provided, only processes products with matching category_name.
+    proxy_mode: "auto" (default), "proxy" (always proxy), "direct" (no proxy).
     """
     import asyncio
 
@@ -226,6 +230,7 @@ def run_phase2_buyhatke(
                 marketplace_slug=marketplace_slug,
                 delay=delay,
                 category_names=category_names,
+                proxy_mode=proxy_mode,
             )
         )
         all_stats["rounds"] += 1
@@ -250,6 +255,7 @@ def run_phase3_extend(
     repeat: bool = False,
     category_names: list[str] | None = None,
     include_discovered: bool = False,
+    proxy_mode: str = "auto",
 ) -> dict:
     """Phase 3: Extend top products with PH deep history.
 
@@ -259,6 +265,7 @@ def run_phase3_extend(
     If repeat=True, keeps claiming new batches until no items remain.
     If category_names provided, only processes products with matching category_name.
     If include_discovered=True, also processes DISCOVERED products (skips bh-fill).
+    proxy_mode: "auto" (default), "proxy" (always proxy), "direct" (no proxy).
     """
     import asyncio
 
@@ -277,16 +284,18 @@ def run_phase3_extend(
                 delay=delay,
                 category_names=category_names,
                 include_discovered=include_discovered,
+                proxy_mode=proxy_mode,
             )
         )
         all_stats["rounds"] += 1
         for key in ("total", "extended", "injected", "token_failed", "api_failed", "rate_limited", "points"):
             all_stats[key] += result.get(key, 0)
 
-        # Stop if rate limited (back off entirely)
-        if result.get("rate_limited", 0) > 0:
-            logger.warning("Phase 3: stopping repeat due to rate limiting (%d rate-limited items)",
-                           result["rate_limited"])
+        # Only stop repeat if the worker explicitly requested stop
+        # (IP burned without proxy). Minor rate limiting with proxy is normal.
+        if result.get("stop_requested", False):
+            logger.warning("Phase 3: stopping repeat — IP burned / stop requested "
+                           "(%d rate-limited items)", result.get("rate_limited", 0))
             break
 
         if not repeat or result.get("total", 0) == 0:

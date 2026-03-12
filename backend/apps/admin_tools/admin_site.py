@@ -642,11 +642,14 @@ class WhydudAdminSite(AdminSite):
                 max_products_val = post_data.get("max_products", "").strip()
                 max_products = int(max_products_val) if max_products_val else None
 
+                proxy_mode = post_data.get("proxy_mode", "auto")
+
                 task_kwargs = {
                     "sitemap_start": start,
                     "sitemap_end": end,
                     "filter_electronics": filter_electronics,
                     "max_products": max_products,
+                    "proxy_mode": proxy_mode,
                 }
 
                 nodes_map, err = WhydudAdminSite._resolve_target_nodes(post_data, celery_app)
@@ -658,6 +661,8 @@ class WhydudAdminSite(AdminSite):
                     filter_desc += ", electronics-only"
                 if max_products:
                     filter_desc += f", max {max_products}"
+                if proxy_mode != "auto":
+                    filter_desc += f", proxy={proxy_mode}"
 
                 if nodes_map:
                     dispatched = WhydudAdminSite._dispatch_to_nodes(
@@ -686,8 +691,9 @@ class WhydudAdminSite(AdminSite):
                     return err
 
                 category_names = post_data.getlist("category_names")
+                proxy_mode = post_data.get("proxy_mode", "auto")
 
-                task_kwargs = {"batch_size": batch, "repeat": repeat}
+                task_kwargs = {"batch_size": batch, "repeat": repeat, "proxy_mode": proxy_mode}
                 if delay is not None:
                     task_kwargs["delay"] = delay
                 if category_names:
@@ -695,6 +701,7 @@ class WhydudAdminSite(AdminSite):
                 rpt = " repeat=ON" if repeat else ""
                 dly = f" delay={delay}s" if delay else ""
                 cat = f" categories={','.join(category_names)}" if category_names else ""
+                prx = f" proxy={proxy_mode}" if proxy_mode != "auto" else ""
 
                 task_ids = []
                 if nodes_map:
@@ -705,12 +712,12 @@ class WhydudAdminSite(AdminSite):
                             r = run_phase2_buyhatke.apply_async(kwargs=task_kwargs, queue=queue_name)
                             task_ids.append(f"{prefix}:{r.id[:8]}")
                     nodes_str = ",".join(nodes_map.keys())
-                    return f"BH-Fill → {nodes_str} ({workers}x each, batch {batch}{rpt}{dly}{cat}). Tasks: {', '.join(task_ids)}"
+                    return f"BH-Fill → {nodes_str} ({workers}x each, batch {batch}{rpt}{dly}{cat}{prx}). Tasks: {', '.join(task_ids)}"
                 else:
                     for _ in range(workers):
                         r = run_phase2_buyhatke.delay(**task_kwargs)
                         task_ids.append(r.id[:8])
-                    return f"BH-Fill dispatched ({workers} workers, batch {batch}{rpt}{dly}{cat}). Tasks: {', '.join(task_ids)}"
+                    return f"BH-Fill dispatched ({workers} workers, batch {batch}{rpt}{dly}{cat}{prx}). Tasks: {', '.join(task_ids)}"
 
             elif action == "ph-extend":
                 from apps.pricing.tasks import run_phase3_extend
@@ -728,8 +735,9 @@ class WhydudAdminSite(AdminSite):
 
                 category_names = post_data.getlist("category_names")
                 include_discovered = post_data.get("include_discovered") == "on"
+                proxy_mode = post_data.get("proxy_mode", "auto")
 
-                task_kwargs = {"limit": limit, "repeat": repeat}
+                task_kwargs = {"limit": limit, "repeat": repeat, "proxy_mode": proxy_mode}
                 if delay is not None:
                     task_kwargs["delay"] = delay
                 if category_names:
@@ -740,6 +748,7 @@ class WhydudAdminSite(AdminSite):
                 dly = f" delay={delay}s" if delay else ""
                 cat = f" categories={','.join(category_names)}" if category_names else ""
                 disc = " +discovered" if include_discovered else ""
+                prx = f" proxy={proxy_mode}" if proxy_mode != "auto" else ""
 
                 task_ids = []
                 if nodes_map:
@@ -750,12 +759,12 @@ class WhydudAdminSite(AdminSite):
                             r = run_phase3_extend.apply_async(kwargs=task_kwargs, queue=queue_name)
                             task_ids.append(f"{prefix}:{r.id[:8]}")
                     nodes_str = ",".join(nodes_map.keys())
-                    return f"PH-Extend → {nodes_str} ({workers}x each, limit {limit}{rpt}{dly}{cat}{disc}). Tasks: {', '.join(task_ids)}"
+                    return f"PH-Extend → {nodes_str} ({workers}x each, limit {limit}{rpt}{dly}{cat}{disc}{prx}). Tasks: {', '.join(task_ids)}"
                 else:
                     for _ in range(workers):
                         r = run_phase3_extend.delay(**task_kwargs)
                         task_ids.append(r.id[:8])
-                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}{dly}{cat}{disc}). Tasks: {', '.join(task_ids)}"
+                    return f"PH-Extend dispatched ({workers} workers, limit {limit}{rpt}{dly}{cat}{disc}{prx}). Tasks: {', '.join(task_ids)}"
 
             elif action == "create-lightweight":
                 from apps.pricing.backfill.lightweight_creator import (

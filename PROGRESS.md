@@ -5115,3 +5115,23 @@ All admin display methods that format prices/amounts now divide by 100 before di
 |---|---|
 | `backend/apps/admin_tools/admin_site.py` | Split `api_backfill_data()` into two: fast endpoint (DB counts, breakdowns, charts, proxy config) and new `api_backfill_cluster()` (Celery inspector, task history, failed products). Added `/api/backfill-cluster/` URL route. Moved `backfill_categories` to server-side `backfill_view()` context so category dropdowns render without API wait |
 | `backend/templates/admin/backfill_console.html` | Full rewrite: two parallel fetch calls (fast data + cluster data), breakdowns now 4-column grid (method, review, marketplace, snapshots), proxy card is compact horizontal strip instead of narrow card, action cards use `flex flex-col` + `mt-auto` for equal-height buttons, consistent `gap-4` spacing, tighter table padding (`px-4 py-2.5`), loading spinners for cluster-dependent sections |
+
+### PH-Extend Repeat Fix + Proxy Mode UI (2026-03-12)
+
+**Problem:** PH-Extend repeat stopped after first batch even with proxy enabled. The repeat loop checked `rate_limited > 0` and stopped — but with rotating proxy, a few rate-limited items (4/1000 = 0.4%) is normal and expected. Also, no admin UI control for proxy mode (auto/proxy/direct).
+
+**Root cause analysis:** Two workers dispatched with 2 workers × 1000 limit correctly claimed DIFFERENT sets via `SELECT FOR UPDATE SKIP LOCKED` (no actual duplicates). The identical 996/4 results were coincidental since both processed similar DISCOVERED products. The real bug was the overly aggressive repeat-stop condition.
+
+**Fixes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/pricing/tasks.py` | PH-Extend repeat loop now checks `stop_requested` flag (set only when IP is burned without proxy) instead of `rate_limited > 0`. Minor rate limiting with proxy no longer stops repeat. Added `proxy_mode` param to `run_phase1_discover`, `run_phase2_buyhatke`, `run_phase3_extend` tasks |
+| `backend/apps/pricing/backfill/phase3_extend.py` | `extend_with_pricehistory()` returns `stop_requested` in stats dict. Accepts `proxy_mode` param, passes to PHClient |
+| `backend/apps/pricing/backfill/phase2_buyhatke.py` | `buyhatke_bulk_fill()` accepts `proxy_mode` param, passes to BHClient |
+| `backend/apps/pricing/backfill/phase1_discover.py` | `discover_from_sitemaps()` accepts `proxy_mode` param, passes to PHClient |
+| `backend/apps/pricing/backfill/ph_client.py` | PHClient accepts `proxy_mode` param, passes to ProxyStrategy |
+| `backend/apps/pricing/backfill/bh_client.py` | BHClient accepts `proxy_mode` param, passes to ProxyStrategy |
+| `backend/apps/pricing/backfill/proxy_strategy.py` | Added `proxy_mode` param: "auto" (default behavior), "proxy" (start in proxy mode), "direct" (disable proxy entirely) |
+| `backend/apps/admin_tools/admin_site.py` | All three dispatch actions (discover, bh-fill, ph-extend) read `proxy_mode` from POST and pass to task kwargs. Status messages include proxy mode when non-auto |
+| `backend/templates/admin/backfill_console.html` | Added Proxy dropdown (Auto/Proxy/Direct) to all three action cards (Discovery, BH-Fill, PH-Extend) |
