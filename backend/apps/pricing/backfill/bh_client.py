@@ -114,6 +114,7 @@ class BHClient:
             proxy_url=BackfillConfig.proxy_url(),
             retry_interval=BackfillConfig.proxy_retry_interval(),
             proxy_burn_threshold=BackfillConfig.proxy_burn_threshold(),
+            direct_burn_threshold=BackfillConfig.direct_burn_threshold(),
         )
 
     async def __aenter__(self) -> BHClient:
@@ -203,8 +204,8 @@ class BHClient:
 
         max_retries = BackfillConfig.bh_max_retries()
         max_free_retries = 10  # safety cap for proxy rotation
-        attempt = 0
         free_retries = 0
+        timeout_retries = 0
 
         async with self._semaphore:
             # Respect cooldown from previous 403 bursts
@@ -226,12 +227,17 @@ class BHClient:
                 )
                 await asyncio.sleep(self._burst_pause)
 
-            while attempt < max_retries:
+            while free_retries <= max_free_retries:
                 # Check for periodic direct IP retry (30-min window)
                 if self._proxy_strategy.should_retry_direct():
                     self._proxy_strategy.start_direct_probe()
 
                 client = self._get_client()
+                route = self._route_label
+                logger.info(
+                    "BH GET %s via %s (req #%d)",
+                    pid, route, self._request_count,
+                )
                 try:
                     resp = await client.get(
                         f"{BackfillConfig.bh_base_url()}/getPredictedData.php",
@@ -241,14 +247,13 @@ class BHClient:
                     resp.raise_for_status()
 
                     # Success — decay delay back toward base
-                    route = self._route_label
                     self._proxy_strategy.on_request_success()
                     self._consecutive_403s = 0
                     if self._delay > self._base_delay:
                         self._delay = max(self._base_delay, self._delay * 0.9)
 
-                    logger.debug(
-                        "BH %s via %s (req #%d)",
+                    logger.info(
+                        "BH %s OK via %s (req #%d)",
                         pid, route, self._request_count,
                     )
                     return self._parse_price_history(resp.text)
@@ -258,7 +263,7 @@ class BHClient:
                         action = self._proxy_strategy.on_request_403()
 
                         if action == "switched":
-                            # Direct→Proxy: reset counters, free retry
+                            # Hit burn threshold → switched to proxy, retry
                             self._consecutive_403s = 0
                             self._delay = self._base_delay
                             free_retries += 1
@@ -267,50 +272,22 @@ class BHClient:
                         if action in ("probe_failed", "proxy_retry", "probe_direct"):
                             # Free retry: proxy rotation or direct probe
                             free_retries += 1
-                            if free_retries > max_free_retries:
-                                raise BHRateLimited(
-                                    f"Max proxy retries ({free_retries}) exceeded"
-                                ) from e
                             continue
 
-                        # "normal" — direct mode 403 (no proxy configured)
-                        self._consecutive_403s += 1
+                        # "skip" or "normal" — don't retry, skip product
                         self._error_count += 1
-                        self._delay = min(self._base_delay * (2 ** self._consecutive_403s), 30.0)
-
-                        attempt += 1
-                        if attempt < max_retries:
-                            wait = attempt * 15
-                            logger.warning(
-                                "BH rate limited (%d), waiting %ds, delay now %.1fs "
-                                "(attempt %d/%d, streak %d, mode=%s)",
-                                e.response.status_code, wait, self._delay,
-                                attempt, max_retries, self._consecutive_403s,
-                                self._proxy_strategy.mode,
-                            )
-                            await asyncio.sleep(wait)
-                            continue
-
-                        # All retries exhausted — enter cooldown
-                        cooldown = min(60 * self._consecutive_403s, 300)
-                        self._cooldown_until = asyncio.get_event_loop().time() + cooldown
-                        logger.warning(
-                            "BH blocked after %d consecutive 403s, cooldown %ds, "
-                            "delay %.1fs, mode=%s",
-                            self._consecutive_403s, cooldown, self._delay,
-                            self._proxy_strategy.mode,
-                        )
                         raise BHRateLimited(
-                            f"403 after {self._consecutive_403s} consecutive rate limits"
+                            f"BH 403 for {pid} — skipping "
+                            f"(mode={self._proxy_strategy.mode})"
                         ) from e
 
                     self._error_count += 1
                     raise
 
                 except (httpx.TimeoutException, httpx.ConnectError):
-                    attempt += 1
-                    if attempt < max_retries:
-                        await asyncio.sleep(2 * attempt)
+                    timeout_retries += 1
+                    if timeout_retries < max_retries:
+                        await asyncio.sleep(2 * timeout_retries)
                         continue
                     self._error_count += 1
                     raise

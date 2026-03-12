@@ -121,6 +121,11 @@ class BackfillConfig:
         """Consecutive 403s on rotating proxy before considering it burned."""
         return int(_get("BACKFILL_PROXY_BURN_THRESHOLD", 3))
 
+    @classmethod
+    def direct_burn_threshold(cls) -> int:
+        """Consecutive direct IP 403s before switching to proxy."""
+        return int(_get("BACKFILL_DIRECT_BURN_THRESHOLD", 5))
+
     # ── Batch sizes ──────────────────────────────────────────────
 
     @classmethod

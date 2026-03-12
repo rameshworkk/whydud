@@ -134,6 +134,7 @@ class PHClient:
             proxy_url=BackfillConfig.proxy_url(),
             retry_interval=BackfillConfig.proxy_retry_interval(),
             proxy_burn_threshold=BackfillConfig.proxy_burn_threshold(),
+            direct_burn_threshold=BackfillConfig.direct_burn_threshold(),
         )
 
     async def __aenter__(self) -> PHClient:
@@ -344,27 +345,25 @@ class PHClient:
         assert self._semaphore is not None
 
         url = f"{BackfillConfig.ph_base_url()}/p/{ph_code}"
-        attempt = 0
         free_retries = 0
 
-        while attempt < self._max_retries:
+        while free_retries <= self._MAX_FREE_RETRIES:
             # Check for periodic direct IP retry (30-min window)
             if self._proxy_strategy.should_retry_direct():
                 self._proxy_strategy.start_direct_probe()
 
-            # Abort immediately if IP is burned (direct mode only)
-            if self.is_ip_burned:
-                raise RateLimitError(
-                    f"IP burned ({self._consecutive_403s} consecutive 403s) — aborting {ph_code}"
-                )
-
             client = self._get_client()
+            route = self._route_label
 
             async with self._semaphore:
                 await self._wait_for_cooldown()
                 await self._maybe_cooldown_pause()
                 await asyncio.sleep(self._html_delay)
                 self._request_count += 1
+                logger.info(
+                    "PH HTTP GET %s via %s (req #%d)",
+                    ph_code, route, self._request_count,
+                )
                 try:
                     resp = await client.get(
                         url, headers={"User-Agent": self._next_ua()}
@@ -376,7 +375,7 @@ class PHClient:
                         action = self._proxy_strategy.on_request_403()
 
                         if action == "switched":
-                            # Direct→Proxy: reset counters, free retry
+                            # Hit burn threshold → switched to proxy, retry
                             self._consecutive_403s = 0
                             self._html_delay = self._base_html_delay
                             self._api_delay = self._base_api_delay
@@ -387,46 +386,22 @@ class PHClient:
                         if action in ("probe_failed", "proxy_retry", "probe_direct"):
                             # Free retry: proxy rotation or direct probe
                             free_retries += 1
-                            if free_retries > self._MAX_FREE_RETRIES:
-                                raise RateLimitError(
-                                    f"Max proxy retries ({free_retries}) for {ph_code}"
-                                ) from e
                             continue
 
-                        # "normal" — direct mode 403 (no proxy configured)
-                        self._on_rate_limit()
-                        if self.is_ip_burned:
-                            raise RateLimitError(
-                                f"IP burned ({self._consecutive_403s} consecutive 403s) "
-                                f"— aborting {ph_code}"
-                            ) from e
-                        attempt += 1
-                        if attempt < self._max_retries:
-                            wait = attempt * 15
-                            logger.warning(
-                                "PH HTML 403 for %s, retry %d/%d in %ds "
-                                "(delay=%.1fs, mode=%s)",
-                                ph_code, attempt, self._max_retries, wait,
-                                self._html_delay, self._proxy_strategy.mode,
-                            )
-                            await asyncio.sleep(wait)
-                            continue
-                        # All retries exhausted — enter global cooldown
-                        cooldown = min(60 * self._consecutive_403s, 300)
-                        self._cooldown_until = time.monotonic() + cooldown
+                        # "skip" or "normal" — don't retry, skip product
+                        self._error_count += 1
                         raise RateLimitError(
-                            f"PH HTML rate limited after {self._max_retries} retries "
-                            f"(cooldown {cooldown}s)"
+                            f"PH HTML 403 for {ph_code} — skipping "
+                            f"(mode={self._proxy_strategy.mode})"
                         ) from e
                     self._error_count += 1
                     return {"external_id": "", "marketplace_slug": "", "token": ""}
 
             # Success
-            route = self._route_label
             self._proxy_strategy.on_request_success()
             self._on_success()
-            logger.debug(
-                "PH HTML %s via %s (req #%d)",
+            logger.info(
+                "PH HTML %s OK via %s (req #%d)",
                 ph_code, route, self._request_count,
             )
             html = resp.text
@@ -434,8 +409,8 @@ class PHClient:
             result["token"] = self._extract_token(html)
             return result
 
-        # Should not reach here, but safety fallback
-        return {"external_id": "", "marketplace_slug": "", "token": ""}
+        # Exhausted proxy free retries
+        raise RateLimitError(f"Max proxy retries ({free_retries}) for {ph_code}")
 
     @staticmethod
     def _extract_token(html: str) -> str:
@@ -550,27 +525,25 @@ class PHClient:
         if not token:
             raise AuthError(f"No token provided for {ph_code}")
 
-        attempt = 0
         free_retries = 0
 
-        while attempt < self._max_retries:
+        while free_retries <= self._MAX_FREE_RETRIES:
             # Check for periodic direct IP retry (30-min window)
             if self._proxy_strategy.should_retry_direct():
                 self._proxy_strategy.start_direct_probe()
 
-            # Abort immediately if IP is burned
-            if self.is_ip_burned:
-                raise RateLimitError(
-                    f"IP burned ({self._consecutive_403s} consecutive 403s) — aborting {ph_code}"
-                )
-
             client = self._get_client()
+            route = self._route_label
 
             async with self._semaphore:
                 await self._wait_for_cooldown()
                 await self._maybe_cooldown_pause()
                 await asyncio.sleep(self._api_delay)
                 self._request_count += 1
+                logger.info(
+                    "PH API POST %s via %s (req #%d)",
+                    ph_code, route, self._request_count,
+                )
                 try:
                     resp = await client.post(
                         f"{BackfillConfig.ph_base_url()}/api/price/{ph_code}",
@@ -591,6 +564,7 @@ class PHClient:
                         action = self._proxy_strategy.on_request_403()
 
                         if action == "switched":
+                            # Hit burn threshold → switched to proxy, retry
                             self._consecutive_403s = 0
                             self._html_delay = self._base_html_delay
                             self._api_delay = self._base_api_delay
@@ -599,47 +573,24 @@ class PHClient:
                             continue
 
                         if action in ("probe_failed", "proxy_retry", "probe_direct"):
+                            # Free retry: proxy rotation or direct probe
                             free_retries += 1
-                            if free_retries > self._MAX_FREE_RETRIES:
-                                raise RateLimitError(
-                                    f"Max proxy retries ({free_retries}) for {ph_code}"
-                                ) from e
                             continue
 
-                        # "normal" — direct mode 403 (no proxy configured)
-                        self._on_rate_limit()
-                        if self.is_ip_burned:
-                            raise RateLimitError(
-                                f"IP burned ({self._consecutive_403s} consecutive 403s) "
-                                f"— aborting {ph_code}"
-                            ) from e
-                        attempt += 1
-                        if attempt < self._max_retries:
-                            wait = attempt * 15
-                            logger.warning(
-                                "PH API 403 for %s, retry %d/%d in %ds "
-                                "(delay=%.1fs, mode=%s)",
-                                ph_code, attempt, self._max_retries, wait,
-                                self._api_delay, self._proxy_strategy.mode,
-                            )
-                            await asyncio.sleep(wait)
-                            continue
-                        # All retries exhausted
-                        cooldown = min(60 * self._consecutive_403s, 300)
-                        self._cooldown_until = time.monotonic() + cooldown
+                        # "skip" or "normal" — don't retry, skip product
+                        self._error_count += 1
                         raise RateLimitError(
-                            f"PH API rate limited after {self._max_retries} retries "
-                            f"(cooldown {cooldown}s)"
+                            f"PH API 403 for {ph_code} — skipping "
+                            f"(mode={self._proxy_strategy.mode})"
                         ) from e
                     self._error_count += 1
                     raise APIError(f"PH API error {status}") from e
 
             # Success
-            route = self._route_label
             self._proxy_strategy.on_request_success()
             self._on_success()
-            logger.debug(
-                "PH API %s via %s (req #%d)",
+            logger.info(
+                "PH API %s OK via %s (req #%d)",
                 ph_code, route, self._request_count,
             )
             body = resp.json()
@@ -652,8 +603,8 @@ class PHClient:
 
             return self._parse_api_response(body)
 
-        # Should not reach here
-        raise APIError(f"PH API failed for {ph_code} after {self._max_retries} retries")
+        # Exhausted proxy free retries
+        raise RateLimitError(f"Max proxy retries ({free_retries}) for {ph_code}")
 
     @staticmethod
     def _parse_api_response(body: dict) -> dict:

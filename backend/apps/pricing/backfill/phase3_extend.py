@@ -453,11 +453,11 @@ async def extend_with_pricehistory(
             # Process in waves for data safety
             for wave_start in range(0, total, _WAVE_SIZE):
                 if _stop_requested:
-                    burned = " (IP burned)" if client.is_ip_burned else ""
+                    proxy_info = f" (proxy: {client.stats.get('proxy', {})})" if client._proxy_strategy.enabled else ""
                     logger.warning(
                         "Phase 3: stopping early due to rate limiting%s "
                         "(wave %d/%d, %d processed so far)",
-                        burned,
+                        proxy_info,
                         wave_start // _WAVE_SIZE + 1,
                         (total + _WAVE_SIZE - 1) // _WAVE_SIZE,
                         _done_count,
