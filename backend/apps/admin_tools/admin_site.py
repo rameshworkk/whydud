@@ -617,11 +617,30 @@ class WhydudAdminSite(AdminSite):
         return resolved, None
 
     @staticmethod
+    def _purge_queue(queue_name, celery_app):
+        """Purge stale tasks from a queue before dispatching new ones."""
+        try:
+            with celery_app.connection_or_acquire() as conn:
+                channel = conn.default_channel
+                from kombu import Queue as KombuQueue
+                q = KombuQueue(queue_name, channel=channel)
+                purged = q.purge()
+                if purged:
+                    import logging
+                    logging.getLogger(__name__).info(
+                        "Purged %d stale task(s) from queue %s", purged, queue_name
+                    )
+                return purged
+        except Exception:
+            return 0
+
+    @staticmethod
     def _dispatch_to_nodes(task_func, kwargs, action_prefix, nodes_map, celery_app):
         """Dispatch task to specific nodes via temporary queues. Returns list of (node, task_id)."""
         dispatched = []
         for prefix, full_name in nodes_map.items():
             queue_name = f"{action_prefix}-{prefix}"
+            WhydudAdminSite._purge_queue(queue_name, celery_app)
             celery_app.control.add_consumer(queue_name, destination=[full_name])
             r = task_func.apply_async(kwargs=kwargs, queue=queue_name)
             dispatched.append((prefix, r.id[:8]))
@@ -707,6 +726,7 @@ class WhydudAdminSite(AdminSite):
                 if nodes_map:
                     for prefix, full_name in nodes_map.items():
                         queue_name = f"bh-fill-{prefix}"
+                        WhydudAdminSite._purge_queue(queue_name, celery_app)
                         celery_app.control.add_consumer(queue_name, destination=[full_name])
                         for _ in range(workers):
                             r = run_phase2_buyhatke.apply_async(kwargs=task_kwargs, queue=queue_name)
@@ -754,6 +774,7 @@ class WhydudAdminSite(AdminSite):
                 if nodes_map:
                     for prefix, full_name in nodes_map.items():
                         queue_name = f"ph-extend-{prefix}"
+                        WhydudAdminSite._purge_queue(queue_name, celery_app)
                         celery_app.control.add_consumer(queue_name, destination=[full_name])
                         for _ in range(workers):
                             r = run_phase3_extend.apply_async(kwargs=task_kwargs, queue=queue_name)
@@ -805,6 +826,7 @@ class WhydudAdminSite(AdminSite):
                     task_ids = []
                     for prefix, full_name in nodes_map.items():
                         queue_name = f"enrich-{prefix}"
+                        WhydudAdminSite._purge_queue(queue_name, celery_app)
                         celery_app.control.add_consumer(queue_name, destination=[full_name])
                         r = celery_app.send_task(
                             "apps.pricing.backfill.enrichment.enrich_batch",

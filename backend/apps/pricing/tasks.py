@@ -268,12 +268,17 @@ def run_phase3_extend(
     proxy_mode: "auto" (default), "proxy" (always proxy), "direct" (no proxy).
     """
     import asyncio
+    import secrets
 
     from apps.pricing.backfill.phase3_extend import extend_with_pricehistory
+
+    # Generate a stable tag for this task so all rounds + waves share the same ID
+    worker_tag = self.request.id[:6] if self.request.id else secrets.token_hex(3)
 
     all_stats = {
         "total": 0, "extended": 0, "injected": 0, "token_failed": 0,
         "api_failed": 0, "rate_limited": 0, "points": 0, "rounds": 0,
+        "worker_tag": worker_tag,
     }
 
     while True:
@@ -285,6 +290,7 @@ def run_phase3_extend(
                 category_names=category_names,
                 include_discovered=include_discovered,
                 proxy_mode=proxy_mode,
+                worker_tag=worker_tag,
             )
         )
         all_stats["rounds"] += 1
@@ -294,15 +300,15 @@ def run_phase3_extend(
         # Only stop repeat if the worker explicitly requested stop
         # (IP burned without proxy). Minor rate limiting with proxy is normal.
         if result.get("stop_requested", False):
-            logger.warning("Phase 3: stopping repeat — IP burned / stop requested "
-                           "(%d rate-limited items)", result.get("rate_limited", 0))
+            logger.warning("Phase 3 [W-%s]: stopping repeat — IP burned / stop requested "
+                           "(%d rate-limited items)", worker_tag, result.get("rate_limited", 0))
             break
 
         if not repeat or result.get("total", 0) == 0:
             break
 
-        logger.info("Phase 3 repeat: round %d done (%d extended so far), claiming next batch...",
-                     all_stats["rounds"], all_stats["extended"])
+        logger.info("Phase 3 [W-%s] repeat: round %d done (%d extended so far), claiming next batch...",
+                     worker_tag, all_stats["rounds"], all_stats["extended"])
 
     return all_stats
 

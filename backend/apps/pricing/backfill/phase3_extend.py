@@ -298,6 +298,7 @@ async def extend_with_pricehistory(
     category_names: list[str] | None = None,
     include_discovered: bool = False,
     proxy_mode: str = "auto",
+    worker_tag: str = "",
 ) -> dict:
     """Phase 3: Extend products with PH deep history.
 
@@ -322,6 +323,12 @@ async def extend_with_pricehistory(
     """
     limit = limit or BackfillConfig.phase3_limit()
 
+    # Generate a short tag to identify this worker in logs
+    if not worker_tag:
+        import secrets
+        worker_tag = secrets.token_hex(3)  # e.g. "a1b2c3"
+    tag = f"[W-{worker_tag}]"
+
     # Atomically claim a batch — other workers will skip these rows
     claimed_ids, original_status_map = await sync_to_async(_claim_batch)(
         limit, marketplace_slug, category_names, include_discovered
@@ -331,7 +338,7 @@ async def extend_with_pricehistory(
         msg = "no products to extend (or all claimed by other workers)"
         if include_discovered:
             msg = "no BH_FILLED or DISCOVERED products to extend"
-        logger.info("Phase 3: %s", msg)
+        logger.info("Phase 3 %s: %s", tag, msg)
         return {
             "total": 0, "extended": 0, "injected": 0,
             "token_failed": 0, "api_failed": 0, "rate_limited": 0,
@@ -343,8 +350,8 @@ async def extend_with_pricehistory(
     total = len(batch)
 
     logger.info(
-        "Phase 3: PH deep extend for %d products (claimed from pool%s)",
-        total, ", includes discovered" if include_discovered else "",
+        "Phase 3 %s: PH deep extend for %d products (claimed from pool%s)",
+        tag, total, ", includes discovered" if include_discovered else "",
     )
     stats = {
         "total": total, "extended": 0, "injected": 0,
@@ -445,9 +452,9 @@ async def extend_with_pricehistory(
         _done_count += 1
         if _done_count % 100 == 0:
             logger.info(
-                "  Phase 3: %d/%d — %d extended (%s points), %d injected, "
+                "  Phase 3 %s: %d/%d — %d extended (%s points), %d injected, "
                 "%d token_failed, %d api_failed, %d rate_limited",
-                _done_count, total,
+                tag, _done_count, total,
                 stats["extended"], f"{stats['points']:,}",
                 stats["injected"], stats["token_failed"],
                 stats["api_failed"], stats["rate_limited"],
@@ -460,9 +467,9 @@ async def extend_with_pricehistory(
                 if _stop_requested:
                     proxy_info = f" (proxy: {client.stats.get('proxy', {})})" if client._proxy_strategy.enabled else ""
                     logger.warning(
-                        "Phase 3: stopping early due to rate limiting%s "
+                        "Phase 3 %s: stopping early due to rate limiting%s "
                         "(wave %d/%d, %d processed so far)",
-                        proxy_info,
+                        tag, proxy_info,
                         wave_start // _WAVE_SIZE + 1,
                         (total + _WAVE_SIZE - 1) // _WAVE_SIZE,
                         _done_count,
@@ -484,15 +491,15 @@ async def extend_with_pricehistory(
                 wave_num = wave_start // _WAVE_SIZE + 1
                 total_waves = (total + _WAVE_SIZE - 1) // _WAVE_SIZE
                 logger.info(
-                    "  Phase 3: wave %d/%d complete (%d/%d processed)",
-                    wave_num, total_waves, _done_count, total,
+                    "  Phase 3 %s: wave %d/%d complete (%d/%d processed)",
+                    tag, wave_num, total_waves, _done_count, total,
                 )
 
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.warning(
-            "Phase 3: interrupted after %d/%d products. "
+            "Phase 3 %s: interrupted after %d/%d products. "
             "All completed products are saved.",
-            _done_count, total,
+            tag, _done_count, total,
         )
     finally:
         # Release any items we claimed but didn't process (e.g. crash/interrupt)
@@ -503,5 +510,6 @@ async def extend_with_pricehistory(
             stats["released_back"] = released
 
     stats["stop_requested"] = _stop_requested
-    logger.info("Phase 3 complete: %s", stats)
+    stats["worker_tag"] = worker_tag
+    logger.info("Phase 3 %s complete: %s", tag, stats)
     return stats

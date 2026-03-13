@@ -4,7 +4,7 @@ import os
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import task_failure, task_retry, task_success
+from celery.signals import setup_logging, task_failure, task_retry, task_success
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whydud.settings.dev")
 
@@ -32,6 +32,40 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 
 # Autodiscover tasks in all installed apps.
 app.autodiscover_tasks()
+
+
+# ---------------------------------------------------------------------------
+# Colorized logging for Celery workers
+# ---------------------------------------------------------------------------
+
+@setup_logging.connect
+def _setup_celery_logging(loglevel=None, logfile=None, format=None, colorize=None, **kwargs):
+    """Install colorized formatter on Celery worker loggers.
+
+    By connecting to ``setup_logging``, we prevent Celery from hijacking
+    the root logger and instead install our own colored formatter.
+    """
+    from apps.pricing.backfill.log_colors import BackfillColorFormatter
+
+    # Celery default format but with our color processor
+    fmt = "[%(asctime)s: %(levelname)s/%(processName)s] %(message)s"
+    formatter = BackfillColorFormatter(fmt)
+
+    # Configure root logger
+    root = logging.getLogger()
+    root.setLevel(loglevel or logging.INFO)
+
+    # File handler (no colors)
+    if logfile:
+        file_handler = logging.FileHandler(logfile)
+        file_handler.setFormatter(logging.Formatter(fmt))
+        root.addHandler(file_handler)
+
+    # Console handler (with colors)
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    root.addHandler(console)
+
 
 # Queue definitions
 app.conf.task_queues = {

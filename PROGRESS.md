@@ -5135,3 +5135,20 @@ All admin display methods that format prices/amounts now divide by 100 before di
 | `backend/apps/pricing/backfill/proxy_strategy.py` | Added `proxy_mode` param: "auto" (default behavior), "proxy" (start in proxy mode), "direct" (disable proxy entirely) |
 | `backend/apps/admin_tools/admin_site.py` | All three dispatch actions (discover, bh-fill, ph-extend) read `proxy_mode` from POST and pass to task kwargs. Status messages include proxy mode when non-auto |
 | `backend/templates/admin/backfill_console.html` | Added Proxy dropdown (Auto/Proxy/Direct) to all three action cards (Discovery, BH-Fill, PH-Extend) |
+
+### Queue Purge + Worker Tags + Colorized Logs (2026-03-12)
+
+**Problems solved:**
+1. Stale tasks from previous dispatches persisted in Celery queues, executing with outdated parameters (e.g., old limit=5000 when new dispatch sent limit=100)
+2. When 2 workers run on the same node, logs from `ForkPoolWorker-1` and `ForkPoolWorker-2` were indistinguishable — no way to know which worker processed which wave
+3. Log output across 15+ files (phases, proxy, HTTP clients) was a wall of identical-looking text, making it hard to spot errors, successes, and proxy state changes
+
+**Fixes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/admin_tools/admin_site.py` | Added `_purge_queue()` static method using kombu to clear stale tasks before each dispatch (discover, bh-fill, ph-extend, enrich). Prevents old tasks from executing with outdated parameters |
+| `backend/apps/pricing/tasks.py` | `run_phase3_extend` generates `worker_tag = self.request.id[:6]` from Celery task ID, passes to `extend_with_pricehistory()`. All repeat-mode log messages include `[W-%s]` tag |
+| `backend/apps/pricing/backfill/phase3_extend.py` | Added `worker_tag` parameter. All log messages prefixed with `[W-xxxxxx]` tag for worker identification. Tag included in returned stats dict |
+| `backend/apps/pricing/backfill/log_colors.py` | **New file.** ANSI color formatter with 30+ regex-based colorization rules. Phase labels get unique colors (cyan/blue/magenta/yellow), worker tags bright yellow, HTTP 200 green, 403/429 red, proxy states colored, success/failure/warning words auto-highlighted |
+| `backend/whydud/celery.py` | Added `@setup_logging.connect` handler that installs `BackfillColorFormatter` on all Celery worker loggers. Console gets colored output, file handlers get plain text |
