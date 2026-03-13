@@ -124,7 +124,8 @@ def _load_batch_and_listings(claimed_ids: list[str]) -> tuple[list, dict]:
     """Load claimed BackfillProducts and pre-fetch matching listings."""
     from apps.products.models import ProductListing
 
-    batch = list(BackfillProduct.objects.filter(id__in=claimed_ids))
+    db = _write_db()
+    batch = list(BackfillProduct.objects.using(db).filter(id__in=claimed_ids))
 
     listing_map: dict[tuple[str, str], dict] = {}
     if batch:
@@ -132,7 +133,7 @@ def _load_batch_and_listings(claimed_ids: list[str]) -> tuple[list, dict]:
             (bp.marketplace_slug, bp.external_id)
             for bp in batch if bp.external_id
         ]
-        for listing in ProductListing.objects.filter(
+        for listing in ProductListing.objects.using(db).filter(
             marketplace__slug__in={ms for ms, _ in external_pairs},
             external_id__in={eid for _, eid in external_pairs},
         ).select_related("marketplace"):
@@ -149,8 +150,9 @@ def _load_batch_and_listings(claimed_ids: list[str]) -> tuple[list, dict]:
 def _get_listing_by_id(listing_id):
     """Synchronous ORM query for a single listing."""
     from apps.products.models import ProductListing
+    db = _write_db()
     try:
-        listing = ProductListing.objects.select_related("marketplace").get(id=listing_id)
+        listing = ProductListing.objects.using(db).select_related("marketplace").get(id=listing_id)
         return {
             "listing_id": str(listing.id),
             "product_id": str(listing.product_id),

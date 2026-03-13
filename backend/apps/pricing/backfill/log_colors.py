@@ -26,6 +26,7 @@ class C:
     BLUE = "\033[34m"
     MAGENTA = "\033[35m"
     CYAN = "\033[36m"
+    WHITE = "\033[37m"
 
     # Bright
     B_RED = "\033[91m"
@@ -35,10 +36,6 @@ class C:
     B_MAGENTA = "\033[95m"
     B_CYAN = "\033[96m"
     B_WHITE = "\033[97m"
-
-    # Backgrounds (subtle)
-    BG_RED = "\033[41m"
-    BG_GREEN = "\033[42m"
 
 
 # ── Pattern rules ────────────────────────────────────────────────
@@ -53,13 +50,12 @@ _RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(Phase\s*3)"), f"{C.BOLD}{C.B_MAGENTA}\\1{C.RESET}"),
     (re.compile(r"(Phase\s*4)"), f"{C.BOLD}{C.YELLOW}\\1{C.RESET}"),
 
-    # Worker tags [W-xxxxxx] — bright yellow, very visible
+    # Worker tags [W-xxxxxx] — bold yellow
     (re.compile(r"(\[W-[a-f0-9]+\])"), f"{C.BOLD}{C.B_YELLOW}\\1{C.RESET}"),
 
     # HTTP status codes
-    (re.compile(r'\b(200 OK|"HTTP/1\.1 200 OK")'), f"{C.GREEN}\\1{C.RESET}"),
-    (re.compile(r"\b(403 Forbidden|403|429)\b"), f"{C.B_RED}\\1{C.RESET}"),
-    (re.compile(r'"HTTP/1\.1 (403 Forbidden)"'), f'"HTTP/1.1 {C.B_RED}\\1{C.RESET}"'),
+    (re.compile(r"\b(200 OK)\b"), f"{C.GREEN}\\1{C.RESET}"),
+    (re.compile(r"\b(403|429|500|502|503)\b"), f"{C.B_RED}\\1{C.RESET}"),
 
     # Proxy mode indicators
     (re.compile(r"(via proxy)"), f"{C.CYAN}\\1{C.RESET}"),
@@ -105,7 +101,7 @@ _RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\b(BH API|BH HTTP)\b"), f"{C.B_BLUE}\\1{C.RESET}"),
     (re.compile(r"\b(BH burst pause|BH cooldown)\b"), f"{C.YELLOW}\\1{C.RESET}"),
 
-    # Request counter (req #NNN)
+    # Request counter (req #NNN) — dim
     (re.compile(r"(\(req #\d+\))"), f"{C.DIM}\\1{C.RESET}"),
 
     # Claimed/released counts
@@ -127,16 +123,32 @@ def colorize(message: str) -> str:
     return message
 
 
+# ── Prefix pattern to split timestamp/level from message ─────────
+# Matches: [2026-03-13 06:58:10,598: INFO/ForkPoolWorker-1]
+_PREFIX_RE = re.compile(
+    r"^(\[[\d\-]+\s[\d:,]+:\s)"   # [date time:
+    r"(\w+)"                        # level
+    r"(/\w[\w\-]*)?"               # /processName (optional)
+    r"(\]\s?)"                      # ] + optional space
+)
+
+
 # ── Custom Formatter ─────────────────────────────────────────────
 
 class BackfillColorFormatter(logging.Formatter):
     """Logging formatter that adds ANSI colors to backfill pipeline messages.
 
-    Also colors the log level itself:
-      - DEBUG: dim
-      - INFO: default
-      - WARNING: yellow
-      - ERROR/CRITICAL: red
+    Produces clean, readable output:
+      - Timestamp + process: dimmed (reduces visual noise)
+      - Level name: colored by severity
+      - Message body: keyword-colorized via pattern rules
+
+    Severity colors:
+      DEBUG:    dim
+      INFO:     white (default)
+      WARNING:  yellow
+      ERROR:    red
+      CRITICAL: bold red
     """
 
     LEVEL_COLORS = {
@@ -147,14 +159,38 @@ class BackfillColorFormatter(logging.Formatter):
         logging.CRITICAL: f"{C.BOLD}{C.B_RED}",
     }
 
+    LEVEL_SHORT = {
+        logging.DEBUG: "DBG",
+        logging.INFO: "INF",
+        logging.WARNING: "WRN",
+        logging.ERROR: "ERR",
+        logging.CRITICAL: "CRT",
+    }
+
     def format(self, record: logging.LogRecord) -> str:
-        # Format the base message
         formatted = super().format(record)
 
-        # Apply pattern-based colorization to the message portion
+        # Split into prefix (timestamp/level/process) and message body
+        m = _PREFIX_RE.match(formatted)
+        if m:
+            ts = m.group(1)        # [2026-03-13 06:58:10,598:
+            level = m.group(2)     # INFO
+            proc = m.group(3) or ""  # /ForkPoolWorker-1
+            bracket = m.group(4)   # ]
+            body = formatted[m.end():]
+
+            # Dim the timestamp + process, color the level
+            level_color = self.LEVEL_COLORS.get(record.levelno, "")
+            colored_level = f"{level_color}{level}{C.RESET}" if level_color else level
+
+            # Colorize the message body
+            body = colorize(body)
+
+            return f"{C.DIM}{ts}{C.RESET}{colored_level}{C.DIM}{proc}{bracket}{C.RESET}{body}"
+
+        # Fallback: colorize everything
         formatted = colorize(formatted)
 
-        # Color the level name
         level_color = self.LEVEL_COLORS.get(record.levelno, "")
         if level_color:
             formatted = formatted.replace(

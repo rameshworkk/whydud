@@ -5152,3 +5152,44 @@ All admin display methods that format prices/amounts now divide by 100 before di
 | `backend/apps/pricing/backfill/phase3_extend.py` | Added `worker_tag` parameter. All log messages prefixed with `[W-xxxxxx]` tag for worker identification. Tag included in returned stats dict |
 | `backend/apps/pricing/backfill/log_colors.py` | **New file.** ANSI color formatter with 30+ regex-based colorization rules. Phase labels get unique colors (cyan/blue/magenta/yellow), worker tags bright yellow, HTTP 200 green, 403/429 red, proxy states colored, success/failure/warning words auto-highlighted |
 | `backend/whydud/celery.py` | Added `@setup_logging.connect` handler that installs `BackfillColorFormatter` on all Celery worker loggers. Console gets colored output, file handlers get plain text |
+
+### Launch Preparation Tooling + Enrichment Throughput Boost (2026-03-13)
+
+**Problem:** 773K products discovered but only 184 fully enriched. Enrichment batch runs 100 products every 15 min (= 400/hr = ~9,600/day). At this rate, enriching even the top 5K products would take 12+ hours. No tooling to diagnose failures, prioritize products, or monitor launch readiness.
+
+**Solution:** Created `launch_prep` management command with 6 subcommands + boosted enrichment throughput 15x.
+
+**Changes:**
+
+| File | Change |
+|---|---|
+| `backend/apps/pricing/management/commands/launch_prep.py` | **New.** 6 subcommands: `status` (launch readiness dashboard with product/pipeline/Meilisearch counts + recommendations), `prioritize` (populate derived fields + assign P1/P2/P3 + cap to top N + assign review targets), `analyze-failed` (group errors by pattern/marketplace/category with counts), `reset-retryable` (reset pipeline/enrichment/review failures with dry-run), `boost-enrich` (dispatch enrichment in configurable rounds×batch with optional priority filter), `sync-search` (full Meilisearch sync with progress reporting) |
+| `backend/whydud/celery.py` | Enrichment batch: `batch_size` 100→500, schedule `*/15`→`*/5` (= 6,000/hr throughput, 15x improvement) |
+
+**Usage:**
+```bash
+# 1. Check launch readiness
+python manage.py launch_prep status
+
+# 2. Prioritize top 5K products
+python manage.py launch_prep prioritize --top 5000
+
+# 3. Analyze what's failing
+python manage.py launch_prep analyze-failed
+
+# 4. Reset retryable failures
+python manage.py launch_prep reset-retryable
+
+# 5. Boost enrichment (500/round × 20 rounds = 10K tasks)
+python manage.py launch_prep boost-enrich --batch 500 --rounds 20
+
+# 6. Sync all products to Meilisearch
+python manage.py launch_prep sync-search
+```
+
+**Key findings from analysis:**
+- Frontend already handles lightweight products well: info banner, hidden empty sections, "Price tracked" badge on cards
+- Meilisearch already indexes lightweight products with `is_lightweight:asc` ranking rule (enriched products rank higher)
+- Product detail view triggers on-demand enrichment when users visit lightweight pages
+- Product list API serves all active products (lightweight + enriched) without filtering
+- The 55K+ "Done" products with price history are immediately usable for launch

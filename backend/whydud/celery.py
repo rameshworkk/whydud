@@ -44,15 +44,18 @@ def _setup_celery_logging(loglevel=None, logfile=None, format=None, colorize=Non
 
     By connecting to ``setup_logging``, we prevent Celery from hijacking
     the root logger and instead install our own colored formatter.
+
+    Also clears Django's structlog JSON handler (from LOGGING config) so
+    each event only appears once — as a clean, colored line.
     """
     from apps.pricing.backfill.log_colors import BackfillColorFormatter
 
-    # Celery default format but with our color processor
     fmt = "[%(asctime)s: %(levelname)s/%(processName)s] %(message)s"
     formatter = BackfillColorFormatter(fmt)
 
-    # Configure root logger
+    # Clear ALL existing handlers (removes Django's structlog JSON handler)
     root = logging.getLogger()
+    root.handlers.clear()
     root.setLevel(loglevel or logging.INFO)
 
     # File handler (no colors)
@@ -65,6 +68,25 @@ def _setup_celery_logging(loglevel=None, logfile=None, format=None, colorize=Non
     console = logging.StreamHandler()
     console.setFormatter(formatter)
     root.addHandler(console)
+
+    # Suppress noisy loggers — ph_client already logs each request,
+    # so httpx/httpcore duplicates are pure noise
+    for name in ("httpx", "httpcore", "httpcore.http11", "httpcore.connection"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+    # Celery internals — only show warnings+
+    logging.getLogger("celery.worker.strategy").setLevel(logging.WARNING)
+    logging.getLogger("celery.app.trace").setLevel(logging.WARNING)
+
+    # Clear stale structlog JSON handlers from named loggers set up by
+    # Django's LOGGING dict (applied before Celery starts).
+    # These loggers have propagate=False + their own StreamHandler with
+    # structlog JSONRenderer — replace with our colored formatter.
+    for name in ("django", "django_structlog"):
+        lg = logging.getLogger(name)
+        lg.handlers.clear()
+        lg.addHandler(console)
+        lg.propagate = False
 
 
 # Queue definitions
@@ -204,8 +226,8 @@ app.conf.beat_schedule = {
     # --- Backfill enrichment ---
     "backfill-enrich-batch": {
         "task": "apps.pricing.backfill.enrichment.enrich_batch",
-        "schedule": crontab(minute="*/15"),
-        "kwargs": {"batch_size": 100},
+        "schedule": crontab(minute="*/5"),
+        "kwargs": {"batch_size": 500},
         "options": {"queue": "scraping"},
     },
     "backfill-cleanup-stale": {
