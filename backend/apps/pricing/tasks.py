@@ -173,7 +173,7 @@ def backfill_existing_listings(
     return asyncio.run(_run(marketplace_slug=marketplace_slug, limit=limit))
 
 
-@shared_task(queue="scraping", bind=True, max_retries=1, soft_time_limit=None, time_limit=None)
+@shared_task(queue="scraping", bind=True, max_retries=1, soft_time_limit=None, time_limit=None, acks_late=True, reject_on_worker_lost=True)
 def run_phase1_discover(
     self,
     sitemap_start: int = 1,
@@ -198,7 +198,7 @@ def run_phase1_discover(
     )
 
 
-@shared_task(queue="scraping", bind=True, max_retries=1, soft_time_limit=None, time_limit=None)
+@shared_task(queue="scraping", bind=True, max_retries=1, soft_time_limit=None, time_limit=None, acks_late=True, reject_on_worker_lost=True)
 def run_phase2_buyhatke(
     self,
     batch_size: int = 5000,
@@ -246,7 +246,7 @@ def run_phase2_buyhatke(
     return all_stats
 
 
-@shared_task(queue="scraping", bind=True, max_retries=1, soft_time_limit=None, time_limit=None)
+@shared_task(queue="scraping", bind=True, max_retries=1, soft_time_limit=None, time_limit=None, acks_late=True, reject_on_worker_lost=True)
 def run_phase3_extend(
     self,
     limit: int = 5000,

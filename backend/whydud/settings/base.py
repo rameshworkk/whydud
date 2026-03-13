@@ -165,6 +165,7 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Don't hoard tasks — critical for long-running backfill jobs
 
 # No global time limits — individual tasks set their own if needed
 

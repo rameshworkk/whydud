@@ -5193,3 +5193,21 @@ python manage.py launch_prep sync-search
 - Product detail view triggers on-demand enrichment when users visit lightweight pages
 - Product list API serves all active products (lightweight + enriched) without filtering
 - The 55K+ "Done" products with price history are immediately usable for launch
+
+---
+
+### 2026-03-13: Fix Phase 1 Discover OOM + Phase 2/3 Stale DB Connection
+
+**Problem 1 — Phase 1 OOM:** `discover` with large sitemap ranges (e.g. 182K products) caused Celery worker to be OOM-killed (SIGKILL signal 9). The code created 182K coroutines in a single `asyncio.gather()` and held all product dicts in memory simultaneously.
+
+**Fix (phase1_discover.py):**
+- `_get_existing_codes`: Chunked `IN` query into batches of 5K (was sending 182K ph_codes in one SQL)
+- HTML fetching: Process in chunks of 5K products at a time, bulk-create per chunk, free memory between chunks
+- `del all_products, existing_codes` after filtering to free memory early
+
+**Problem 2 — Phase 2/3 Stale Connections:** `OperationalError('the connection is closed')` after long async HTTP phases. PostgreSQL connections time out while the task spends minutes doing HTTP requests, then the sync DB save functions fail.
+
+**Fix (phase2_buyhatke.py, phase3_extend.py):**
+- Added `close_old_connections()` at the start of every sync DB function called via `sync_to_async` after long async gaps
+- Affected functions: all `_save_bp_*`, `_release_unclaimed`, `_release_bp_rate_limited`, `_get_listing_by_id`
+- `close_old_connections()` drops stale connections; Django opens fresh ones on next query
