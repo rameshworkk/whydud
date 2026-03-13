@@ -30,12 +30,17 @@ logger = logging.getLogger(__name__)
 
 
 def _get_existing_codes(ph_codes: list[str]) -> set[str]:
-    """Synchronous ORM query for existing ph_codes."""
-    return set(
-        BackfillProduct.objects.filter(
-            ph_code__in=ph_codes
-        ).values_list("ph_code", flat=True)
-    )
+    """Synchronous ORM query for existing ph_codes (chunked to avoid huge IN clauses)."""
+    existing = set()
+    chunk_size = 5000
+    for i in range(0, len(ph_codes), chunk_size):
+        chunk = ph_codes[i : i + chunk_size]
+        existing.update(
+            BackfillProduct.objects.filter(
+                ph_code__in=chunk
+            ).values_list("ph_code", flat=True)
+        )
+    return existing
 
 
 def _bulk_create_backfill_products(records: list[dict]) -> int:
@@ -146,17 +151,19 @@ async def discover_from_sitemaps(
         )
         new_products = [p for p in all_products if p["ph_code"] not in existing_codes]
         stats["skipped_dupe"] = len(all_products) - len(new_products)
+        del all_products, existing_codes  # free memory
         logger.info(
             "  New products: %d (skipping %d existing)",
             len(new_products),
             stats["skipped_dupe"],
         )
 
-        # Step 5: Fetch HTML concurrently for each new product → extract ASIN/FSID
-        pending_records: list[dict] = []
+        # Step 5: Fetch HTML + bulk-create in chunks to limit memory
+        CHUNK_SIZE = 5000  # process this many products at a time
+        total_products = len(new_products)
         _done_count = 0
 
-        async def _fetch_one(product):
+        async def _fetch_one(product) -> dict | None:
             nonlocal _done_count
             code = product["ph_code"]
             try:
@@ -168,42 +175,57 @@ async def discover_from_sitemaps(
 
                 if not external_id or not marketplace_slug:
                     stats["failed"] += 1
-                else:
-                    stats["asin_extracted"] += 1
-                    pending_records.append({
-                        "ph_code": code,
-                        "ph_url": product.get("ph_url", ""),
-                        "marketplace_slug": marketplace_slug,
-                        "external_id": external_id,
-                        "title": meta.get("title", ""),
-                        "brand_name": meta.get("brand_name", ""),
-                        "image_url": meta.get("image_url", ""),
-                        "current_price": meta.get("current_price"),
-                    })
+                    return None
+
+                stats["asin_extracted"] += 1
+                return {
+                    "ph_code": code,
+                    "ph_url": product.get("ph_url", ""),
+                    "marketplace_slug": marketplace_slug,
+                    "external_id": external_id,
+                    "title": meta.get("title", ""),
+                    "brand_name": meta.get("brand_name", ""),
+                    "image_url": meta.get("image_url", ""),
+                    "current_price": meta.get("current_price"),
+                }
 
             except Exception as e:
                 stats["failed"] += 1
                 logger.debug("  %s: %s", code, e)
+                return None
+            finally:
+                _done_count += 1
+                if _done_count % 200 == 0:
+                    logger.info(
+                        "  Progress: %d/%d — %d ASINs extracted, %d failed",
+                        _done_count, total_products,
+                        stats["asin_extracted"], stats["failed"],
+                    )
 
-            _done_count += 1
-            if _done_count % 200 == 0:
-                logger.info(
-                    "  Progress: %d/%d — %d ASINs extracted, %d failed",
-                    _done_count, len(new_products),
-                    stats["asin_extracted"], stats["failed"],
-                )
+        total_created = 0
+        for chunk_start in range(0, total_products, CHUNK_SIZE):
+            chunk = new_products[chunk_start : chunk_start + CHUNK_SIZE]
+            logger.info(
+                "  Chunk %d–%d of %d",
+                chunk_start + 1,
+                min(chunk_start + CHUNK_SIZE, total_products),
+                total_products,
+            )
 
-        # Fire all HTML fetches concurrently — PHClient semaphore limits in-flight
-        await asyncio.gather(*[_fetch_one(p) for p in new_products])
+            # Fetch HTML for this chunk — PHClient semaphore limits in-flight
+            results = await asyncio.gather(*[_fetch_one(p) for p in chunk])
+            pending_records = [r for r in results if r is not None]
 
-        # Step 6: Bulk-create records in batches of 1000
-        if pending_records:
-            total_created = 0
-            for i in range(0, len(pending_records), 1000):
-                batch = pending_records[i : i + 1000]
-                count = await sync_to_async(_bulk_create_backfill_products)(batch)
-                total_created += count
-            stats["created"] = total_created
+            # Bulk-create this chunk immediately, then free memory
+            if pending_records:
+                for i in range(0, len(pending_records), 1000):
+                    batch = pending_records[i : i + 1000]
+                    count = await sync_to_async(_bulk_create_backfill_products)(batch)
+                    total_created += count
+            del results, pending_records  # free memory before next chunk
+
+        stats["created"] = total_created
+        if total_created:
             logger.info("  Created %d BackfillProduct records", total_created)
 
     logger.info("Phase 1 complete: %s", stats)

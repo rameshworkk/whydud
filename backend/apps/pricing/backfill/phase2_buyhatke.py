@@ -25,7 +25,7 @@ import logging
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.db import transaction
+from django.db import close_old_connections, transaction
 
 from apps.pricing.backfill.bh_client import BHClient, BHRateLimited
 from apps.pricing.backfill.config import BackfillConfig
@@ -117,6 +117,7 @@ def _load_batch_and_listings(claimed_ids: list[str]) -> tuple[list, dict]:
 
 def _save_bp_filled(bp, result, listing_info):
     """Synchronous save for a successfully filled BackfillProduct."""
+    close_old_connections()
     bp.price_data_points = result.point_count
     if result.price_points:
         bp.history_from = result.price_points[0].time
@@ -150,12 +151,14 @@ def _save_bp_filled(bp, result, listing_info):
 
 def _save_bp_empty(bp):
     """Synchronous save for empty result."""
+    close_old_connections()
     bp.status = BackfillProduct.Status.BH_FILLED
     bp.save(update_fields=["status", "updated_at"])
 
 
 def _save_bp_failed(bp, error_msg):
     """Synchronous save for failed result."""
+    close_old_connections()
     bp.status = BackfillProduct.Status.FAILED
     bp.error_message = error_msg[:500]
     bp.retry_count += 1
@@ -164,6 +167,7 @@ def _save_bp_failed(bp, error_msg):
 
 def _release_bp_rate_limited(bp):
     """Release a rate-limited product back to DISCOVERED for another node to pick up."""
+    close_old_connections()
     db = _write_db()
     BackfillProduct.objects.using(db).filter(
         id=bp.id, status=BackfillProduct.Status.BH_FILLING
@@ -177,6 +181,7 @@ def _release_unclaimed(claimed_ids: list[str], processed_ids: set[str]) -> int:
     """
     unprocessed = set(claimed_ids) - processed_ids
     if unprocessed:
+        close_old_connections()
         db = _write_db()
         count = BackfillProduct.objects.using(db).filter(
             id__in=list(unprocessed), status=BackfillProduct.Status.BH_FILLING

@@ -35,7 +35,7 @@ import logging
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.db import transaction
+from django.db import close_old_connections, transaction
 from django.db.models import F, Q
 
 from apps.pricing.backfill.config import BackfillConfig
@@ -150,6 +150,7 @@ def _load_batch_and_listings(claimed_ids: list[str]) -> tuple[list, dict]:
 def _get_listing_by_id(listing_id):
     """Synchronous ORM query for a single listing."""
     from apps.products.models import ProductListing
+    close_old_connections()
     db = _write_db()
     try:
         listing = ProductListing.objects.using(db).select_related("marketplace").get(id=listing_id)
@@ -164,6 +165,7 @@ def _get_listing_by_id(listing_id):
 
 def _save_bp_extended(bp, result, listing_info):
     """Synchronous save for a successfully extended BackfillProduct."""
+    close_old_connections()
     price_points = result["price_points"]
     point_count = result.get("point_count", len(price_points))
 
@@ -212,6 +214,7 @@ def _save_bp_extended(bp, result, listing_info):
 
 def _save_bp_empty(bp):
     """Synchronous save for empty PH result."""
+    close_old_connections()
     bp.status = BackfillProduct.Status.PH_EXTENDED
     bp.save(update_fields=["status", "updated_at"])
 
@@ -222,6 +225,7 @@ def _save_bp_token_failed(bp, error_msg, revert_status: str | None = None):
     Reverts status to original (BH_FILLED or DISCOVERED) so the product
     can be retried.
     """
+    close_old_connections()
     bp.status = revert_status or BackfillProduct.Status.BH_FILLED
     bp.error_message = error_msg[:500]
     bp.retry_count += 1
@@ -233,6 +237,7 @@ def _save_bp_rate_limited(bp, error_msg, revert_status: str | None = None):
 
     Reverts to original status (BH_FILLED or DISCOVERED).
     """
+    close_old_connections()
     bp.status = revert_status or BackfillProduct.Status.BH_FILLED
     bp.error_message = error_msg[:500]
     bp.save(update_fields=["status", "error_message", "updated_at"])
@@ -240,6 +245,7 @@ def _save_bp_rate_limited(bp, error_msg, revert_status: str | None = None):
 
 def _save_bp_failed(bp, error_msg):
     """Synchronous save for API failure (non-rate-limit)."""
+    close_old_connections()
     bp.status = BackfillProduct.Status.FAILED
     bp.error_message = error_msg[:500]
     bp.retry_count += 1
@@ -263,6 +269,7 @@ def _release_unclaimed(
     if not unprocessed:
         return 0
 
+    close_old_connections()
     db = _write_db()
     total_released = 0
 
