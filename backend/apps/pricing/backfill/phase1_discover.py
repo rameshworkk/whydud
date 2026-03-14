@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 def _get_existing_codes(ph_codes: list[str]) -> set[str]:
     """Synchronous ORM query for existing ph_codes (chunked to avoid huge IN clauses)."""
+    from django.db import close_old_connections
+
+    close_old_connections()
     existing = set()
     chunk_size = 5000
     for i in range(0, len(ph_codes), chunk_size):
@@ -45,7 +48,11 @@ def _get_existing_codes(ph_codes: list[str]) -> set[str]:
 
 def _bulk_create_backfill_products(records: list[dict]) -> int:
     """Bulk-create BackfillProduct records. Returns count created."""
+    from django.db import close_old_connections
+
     from apps.pricing.backfill.prioritizer import infer_category_from_title
+
+    close_old_connections()
 
     objects = []
     for r in records:
