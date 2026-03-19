@@ -2,7 +2,12 @@
 # Uses Cloudflare Origin Certificate for Full (strict) SSL mode.
 # Mount cert + key into /etc/caddy/certs/ via Docker Compose.
 
-whydud.com, www.whydud.com {
+www.whydud.com {
+	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin-key.pem
+	redir https://whydud.com{uri} 301
+}
+
+whydud.com {
 	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin-key.pem
 
 	# Django backend: API + admin + webhooks

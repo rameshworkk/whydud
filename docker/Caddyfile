@@ -1,7 +1,11 @@
 # Whydud — Caddy reverse proxy config
 # Auto-SSL via Let's Encrypt
 
-whydud.com, www.whydud.com {
+www.whydud.com {
+    redir https://whydud.com{uri} 301
+}
+
+whydud.com {
     # Django backend: API + admin + webhooks + OAuth
     handle /api/* {
         reverse_proxy backend:8000
