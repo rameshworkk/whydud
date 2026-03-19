@@ -55,6 +55,7 @@
       </div>
       {% endif %}
 
+      <!--email_off-->
       <form method="post" action="{{ app_path }}">
         {% csrf_token %}
 
@@ -68,7 +69,7 @@
                         text-slate-700 placeholder-slate-300 bg-white
                         focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none
                         transition-colors"
-                 placeholder="admin@whydud.com"
+                 placeholder="Enter your email"
                  {% if form.username.value %}value="{{ form.username.value }}"{% endif %}>
         </div>
 
@@ -92,6 +93,7 @@
           {% translate "Log in" %}
         </button>
       </form>
+      <!--email_on-->
     </div>
 
     <p class="text-center text-[11px] text-slate-400 mt-6">
