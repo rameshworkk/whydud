@@ -499,6 +499,7 @@ class Command(BaseCommand):
 
     def _handle_assign_priorities(self, **options):
         from apps.pricing.backfill.prioritizer import (
+            apply_custom_priority_rules,
             assign_enrichment_priorities,
             assign_review_targets,
             populate_derived_fields,
@@ -516,6 +517,12 @@ class Command(BaseCommand):
         self.stdout.write(
             f"  P1 (Playwright): {result['p1']:,}  |  P2 (curl_cffi): {result['p2']:,}"
         )
+
+        self.stdout.write(self.style.MIGRATE_HEADING("Applying custom priority rules"))
+        custom_result = apply_custom_priority_rules()
+        for r in custom_result["rules"]:
+            self.stdout.write(f"  {r['rule']}: {r['updated']:,} → P{r['target_priority']}")
+        self.stdout.write(f"  Total custom updates: {custom_result['total']:,}")
 
         max_review = options.get("max_review", 100_000)
         self.stdout.write(self.style.MIGRATE_HEADING(

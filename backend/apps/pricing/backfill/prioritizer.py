@@ -241,6 +241,53 @@ def assign_enrichment_priorities() -> dict:
     return {'p1': p1_count, 'p2': p2_count}
 
 
+# ── Custom priority rules (admin-configurable) ────────────────────
+
+def apply_custom_priority_rules() -> dict:
+    """Apply admin-defined EnrichmentPriorityRule records.
+
+    Rules are evaluated in ``order`` (ascending). Each rule builds a queryset
+    from its filters and bulk-updates matching products to the target priority.
+    Later rules can override earlier ones (higher ``order`` wins).
+
+    Returns:
+        Dict with per-rule counts and total updated.
+    """
+    from apps.pricing.models import EnrichmentPriorityRule
+
+    rules = EnrichmentPriorityRule.objects.filter(is_active=True).order_by("order")
+    results = []
+    total = 0
+
+    for rule in rules:
+        qs = rule.build_queryset()
+        count = qs.update(enrichment_priority=rule.target_priority)
+
+        if rule.also_mark_reviews and count > 0:
+            # Mark matched products for review scraping
+            review_updated = qs.filter(review_status="skip").update(
+                review_status="pending",
+            )
+            logger.info(
+                "  Rule '%s': %d → P%d (%d marked for reviews)",
+                rule.name, count, rule.target_priority, review_updated,
+            )
+        else:
+            logger.info(
+                "  Rule '%s': %d → P%d", rule.name, count, rule.target_priority,
+            )
+
+        results.append({
+            "rule": rule.name,
+            "target_priority": rule.target_priority,
+            "updated": count,
+        })
+        total += count
+
+    logger.info("Custom rules applied: %d total updates from %d rules", total, len(results))
+    return {"rules": results, "total": total}
+
+
 # ── Review target assignment ────────────────────────────────────────
 
 def assign_review_targets(max_review_products: int = 100_000) -> int:

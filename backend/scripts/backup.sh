@@ -25,8 +25,8 @@ set -euo pipefail
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 BUCKET="${BACKUP_S3_BUCKET:-whydud-backups}"
 REMOTE_PATH="daily"
-LOCAL_RETENTION_DAYS=7
-REMOTE_RETENTION_DAYS=180
+LOCAL_RETENTION_DAYS=1
+REMOTE_RETENTION_DAYS=5
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 DATE_ONLY=$(date +%Y%m%d)
 DUMP_FILE="${BACKUP_DIR}/whydud_${TIMESTAMP}.dump"
@@ -244,10 +244,11 @@ log "Manifest updated"
 
 echo "$TIMESTAMP" > "${BACKUP_DIR}/.last_backup_time"
 
-# ── Local retention: delete backups older than 7 days ────────────────────────
+# ── Local retention: keep only last N backups ────────────────────────────────
 
-log "Cleaning local backups older than ${LOCAL_RETENTION_DAYS} days..."
-DELETED_LOCAL=$(find "$BACKUP_DIR" -name "whydud_*.dump.gz" -mtime +"$LOCAL_RETENTION_DAYS" -delete -print 2>/dev/null | wc -l || echo "0")
+LOCAL_KEEP_COUNT=4  # ~1 day of backups (every 6h)
+log "Keeping last ${LOCAL_KEEP_COUNT} local backups, removing older..."
+DELETED_LOCAL=$(ls -t "$BACKUP_DIR"/whydud_*.dump.gz 2>/dev/null | tail -n +$((LOCAL_KEEP_COUNT + 1)) | xargs rm -f -v 2>/dev/null | wc -l || echo "0")
 log "Deleted ${DELETED_LOCAL} old local backups"
 
 # ── Remote retention: delete backups older than 180 days ─────────────────────

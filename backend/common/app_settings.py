@@ -485,17 +485,17 @@ class BackupConfig:
     @classmethod
     def local_retention_days(cls) -> int:
         """Days to keep local backup files."""
-        return _get("BACKUP_LOCAL_RETENTION_DAYS", 7)
+        return _get("BACKUP_LOCAL_RETENTION_DAYS", 3)
 
     @classmethod
     def remote_retention_days(cls) -> int:
         """Days to keep remote backup files."""
-        return _get("BACKUP_REMOTE_RETENTION_DAYS", 180)
+        return _get("BACKUP_REMOTE_RETENTION_DAYS", 5)
 
     @classmethod
     def max_backup_age_hours(cls) -> int:
         """Health check threshold: alert if last backup is older than this."""
-        return _get("BACKUP_MAX_AGE_HOURS", 12)
+        return _get("BACKUP_MAX_AGE_HOURS", 30)
 
 
 # ---------------------------------------------------------------------------

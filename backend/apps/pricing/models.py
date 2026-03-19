@@ -329,3 +329,115 @@ class BackfillProduct(models.Model):
 
     def __str__(self) -> str:
         return f"{self.marketplace_slug}/{self.external_id} ({self.status})"
+
+
+class EnrichmentPriorityRule(models.Model):
+    """Admin-configurable rules for custom enrichment priority assignment.
+
+    Rules are evaluated in order (lowest ``order`` first). Each rule defines
+    filters (marketplace, category, price range, brand pattern, min data points)
+    and a target priority. When ``apply_custom_priority_rules()`` runs, matching
+    BackfillProducts are updated to the rule's target priority.
+    """
+
+    PRIORITY_CHOICES = [
+        (0, "P0 — On-demand"),
+        (1, "P1 — Playwright"),
+        (2, "P2 — curl_cffi"),
+        (3, "P3 — curl_cffi-low"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(
+        max_length=200,
+        help_text="Human-readable rule name (e.g. 'Apple phones > ₹50K → P1')",
+    )
+    is_active = models.BooleanField(default=True)
+    order = models.IntegerField(
+        default=0,
+        help_text="Evaluation order — lower runs first. Later rules can override earlier ones.",
+    )
+
+    # Filters — all optional, combined with AND
+    marketplace_slug = models.CharField(
+        max_length=50, blank=True,
+        help_text="Filter by marketplace (e.g. 'amazon-in', 'flipkart'). Blank = any.",
+    )
+    category_name = models.CharField(
+        max_length=100, blank=True,
+        help_text="Exact category match (e.g. 'smartphone', 'laptop'). Blank = any.",
+    )
+    category_pattern = models.CharField(
+        max_length=200, blank=True,
+        help_text="Regex pattern for category (e.g. 'smartphone|laptop'). Blank = any.",
+    )
+    brand_pattern = models.CharField(
+        max_length=200, blank=True,
+        help_text="Regex pattern for title/brand (e.g. '^(apple|samsung)'). Blank = any.",
+    )
+    title_contains = models.CharField(
+        max_length=200, blank=True,
+        help_text="Case-insensitive substring match on title. Blank = any.",
+    )
+    min_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Minimum current_price in paisa (e.g. 5000000 = ₹50K). Null = no minimum.",
+    )
+    max_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Maximum current_price in paisa. Null = no maximum.",
+    )
+    min_data_points = models.IntegerField(
+        null=True, blank=True,
+        help_text="Minimum price_data_points. Null = no minimum.",
+    )
+
+    # Target
+    target_priority = models.SmallIntegerField(
+        choices=PRIORITY_CHOICES,
+        help_text="Priority to assign to matching products.",
+    )
+    also_mark_reviews = models.BooleanField(
+        default=False,
+        help_text="Also set review_status='pending' for matched products.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "enrichment_priority_rules"
+        ordering = ["order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.name} → P{self.target_priority}"
+
+    def build_queryset(self):
+        """Build a queryset of BackfillProducts matching this rule's filters.
+
+        Only targets products with scrape_status='pending' (not yet enriched).
+        """
+        qs = BackfillProduct.objects.filter(scrape_status="pending")
+
+        if self.marketplace_slug:
+            qs = qs.filter(marketplace_slug=self.marketplace_slug)
+        if self.category_name:
+            qs = qs.filter(category_name=self.category_name)
+        if self.category_pattern:
+            qs = qs.filter(category_name__iregex=self.category_pattern)
+        if self.brand_pattern:
+            qs = qs.filter(title__iregex=self.brand_pattern)
+        if self.title_contains:
+            qs = qs.filter(title__icontains=self.title_contains)
+        if self.min_price is not None:
+            qs = qs.filter(current_price__gte=self.min_price)
+        if self.max_price is not None:
+            qs = qs.filter(current_price__lte=self.max_price)
+        if self.min_data_points is not None:
+            qs = qs.filter(price_data_points__gte=self.min_data_points)
+
+        return qs
+
+    def preview_count(self) -> int:
+        """Return count of products that would be affected by this rule."""
+        return self.build_queryset().count()
