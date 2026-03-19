@@ -16,6 +16,8 @@ whydud.com {
 	}
 
 	handle /admin/* {
+		header Cache-Control "no-store, no-cache, must-revalidate, private"
+		header Cloudflare-CDN-Cache-Control "no-store"
 		reverse_proxy backend:8000
 	}
 
