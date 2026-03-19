@@ -53,53 +53,63 @@ class RequestIDMiddleware:
 class AdminLoginDebugMiddleware:
     """Temporary middleware to diagnose admin login failures.
 
-    Logs POST data, headers, and auth result for /admin/login/ requests.
-    Remove after the issue is resolved.
+    Uses print() to ensure output reaches Docker logs regardless of
+    structlog configuration. Remove after the issue is resolved.
     """
 
     def __init__(self, get_response: callable) -> None:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
+        # Log ALL admin requests to verify middleware is active
+        if request.path.startswith("/admin/"):
+            import sys
+            print(
+                f"[ADMIN_DEBUG] {request.method} {request.path} "
+                f"host={request.META.get('HTTP_HOST')}",
+                file=sys.stderr, flush=True,
+            )
+
         if request.path == "/admin/login/" and request.method == "POST":
+            import sys
             username = request.POST.get("username", "<MISSING>")
-            has_password = bool(request.POST.get("password"))
+            password = request.POST.get("password", "")
             has_csrf = bool(request.POST.get("csrfmiddlewaretoken"))
             csrf_cookie = bool(request.COOKIES.get("csrftoken"))
             session_cookie = bool(request.COOKIES.get("sessionid"))
 
-            # Try authenticate directly to see the result
+            # Try authenticate directly
             auth_user = None
-            if username != "<MISSING>" and has_password:
+            try:
                 auth_user = authenticate(
                     request,
                     username=username,
-                    password=request.POST.get("password"),
+                    password=password,
                 )
+            except Exception as exc:
+                print(f"[ADMIN_LOGIN_DEBUG] authenticate() EXCEPTION: {exc}", file=sys.stderr, flush=True)
 
-            logger.warning(
-                "ADMIN_LOGIN_DEBUG",
-                username=username,
-                username_repr=repr(username),
-                username_len=len(username) if username else 0,
-                has_password=has_password,
-                password_len=len(request.POST.get("password", "")),
-                has_csrf_token=has_csrf,
-                has_csrf_cookie=csrf_cookie,
-                has_session_cookie=session_cookie,
-                auth_result="SUCCESS" if auth_user else "FAILED",
-                auth_user_id=str(auth_user.pk) if auth_user else None,
-                content_type=request.content_type,
-                cf_connecting_ip=request.META.get("HTTP_CF_CONNECTING_IP"),
-                x_forwarded_for=request.META.get("HTTP_X_FORWARDED_FOR"),
-                x_forwarded_proto=request.META.get("HTTP_X_FORWARDED_PROTO"),
-                x_forwarded_host=request.META.get("HTTP_X_FORWARDED_HOST"),
-                host=request.META.get("HTTP_HOST"),
-                referer=request.META.get("HTTP_REFERER"),
-                origin=request.META.get("HTTP_ORIGIN"),
-                cookie_count=len(request.COOKIES),
-                cookie_names=list(request.COOKIES.keys()),
+            debug_info = (
+                f"\n{'='*60}\n"
+                f"[ADMIN_LOGIN_DEBUG] POST /admin/login/\n"
+                f"  username       = {username!r}\n"
+                f"  username_len   = {len(username)}\n"
+                f"  has_password   = {bool(password)}\n"
+                f"  password_len   = {len(password)}\n"
+                f"  has_csrf_token = {has_csrf}\n"
+                f"  has_csrf_cookie= {csrf_cookie}\n"
+                f"  has_session    = {session_cookie}\n"
+                f"  auth_result    = {'SUCCESS user=' + str(auth_user.pk) if auth_user else 'FAILED'}\n"
+                f"  content_type   = {request.content_type}\n"
+                f"  host           = {request.META.get('HTTP_HOST')}\n"
+                f"  x_fwd_host    = {request.META.get('HTTP_X_FORWARDED_HOST')}\n"
+                f"  x_fwd_proto   = {request.META.get('HTTP_X_FORWARDED_PROTO')}\n"
+                f"  cf_ip          = {request.META.get('HTTP_CF_CONNECTING_IP')}\n"
+                f"  cookie_names   = {list(request.COOKIES.keys())}\n"
+                f"  post_keys      = {list(request.POST.keys())}\n"
+                f"{'='*60}"
             )
+            print(debug_info, file=sys.stderr, flush=True)
 
         response = self.get_response(request)
         return response
